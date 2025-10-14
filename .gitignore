@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+
+# Envs / secrets
+.env
+*.env
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+
+# Node / builds (if any)
+node_modules/
+dist/
+build/
+
+# User profile folders (avoid accidental adds)
+AppData/
