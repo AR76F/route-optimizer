@@ -2,3 +2,5 @@ streamlit
 googlemaps
 folium
 polyline
+streamlit-folium
+mygeotab>=0.10
