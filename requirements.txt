@@ -1,6 +1,7 @@
-streamlit
-googlemaps
-folium
-streamlit-folium
-polyline
-mygeotab>=0.10
+streamlit==1.50.0
+googlemaps==4.10.0
+polyline==2.0.3
+folium==0.17.0
+streamlit-folium==0.17.5
+requests==2.32.3
+mygeotab==0.8.2 
