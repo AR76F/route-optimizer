@@ -9,7 +9,7 @@ from streamlit.components.v1 import html
 from datetime import datetime, time, timedelta
 
 st.set_page_config(page_title="Route Optimizer", layout="wide")
-st.title("📍 Route Optimizer — Home ➜ Storage ➜ Optimized Stops (≤ 25)")
+st.title("📍 Optimisation des trajets (≤ 25 trajets)")
 
 # ─────────────────────────────
 # Secrets-aware API key input
