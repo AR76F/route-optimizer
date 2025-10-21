@@ -1,6 +1,8 @@
 # app.py — Route Optimizer with optional Geotab live origin
 # Start (typed or Geotab) → Storage → Optimized Stops (≤ 25 total, traffic-aware)
 
+from __future__ import annotations
+
 import os
 import time
 from datetime import datetime, date, time as dtime, timedelta, timezone
@@ -32,11 +34,13 @@ def get_gmaps_client(api_key: str | None):
     """Return a Google Maps client or raise with a helpful message."""
     key = api_key or st.secrets.get("GOOGLE_MAPS_API_KEY", "")
     if not key:
-        raise RuntimeError("No Google Maps API key. Add it to Streamlit Secrets as GOOGLE_MAPS_API_KEY or enter it.")
+        raise RuntimeError(
+            "No Google Maps API key. Add it in Streamlit Secrets as `GOOGLE_MAPS_API_KEY` or paste it above."
+        )
     return googlemaps.Client(key=key)
 
 def geocode_one(gmaps: googlemaps.Client, text_or_latlon):
-    """Geocode an address string or (lat,lon) tuple into a usable string/lat/lon."""
+    """Geocode an address string or (lat,lon) tuple into usable dict."""
     if isinstance(text_or_latlon, (list, tuple)) and len(text_or_latlon) == 2:
         lat, lon = float(text_or_latlon[0]), float(text_or_latlon[1])
         return {"raw": f"{lat},{lon}", "lat": lat, "lon": lon, "label": f"{lat:.5f}, {lon:.5f}"}
@@ -54,21 +58,23 @@ def geocode_one(gmaps: googlemaps.Client, text_or_latlon):
 def decode_distance_duration(leg):
     """Return ('12.3 km', '17 mins') from a Directions leg with/without traffic."""
     dist = leg.get("distance", {}).get("text", "—")
-    # Prefer duration_in_traffic when available (driving with departure_time)
     dur = leg.get("duration_in_traffic", {}).get("text") or leg.get("duration", {}).get("text", "—")
     return dist, dur
 
-def build_route_map(path_coords, markers, center=None, zoom=8, height=600):
+def build_route_map(path_coords, markers, center=None, zoom=8, height=700):
     """Create a Folium map with a route polyline and numbered red markers."""
-    if not center:
-        center = [sum(p[0] for p in path_coords)/len(path_coords), sum(p[1] for p in path_coords)/len(path_coords)]
+    if not center and path_coords:
+        center = [sum(p[0] for p in path_coords)/len(path_coords),
+                  sum(p[1] for p in path_coords)/len(path_coords)]
+    elif not center:
+        center = [45.5, -73.6]  # fallback: Montreal-ish
 
     m = folium.Map(location=center, zoom_start=zoom, tiles="CartoDB positron")
-    # Route polyline
-    folium.PolyLine(path_coords, weight=6, opacity=0.8, color="#2176FF").add_to(m)
-    # Markers
+    if path_coords:
+        folium.PolyLine(path_coords, weight=6, opacity=0.9, color="#1E6CFF").add_to(m)
+
     for i, (lat, lon, label) in enumerate(markers, start=1):
-        popup = folium.Popup(f"<b>{i}.</b> {label}", max_width=300)
+        popup = folium.Popup(f"<b>{i}.</b> {label}", max_width=320)
         folium.Marker(
             [lat, lon],
             popup=popup,
@@ -78,30 +84,37 @@ def build_route_map(path_coords, markers, center=None, zoom=8, height=600):
     st_folium(m, height=height, use_container_width=True, returned_objects=[])
 
 # ────────────────────────────────────────────────────────────────────────────────
-# Geotab helpers (driver names, big map, pick driver as start)
+# Geotab helpers (NO caching function takes the API object to avoid UnhashableParamError)
 # ────────────────────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=60)
+def geotab_connect_from_secrets():
+    db = st.secrets.get("GEOTAB_DATABASE", "")
+    un = st.secrets.get("GEOTAB_USERNAME", "")
+    pw = st.secrets.get("GEOTAB_PASSWORD", "")
+    srv = st.secrets.get("GEOTAB_SERVER", "my.geotab.com")
+    if not (db and un and pw):
+        st.error("Geotab secrets missing. Set GEOTAB_DATABASE, GEOTAB_USERNAME, GEOTAB_PASSWORD.")
+        return None
+    try:
+        api = myg.API(un, pw, db, srv)
+        api.authenticate()
+        return api
+    except Exception as e:
+        st.error(f"Geotab login failed: {e}")
+        return None
+
 def geotab_fetch_devices(api: "myg.API"):
     try:
-        devices = api.call("Get", "Device", {"search": {"isActive": True}})
+        return api.call("Get", "Device", {"search": {"isActive": True}})
     except Exception:
-        devices = []
-    return [
-        {
-            "id": d["id"],
-            "name": d.get("name", ""),
-            "serialNumber": d.get("serialNumber", ""),
-            "vin": d.get("vehicleIdentificationNumber", ""),
-        }
-        for d in devices
-    ]
+        return []
 
-@st.cache_data(ttl=60)
 def geotab_try_get_current_driver_diag(api: "myg.API"):
+    """Try to find a 'current driver' diagnostic id if present."""
     try:
         diags = api.call("Get", "Diagnostic", {})
     except Exception:
         return None
+
     candidates = ["DeviceCurrentDriver", "DeviceCurrentDriverId", "Current Driver", "CurrentDriver", "DriverId", "Driver"]
     for d in diags:
         nm = (d.get("name") or "").lower()
@@ -140,7 +153,6 @@ def geotab_latest_driverchange(api: "myg.API", device_id: str):
         pass
     return None, None
 
-@st.cache_data(ttl=60)
 def geotab_load_user_names(api: "myg.API"):
     try:
         users = api.call("Get", "User", {"search": {"isDriver": True, "isActive": True}})
@@ -151,7 +163,6 @@ def geotab_load_user_names(api: "myg.API"):
         for u in users
     }
 
-@st.cache_data(ttl=60)
 def geotab_load_device_position(api: "myg.API", device_id: str):
     try:
         from_dt = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
@@ -174,17 +185,18 @@ def geotab_driver_label_for_device(api: "myg.API", device: dict, diag_id: str | 
     if diag_id:
         v, when1 = geotab_latest_status_value(api, device["id"], diag_id)
         if v and str(v) in user_names:
-            return user_names[str(v)], device["name"], when1
+            return user_names[str(v)], device.get("name", ""), when1
     # 2) Latest DriverChange
     uid, when2 = geotab_latest_driverchange(api, device["id"])
     if uid and uid in user_names:
-        return user_names[uid], device["name"], when2
+        return user_names[uid], device.get("name", ""), when2
     # 3) Fallback to device name
-    return device["name"] or device["serialNumber"] or device["vin"] or "(unknown)", "", None
+    return device.get("name") or device.get("serialNumber") or device.get("vehicleIdentificationNumber") or "(unknown)", "", None
 
 def render_geotab_live_block():
-    """Large Geotab map; let user pick a driver as route start. Stores lat/lon in st.session_state['route_start_latlon']"""
+    """Large Geotab map; let user pick a driver as route start. Stores (lat,lon) in st.session_state['route_start_latlon']"""
     st.subheader("🚚 Live Fleet (Geotab)")
+
     if not GEOTAB_AVAILABLE:
         st.info("Geotab not installed on this server. Add `mygeotab` to requirements to enable.")
         return
@@ -194,27 +206,14 @@ def render_geotab_live_block():
         st.session_state.pop("route_start_latlon", None)
         return
 
-    # Secrets: GEOTAB_DATABASE, GEOTAB_USERNAME, GEOTAB_PASSWORD, optional GEOTAB_SERVER
-    db = st.secrets.get("GEOTAB_DATABASE", "")
-    un = st.secrets.get("GEOTAB_USERNAME", "")
-    pw = st.secrets.get("GEOTAB_PASSWORD", "")
-    srv = st.secrets.get("GEOTAB_SERVER", "my.geotab.com")
-    if not (db and un and pw):
-        st.error("Geotab secrets missing. Set GEOTAB_DATABASE, GEOTAB_USERNAME, GEOTAB_PASSWORD.")
-        return
-
-    try:
-        api = myg.API(un, pw, db, srv)
-        api.authenticate()
-    except Exception as e:
-        st.error(f"Geotab login failed: {e}")
+    api = geotab_connect_from_secrets()
+    if not api:
         return
 
     devices = geotab_fetch_devices(api)
     user_names = geotab_load_user_names(api)
     driver_diag_id = geotab_try_get_current_driver_diag(api)
 
-    # Build pin list
     pins = []
     for d in devices:
         lat, lon, when = geotab_load_device_position(api, d["id"])
@@ -230,11 +229,10 @@ def render_geotab_live_block():
         st.info("No recent positions (last ~2 hours).")
         return
 
-    # Center & draw map (big)
     avg_lat = sum(p["lat"] for p in pins)/len(pins)
     avg_lon = sum(p["lon"] for p in pins)/len(pins)
 
-    m = folium.Map(location=[avg_lat, avg_lon], zoom_start=8, tiles="CartoDB positron")
+    m = folium.Map(location=[avg_lat, avg_lon], zoom_start=7, tiles="CartoDB positron")
     cluster = MarkerCluster().add_to(m)
     for p in pins:
         html = f"""
@@ -253,8 +251,7 @@ def render_geotab_live_block():
     st_folium(m, height=700, use_container_width=True, returned_objects=[])
 
     # Driver selector by name
-    driver_list = sorted({p["driver"] for p in pins if p["driver"]})
-    driver_list = ["(none)"] + driver_list
+    driver_list = ["(none)"] + sorted({p["driver"] for p in pins if p["driver"]})
     chosen = st.selectbox("Use this driver as route start:", driver_list, index=0)
     if chosen != "(none)":
         sel_pin = next((p for p in pins if p["driver"] == chosen), None)
@@ -269,7 +266,6 @@ def render_geotab_live_block():
 # ────────────────────────────────────────────────────────────────────────────────
 # Inputs
 # ────────────────────────────────────────────────────────────────────────────────
-# API key (uses secrets by default; field allows override without displaying the key)
 api_key_default = st.secrets.get("GOOGLE_MAPS_API_KEY", "")
 api_key = st.text_input("Google Maps API Key", value=api_key_default, type="password")
 
@@ -285,7 +281,6 @@ tcol1, tcol2, tcol3 = st.columns([1, 1, 1])
 leave_now = tcol1.checkbox("Leave now", value=True)
 traffic_model = tcol2.selectbox("Traffic model", ["best_guess", "optimistic", "pessimistic"])
 
-# If not leaving now, pick date/time
 if not leave_now:
     planned_date = tcol2.date_input("Planned departure date", value=date.today())
     planned_time = tcol3.time_input("Planned departure time", value=dtime(hour=datetime.now().hour, minute=0))
@@ -303,11 +298,10 @@ render_geotab_live_block()
 col1, col2 = st.columns([1, 1])
 with col1:
     home_addr = st.text_input("Technician home (START)", value="")
-
 with col2:
     storage_addr = st.text_input("Storage location (first stop)", value="")
 
-other_stops_text = st.text_area("Other stops (one ZIP/postal code or full address per line)", height=160, placeholder="H2Y 1C6\nJ4B 5E4\n...")
+other_stops_text = st.text_area("Other stops (one ZIP/postal code or full address per line)", height=170, placeholder="H2Y 1C6\nJ4B 5E4\n...")
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Optimize Button
@@ -322,10 +316,8 @@ if go:
         st.error(str(e))
         st.stop()
 
-    # Derive origin: Geotab driver pick overrides manual home if available
-    origin_info = None
+    # Determine origin: Geotab chosen driver overrides manual home
     if "route_start_latlon" in st.session_state:
-        # Geotab chosen driver origin
         origin_info = geocode_one(gmaps_client, st.session_state["route_start_latlon"])
     else:
         origin_info = geocode_one(gmaps_client, home_addr)
@@ -334,14 +326,11 @@ if go:
 
     # Parse other stops
     raw_lines = [ln.strip() for ln in (other_stops_text or "").splitlines() if ln.strip()]
-    if len(raw_lines) > 0:
-        other_infos = []
-        for ln in raw_lines:
-            gi = geocode_one(gmaps_client, ln)
-            if gi:
-                other_infos.append(gi)
-    else:
-        other_infos = []
+    other_infos = []
+    for ln in raw_lines:
+        gi = geocode_one(gmaps_client, ln)
+        if gi: 
+            other_infos.append(gi)
 
     # Safety checks
     if not origin_info:
@@ -351,10 +340,130 @@ if go:
         st.error("Please specify a valid Storage location.")
         st.stop()
 
-    # Build sequence: origin → storage → other stops
-    # Respect 25 total limit: origin + destination + waypoints ≤ 25
-    # We will use optimize:true, so waypoints can be many (Google allows up to 25 including origin & destination).
-    # We'll cap other stops as needed.
+    # Combine a maximum of 25 (origin + destination + waypoints <= 25 for a single call)
+    # We'll do two calls: A) origin→storage, B) storage→others (+ optional return).
     max_total = 25
-    # origin & destination count as 2 => waypoints ≤ 23
-    leftover_waypoints = max_total - 2
+
+    # Departure time (Google only uses traffic for driving)
+    departure_time = None
+    if travel_mode == "driving":
+        if leave_now:
+            departure_time = datetime.now()
+        else:
+            # naive local dt is fine for Google client
+            departure_time = datetime.combine(planned_date, planned_time)
+
+    # ── LEG A: origin → storage ────────────────────────────────────────────────
+    try:
+        resp_a = gmaps_client.directions(
+            origin=origin_info["raw"],
+            destination=storage_info["raw"],
+            mode=travel_mode,
+            departure_time=departure_time if travel_mode == "driving" else None,
+            traffic_model=traffic_model if travel_mode == "driving" else None
+        )
+    except Exception as e:
+        st.error(f"Directions (origin → storage) failed: {e}")
+        st.stop()
+
+    if not resp_a:
+        st.error("No route found from origin to storage.")
+        st.stop()
+
+    # Decode path
+    path_coords = []
+    if "overview_polyline" in resp_a[0]["overview_polyline"]:
+        path_coords += polyline.decode(resp_a[0]["overview_polyline"]["points"])
+
+    markers = [
+        (origin_info["lat"], origin_info["lon"], f"START — {origin_info['label']}"),
+        (storage_info["lat"], storage_info["lon"], f"Storage — {storage_info['label']}")
+    ]
+
+    total_distance_text = []
+    total_duration_text = []
+    for leg in resp_a[0]["legs"]:
+        dist, dur = decode_distance_duration(leg)
+        total_distance_text.append(dist)
+        total_duration_text.append(dur)
+
+    # ── LEG B: storage → others (+ return) with optimization ───────────────────
+    if other_infos or round_trip:
+        waypoints = []
+        if other_infos:
+            waypoints = ["optimize:true"] + [o["raw"] for o in other_infos]
+
+        if round_trip:
+            destination_b = origin_info["raw"]
+        else:
+            # If there's at least one other stop, make the last item the destination
+            if other_infos:
+                destination_b = other_infos[-1]["raw"]
+                # waypoints already contains all others; remove the last from waypoints set:
+                if len(waypoints) > 1:
+                    waypoints = ["optimize:true"] + [o["raw"] for o in other_infos[:-1]]
+            else:
+                # no other stops, and no round trip: end at storage
+                destination_b = storage_info["raw"]
+
+        try:
+            resp_b = gmaps_client.directions(
+                origin=storage_info["raw"],
+                destination=destination_b,
+                mode=travel_mode,
+                waypoints=waypoints if waypoints else None,
+                departure_time=departure_time if travel_mode == "driving" else None,
+                traffic_model=traffic_model if travel_mode == "driving" else None
+            )
+        except Exception as e:
+            st.error(f"Directions (storage → rest) failed: {e}")
+            st.stop()
+
+        if not resp_b:
+            st.error("No route found for the second leg (storage → stops).")
+            st.stop()
+
+        # Build waypoint order for markers if optimization was used
+        ordered_others = other_infos[:]
+        if waypoints and waypoints[0] == "optimize:true":
+            # When optimize:true is used, the API returns `waypoint_order`
+            wpo = resp_b[0].get("waypoint_order") or []
+            if round_trip:
+                ordered_others = [other_infos[i] for i in wpo]
+            else:
+                # destination fixed to the last other
+                ordered_others = [other_infos[i] for i in wpo] + ([other_infos[-1]] if other_infos else [])
+
+        # Decode path and append (avoid double-adding start point)
+        if "overview_polyline" in resp_b[0]["overview_polyline"]:
+            coords_b = polyline.decode(resp_b[0]["overview_polyline"]["points"])
+            if path_coords and coords_b:
+                if path_coords[-1] == coords_b[0]:
+                    coords_b = coords_b[1:]
+            path_coords += coords_b
+
+        # Add markers for ordered others
+        for o in ordered_others:
+            markers.append((o["lat"], o["lon"], o["label"]))
+
+        # If round trip, add home again
+        if round_trip:
+            markers.append((origin_info["lat"], origin_info["lon"], f"END — {origin_info['label']}"))
+
+        # Add leg B distance/duration
+        for leg in resp_b[0]["legs"]:
+            dist, dur = decode_distance_duration(leg)
+            total_distance_text.append(dist)
+            total_duration_text.append(dur)
+
+    # ───────────────────────────────────────────────────────────────────────────
+    # Output: totals + big map
+    # ───────────────────────────────────────────────────────────────────────────
+    colm1, colm2 = st.columns(2)
+    with colm1:
+        st.metric("Legs distance (sum of displayed legs)", " + ".join(total_distance_text))
+    with colm2:
+        st.metric("Legs duration (traffic-aware if driving)", " + ".join(total_duration_text))
+
+    st.markdown("#### Optimized route")
+    build_route_map(path_coords, markers, height=700)
