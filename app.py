@@ -419,84 +419,96 @@ with tabs[0]:
     else:
         st.info("Geotab désactivé. Ajoutez `GEOTAB_DATABASE`, `GEOTAB_USERNAME`, `GEOTAB_PASSWORD` dans les Secrets.")
 
-# ===============  TAB 2 — TECHNICIAN HOME (mêmes réglages de taille de carte)  ===============
+# ============= TAB 2 – TECHNICIAN HOME (avec entrepôts inclus) =============
 with tabs[1]:
     TECH_HOME = {
         "Alain": "1110 rue Proulx, Les Cèdres, QC J7T 1E6",
         "Alex": "163 21e ave, Sabrevois, J0J 2G0",
         "Ali": "226 rue Felx, Saint-Clet, QC J0P 1S0",
-        "Ben C": "34 rue de la Digue, Saint-Jérôme, QC, Canada",
+        "Ben C": "34 rue de la Digue, Saint-Jérome, QC, Canada",
         "Ben L": "12 rue de Beaudry, Mercier, J6R 2N7",
         "Christian": "31 rue des Roitelets, Delson, J5B 1T6",
         "Donald": "Montée Saint-Régis, Sainte-Catherine, QC, Canada",
-        "Elie": "3700 Montée du 4e Rang, Les Maskoutains, J0H 1S0",
-        "Francois": "80 rue de Beaujeu, Coteau-du-Lac, J0P 1B0",
+        "Elie": "3700 Mnt du 4e Rang, Les Maskoutains, J0H 1S0",
+        "Francois": "80 rue de Beaujeu, Coteau-du-lac, J0P 1B0",
         "Fredy": "312 rue de Valcourt, Blainville, J7B 1H3",
         "George": "Rue René-Lévesque, Saint-Eustache, J7R 7L4",
         "Kevin": "943 rue des Marquises, Beloeil, J3G 6T9",
         "Louis": "5005 rue Domville, Saint-Hubert, J3Y 1Y2",
-        "Martin": "1444 rue de l'Orchidée, L'Assomption, QC J5W 6B3",
-        "Maxime": "3e ave, Île aux Noix, QC, Canada",
-        "Michael": "2020 Chem. de Covey Hill, Hinchinbrooke, QC, Canada",
+        "Martin": "1444 rue de l'Orchidée, L'Assomption QC J5W 6B3",
+        "Maxime": "3e ave, Ile aux Noix, QC, Canada",
+        "Michael": "2020 chem. De Covery Hill, Hinchinbrooke, QC, Canada",
         "Patrick": "222 rue Charles-Gadiou, L'Assomption, J5W 0J4",
         "PL": "143 rue Ashby, Marieville, J3M 1P2",
         "Seb": "Saint-Valentin, QC, Canada",
-        "Sergio": "791 rue des Marquises, Beloeil, QC J3G 6M6",
+        "Sergio": "791 Rue des Marquises, Beloeil, QC J3G 6M6",
     }
 
-    def _canon_addr(a: str) -> str:
-        a = (a or "").strip()
-        if not a:
-            return a
-        a = normalize_ca_postal(a)
-        if "canada" not in a.lower() and "qc" in a.lower():
-            a = f"{a}, Canada"
-        return a
+    ENTREPOTS = {
+        "Candiac": "315 Liberté, Candiac, QC J5R 6Z7",
+        "Assomption": "119 rue de la Commissaires, Assomption, QC, Canada",
+        "Boisbriand": "5025 rue Ambroise-Lafortune, Boisbriand, QC, Canada",
+        "Mirabel": "1600 Montée Guenette, Mirabel, QC, Canada",
+    }
 
-    @st.cache_data(ttl=86400, show_spinner=False)
-    def _geocode_team(homes: dict):
-        rows = []
-        for name, raw in homes.items():
-            q = _canon_addr(raw)
-            g = geocode_ll(gmaps_client, q)
-            if g:
-                lat, lon, pretty = g
-                rows.append({"name": name, "address": pretty, "lat": lat, "lon": lon})
-        return rows
+    show_map = st.checkbox("Afficher la carte des techniciens et entrepôts", value=True)
+    if show_map:
+        try:
+            points = []
 
-    team_rows = _geocode_team(TECH_HOME)
-    if not team_rows:
-        st.info("Aucune adresse d'équipe géocodée.")
-    else:
-        pick_list = [f"{r['name']} — {r['address']}" for r in team_rows]
-        tech_pick = st.selectbox("Choisir un technicien :", ["(aucun)"] + pick_list, index=0)
-        if tech_pick != "(aucun)":
-            chosen = team_rows[pick_list.index(tech_pick)]
-            st.session_state.route_start = chosen["address"]
-            st.success(f"Départ défini sur **{chosen['name']}** — {chosen['address']}")
+            # Techniciens
+            for name, addr in TECH_HOME.items():
+                g = geocode_ll(gmaps_client, addr)
+                if g:
+                    lat, lon, formatted = g
+                    points.append({
+                        "name": name,
+                        "address": formatted,
+                        "lat": lat,
+                        "lon": lon,
+                        "type": "technician"
+                    })
 
-        if st.checkbox("Afficher la carte des domiciles", value=False, key="team_map_toggle"):
-            avg_lat = sum(r["lat"] for r in team_rows) / len(team_rows)
-            avg_lon = sum(r["lon"] for r in team_rows) / len(team_rows)
-            fmap = folium.Map(location=[avg_lat, avg_lon], zoom_start=8, tiles="cartodbpositron")
-            for r in team_rows:
-                # point + label nom
-                folium.CircleMarker([r["lat"], r["lon"]], radius=7, color="#1b4332", weight=2,
-                                    fill=True, fill_color="#2d6a4f", fill_opacity=0.95).add_to(fmap)
-                folium.Marker(
-                    [r["lat"], r["lon"]],
-                    popup=folium.Popup(f"<b>{r['name']}</b><br>{r['address']}", max_width=320),
-                    tooltip=f"{r['name']} — {r['address']}",
-                    icon=folium.DivIcon(
-                        icon_size=(220, 20), icon_anchor=(0, -14),
-                        html=f"""<div style="display:inline-block;padding:2px 6px;
-                                 font-size:12px;font-weight:700;color:#111;background:#fff;
-                                 border:1px solid #ddd;border-radius:6px;
-                                 box-shadow:0 1px 2px rgba(0,0,0,.25);white-space:nowrap;">
-                                 {r['name']}</div>"""
-                    )
-                ).add_to(fmap)
-            st_folium(fmap, height=800, width=1800)
+            # Entrepôts
+            for name, addr in ENTREPOTS.items():
+                g = geocode_ll(gmaps_client, addr)
+                if g:
+                    lat, lon, formatted = g
+                    points.append({
+                        "name": name,
+                        "address": formatted,
+                        "lat": lat,
+                        "lon": lon,
+                        "type": "entrepot"
+                    })
+
+            if points:
+                avg_lat = sum(p["lat"] for p in points) / len(points)
+                avg_lon = sum(p["lon"] for p in points) / len(points)
+                fmap = folium.Map(location=[avg_lat, avg_lon], zoom_start=8, tiles="cartodbpositron")
+
+                for p in points:
+                    if p["type"] == "technician":
+                        folium.Marker(
+                            [p["lat"], p["lon"]],
+                            popup=folium.Popup(f"<b>{p['name']}</b><br>{p['address']}", max_width=300),
+                            tooltip=p["name"],
+                            icon=folium.Icon(color="blue", icon="user", prefix="fa")
+                        ).add_to(fmap)
+                    else:
+                        folium.Marker(
+                            [p["lat"], p["lon"]],
+                            popup=folium.Popup(f"<b>🏭 Entrepôt — {p['name']}</b><br>{p['address']}", max_width=300),
+                            tooltip=f"Entrepôt — {p['name']}",
+                            icon=folium.Icon(color="red", icon="building", prefix="fa")
+                        ).add_to(fmap)
+
+                st_folium(fmap, height=800, width=1800)
+            else:
+                st.warning("Aucune position trouvée pour les techniciens ou entrepôts.")
+
+        except Exception as e:
+            st.error(f"Erreur lors du chargement de la carte : {e}")
 
 # Rappel visuel du départ courant
 if st.session_state.route_start:
