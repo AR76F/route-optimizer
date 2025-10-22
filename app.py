@@ -350,7 +350,7 @@ if geotab_enabled_by_secrets:
                         folium.CircleMarker([p["lat"], p["lon"]], radius=8, color="#222", weight=2,
                                             fill=True, fill_color=color, fill_opacity=0.9).add_to(fmap)
 
-                    st_folium(fmap, height=420)
+                    st_folium(fmap, height=800, width=1800)
 
                     # Use driver/device as route start — auto-fill the START address
                     start_choice = st.selectbox("Use this driver/device as route start:",
