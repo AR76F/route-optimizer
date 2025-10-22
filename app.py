@@ -49,14 +49,16 @@ def cummins_header():
         "assets/cummins_black.jpg",
     ]
 
-    col_logo, col_title = st.columns([1, 6], vertical_alignment="center")
+    # Larger logo column balance
+    col_logo, col_title = st.columns([1, 5], vertical_alignment="center")
 
     with col_logo:
         shown = False
         for path in CANDIDATES:
             if os.path.exists(path):
                 try:
-                    st.image(path, width=90)
+                    # Display the logo larger (150px width)
+                    st.image(path, width=150)
                     shown = True
                     break
                 except Exception:
@@ -66,8 +68,8 @@ def cummins_header():
             # Inline fallback logo (simple black “C” emblem)
             st.markdown(
                 """
-                <div style="width:90px;height:90px;display:flex;align-items:center;justify-content:center;">
-                  <svg viewBox="0 0 100 100" width="90" height="90"
+                <div style="width:150px;height:150px;display:flex;align-items:center;justify-content:center;">
+                  <svg viewBox="0 0 100 100" width="150" height="150"
                        xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Cummins">
                     <rect x="0" y="0" width="100" height="100" fill="#000000"/>
                     <path d="M70,50a20,20 0 1,1 -20,-20" fill="#ffffff"/>
@@ -81,9 +83,9 @@ def cummins_header():
         st.markdown(
             """
             <div style="margin-bottom:2px;">
-              <h1 style="margin:0;color:white;">Route Optimizer</h1>
+              <h1 style="margin:0;color:white;font-size:42px;">Route Optimizer</h1>
             </div>
-            <div style="color:#9aa0a6;font-size:14px;">
+            <div style="color:#9aa0a6;font-size:16px;">
               Home ➜ Storage ➜ Optimized Stops (≤ 25) — <b>Cummins Service Fleet</b>
             </div>
             """,
