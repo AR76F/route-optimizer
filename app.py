@@ -392,7 +392,7 @@ stops_text = st.text_area(
 other_stops_input = [s.strip() for s in stops_text.splitlines() if s.strip()]
 
 # ────────────────────────────────────────────────────────────────────────────────
-# Optimize route — DRIVING ONLY • No map (stable)
+# Optimize route — DRIVING ONLY (compute + persist result)
 # ────────────────────────────────────────────────────────────────────────────────
 st.markdown("---")
 if st.button("🧭 Optimize Route", type="primary"):
@@ -428,8 +428,10 @@ if st.button("🧭 Optimize Route", type="primary"):
                 wp_geocoded.append((label, addr, (lat, lon)))
 
         if failures:
-            st.error("I couldn’t geocode some locations:\n\n- " + "\n- ".join(failures) +
-                     "\n\nTip: use full street addresses if a postal code fails.")
+            st.error(
+                "I couldn’t geocode some locations:\n\n- " + "\n- ".join(failures) +
+                "\n\nTip: use full street addresses if a postal code fails."
+            )
             st.stop()
 
         # 3) Build Directions request (DRIVING + optimize:true)
@@ -456,7 +458,6 @@ if st.button("🧭 Optimize Route", type="primary"):
                 destination_llstr = wp_llstr[-1]
                 waypoints_for_api = wp_llstr[:-1]      # all except final destination
             else:
-                # no other stops
                 if storage_g:
                     destination_addr = storage_g[2]
                     destination_llstr = to_ll_str((storage_g[0], storage_g[1]))
@@ -485,7 +486,7 @@ if st.button("🧭 Optimize Route", type="primary"):
             })
             st.stop()
 
-        # 4) Use Google’s waypoint_order to build the visit list
+        # 4) Build visit list using Google's waypoint_order
         if waypoints_for_api:
             order = directions[0].get("waypoint_order", list(range(len(waypoints_for_api))))
             ordered_wp_addrs = [wp_addrs[i] for i in order]
@@ -503,66 +504,89 @@ if st.button("🧭 Optimize Route", type="primary"):
         km = total_dist_m / 1000.0 if total_dist_m else 0.0
         mins = total_sec / 60.0 if total_sec else 0.0
 
-        # 6) Results + optional map
-        st.markdown("#### Optimized order (Driving)")
-        for ix, addr in enumerate(visit_texts):
-            if ix == 0:
-                st.write(f"**START** — {addr}")
-            elif ix == len(visit_texts) - 1:
-                st.write(f"**END** — {addr}")
-            else:
-                st.write(f"**{ix}** — {addr}")
-
-        # Toggle map rendering (off by default for stability)
-        show_map = st.checkbox("Show map", value=False)
-        if show_map:
-            try:
-                fmap = folium.Map(location=[start_ll[0], start_ll[1]], zoom_start=9, tiles="cartodbpositron")
-
-                # Safe polyline (skip if missing)
-                overview = directions[0].get("overview_polyline", {}).get("points")
-                if overview:
-                    try:
-                        path = polyline.decode(overview)
-                        folium.PolyLine(path, weight=7, color="#2196f3", opacity=0.9).add_to(fmap)
-                    except Exception:
-                        pass
-
-                # Start marker
-                folium.Marker(
-                    start_ll, icon=folium.Icon(color="green", icon="play", prefix="fa"),
-                    popup=folium.Popup(f"<b>START</b><br>{visit_texts[0]}", max_width=260)
-                ).add_to(fmap)
-
-                # Waypoint markers (reuse geocoded cache)
-                addr2ll = {addr: ll for (_lbl, addr, ll) in wp_geocoded}
-                for i, addr in enumerate(visit_texts[1:-1], start=1):
-                    ll = addr2ll.get(addr)
-                    if ll:
-                        folium.Marker(
-                            ll, popup=folium.Popup(f"<b>{i}</b>. {addr}", max_width=260),
-                            icon=big_number_marker(str(i))
-                        ).add_to(fmap)
-
-                # End marker
-                end_g = geocode_ll(gmaps_client, visit_texts[-1])
-                if end_g:
-                    end_ll = (end_g[0], end_g[1])
-                    folium.Marker(
-                        end_ll, icon=folium.Icon(color="red", icon="flag-checkered", prefix="fa"),
-                        popup=folium.Popup(f"<b>{'END (Home)' if round_trip else 'END'}</b><br>{visit_texts[-1]}", max_width=260)
-                    ).add_to(fmap)
-
-                st_folium(fmap, height=560)
-            except Exception as e:
-                st.warning(f"Map rendering skipped: {e}")
-
-        # 7) Totals (already computed above)
-        st.success(f"**Total distance:** {km:.1f} km • **Total time:** {mins:.0f} mins (live traffic)")
+        # 6) Persist everything needed to re-render after reruns (e.g., Show map toggle)
+        st.session_state.route_result = {
+            "visit_texts": visit_texts,
+            "km": km,
+            "mins": mins,
+            "start_ll": start_ll,
+            "wp_geocoded": wp_geocoded,
+            "round_trip": round_trip,
+            "overview": directions[0].get("overview_polyline", {}).get("points"),
+        }
 
     except Exception as e:
-        # absolute last safety net to prevent “blink”
         st.error(f"Unexpected error: {type(e).__name__}: {e}")
         st.exception(e)
 
+# ────────────────────────────────────────────────────────────────────────────────
+# Render last optimized result (persists across reruns, e.g. Show map toggle)
+# ────────────────────────────────────────────────────────────────────────────────
+res = st.session_state.get("route_result")
+if res:
+    visit_texts = res["visit_texts"]
+    km = res["km"]
+    mins = res["mins"]
+    start_ll = tuple(res["start_ll"])
+    wp_geocoded = res["wp_geocoded"]
+    round_trip = res["round_trip"]
+    overview = res.get("overview")
+
+    st.markdown("#### Optimized order (Driving)")
+    for ix, addr in enumerate(visit_texts):
+        if ix == 0:
+            st.write(f"**START** — {addr}")
+        elif ix == len(visit_texts) - 1:
+            st.write(f"**END** — {addr}")
+        else:
+            st.write(f"**{ix}** — {addr}")
+
+    # Toggle map rendering (off by default for stability)
+    show_map = st.checkbox("Show map", value=False, key="show_map_toggle")
+    if show_map:
+        try:
+            fmap = folium.Map(location=[start_ll[0], start_ll[1]], zoom_start=9, tiles="cartodbpositron")
+
+            # Safe polyline
+            if overview:
+                try:
+                    path = polyline.decode(overview)
+                    folium.PolyLine(path, weight=7, color="#2196f3", opacity=0.9).add_to(fmap)
+                except Exception:
+                    pass
+
+            # Start marker
+            folium.Marker(
+                start_ll, icon=folium.Icon(color="green", icon="play", prefix="fa"),
+                popup=folium.Popup(f"<b>START</b><br>{visit_texts[0]}", max_width=260)
+            ).add_to(fmap)
+
+            # Waypoint markers from cached geocodes
+            addr2ll = {addr: ll for (_lbl, addr, ll) in wp_geocoded}
+            for i, addr in enumerate(visit_texts[1:-1], start=1):
+                ll = addr2ll.get(addr)
+                if ll:
+                    folium.Marker(
+                        ll, popup=folium.Popup(f"<b>{i}</b>. {addr}", max_width=260),
+                        icon=big_number_marker(str(i))
+                    ).add_to(fmap)
+
+            # End marker
+            end_addr = visit_texts[-1]
+            end_ll = addr2ll.get(end_addr)
+            if not end_ll:
+                g = geocode_ll(gmaps_client, end_addr)
+                if g:
+                    end_ll = (g[0], g[1])
+            if end_ll:
+                folium.Marker(
+                    end_ll, icon=folium.Icon(color="red", icon="flag-checkered", prefix="fa"),
+                    popup=folium.Popup(f"<b>{'END (Home)' if round_trip else 'END'}</b><br>{end_addr}", max_width=260)
+                ).add_to(fmap)
+
+            st_folium(fmap, height=560)
+        except Exception as e:
+            st.warning(f"Map rendering skipped: {e}")
+
+    st.success(f"**Total distance:** {km:.1f} km • **Total time:** {mins:.0f} mins (live traffic)")
 
