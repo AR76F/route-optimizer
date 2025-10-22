@@ -1,17 +1,26 @@
-# Save the final script to a file so the user can download it if they want.
-code = r'''
+# app.py
+# Streamlit Route Optimizer — Home ➜ Storage ➜ Optimized Stops (≤ 25)
+# Notes:
+# - No filesystem writes (GitHub/Streamlit Cloud often block /mnt/data).
+# - Optional Geotab integration guarded behind secrets + import.
+# - Includes a "Download this script" button via inspect (no file creation needed).
+
 import os
+import sys
+import inspect
 from datetime import datetime, date, time, timedelta, timezone
 from typing import List, Tuple, Optional
 
 import streamlit as st
+
+# Third-party libs (make sure these are in your requirements.txt)
 import googlemaps
 import polyline
 import folium
 from streamlit_folium import st_folium
 
 # ────────────────────────────────────────────────────────────────────────────────
-# Optional myGeotab import
+# Optional myGeotab import (app still works if it's missing or secrets not set)
 # ────────────────────────────────────────────────────────────────────────────────
 GEOTAB_AVAILABLE = True
 try:
@@ -19,24 +28,27 @@ try:
 except Exception:
     GEOTAB_AVAILABLE = False
 
-
 # ────────────────────────────────────────────────────────────────────────────────
-# Page + helpers
+# Page config
 # ────────────────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Route Optimizer", layout="wide")
 st.title("📍 Route Optimizer — Home ➜ Storage ➜ Optimized Stops (≤ 25)")
 
+# ────────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ────────────────────────────────────────────────────────────────────────────────
 def secret(name: str, default: Optional[str] = None) -> Optional[str]:
+    """Fetch from Streamlit secrets or environment."""
     try:
         return st.secrets[name]
     except Exception:
         return os.getenv(name, default)
 
-def geocode(gmaps: googlemaps.Client, text: str) -> Optional[Tuple[float, float]]:
+def geocode(gmaps_client: googlemaps.Client, text: str) -> Optional[Tuple[float, float]]:
     if not text:
         return None
     try:
-        res = gmaps.geocode(text)
+        res = gmaps_client.geocode(text)
         if res:
             loc = res[0]["geometry"]["location"]
             return float(loc["lat"]), float(loc["lng"])
@@ -44,9 +56,9 @@ def geocode(gmaps: googlemaps.Client, text: str) -> Optional[Tuple[float, float]
         pass
     return None
 
-def reverse_geocode(gmaps: googlemaps.Client, lat: float, lon: float) -> str:
+def reverse_geocode(gmaps_client: googlemaps.Client, lat: float, lon: float) -> str:
     try:
-        res = gmaps.reverse_geocode((lat, lon))
+        res = gmaps_client.reverse_geocode((lat, lon))
         if res:
             return res[0].get("formatted_address", f"{lat:.5f},{lon:.5f}")
     except Exception:
@@ -72,15 +84,31 @@ def add_marker(mapobj, lat, lon, popup, icon=None):
         icon = folium.Icon(color="red", icon="map-marker", prefix="fa")
     folium.Marker([lat, lon], popup=popup, icon=icon).add_to(mapobj)
 
+def recency_color(ts: Optional[str]) -> Tuple[str, str]:
+    """Return (color, label) based on timestamp recency."""
+    if not ts:
+        return "#9e9e9e", "> 30d"
+    try:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except Exception:
+        return "#9e9e9e", "unknown"
+    age = datetime.now(timezone.utc) - dt.astimezone(timezone.utc)
+    if age <= timedelta(hours=2):
+        return "#00c853", "≤ 2h"
+    if age <= timedelta(hours=24):
+        return "#2e7d32", "≤ 24h"
+    if age <= timedelta(days=7):
+        return "#fb8c00", "≤ 7d"
+    return "#9e9e9e", "> 7d"
 
 # ────────────────────────────────────────────────────────────────────────────────
-# Google key strictly from Secrets
+# Google Maps API key (secrets only)
 # ────────────────────────────────────────────────────────────────────────────────
 GOOGLE_KEY = secret("GOOGLE_MAPS_API_KEY")
 if not GOOGLE_KEY:
     st.error("Missing Google Maps key. Add it in **App settings → Secrets** as `GOOGLE_MAPS_API_KEY`.")
     st.stop()
-gmaps = googlemaps.Client(key=GOOGLE_KEY)
+gmaps_client = googlemaps.Client(key=GOOGLE_KEY)
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Inputs — mode, traffic, round trip
@@ -121,7 +149,7 @@ stops_text = st.text_area(
 other_stops_input = [s.strip() for s in stops_text.splitlines() if s.strip()]
 
 # ────────────────────────────────────────────────────────────────────────────────
-# Geotab (via secrets only)
+# Geotab (via secrets only; optional)
 # ────────────────────────────────────────────────────────────────────────────────
 st.markdown("---")
 st.subheader("🚚 Live Fleet (Geotab)")
@@ -133,7 +161,6 @@ G_SERVER = secret("GEOTAB_SERVER", "my.geotab.com")
 
 geotab_enabled_by_secrets = GEOTAB_AVAILABLE and all([G_DB, G_USER, G_PWD])
 
-debug = False
 picked_driver_choice = None
 picked_driver_latlon = None
 
@@ -227,25 +254,6 @@ def geotab_last_position(api: "myg.API", device_id: str):
         return lat, lon, when
     return None, None, None
 
-def recency_color(ts: Optional[str]) -> Tuple[str, str]:
-    if not ts:
-        return "#9e9e9e", "> 30d"
-    try:
-        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-    except Exception:
-        return "#9e9e9e", "unknown"
-    age = datetime.now(timezone.utc) - dt.astimezone(timezone.utc)
-    if age <= timedelta(hours=2):
-        return "#00c853", "≤ 2h"
-    if age <= timedelta(hours=24):
-        return "#2e7d32", "≤ 24h"
-    if age <= timedelta(days=7):
-        return "#fb8c00", "≤ 7d"
-    return "#9e9e9e", "> 7d"
-
-# ────────────────────────────────────────────────────────────────────────────────
-# Geotab live map
-# ────────────────────────────────────────────────────────────────────────────────
 if geotab_enabled_by_secrets:
     api = geotab_connect_from_secrets()
     if api:
@@ -277,16 +285,17 @@ if geotab_enabled_by_secrets:
             for p in points:
                 color, lab = recency_color(p["when"])
                 who = p["driverName"] or p["deviceName"]
-                add_marker(fmap, p["lat"], p["lon"],
+                add_marker(
+                    fmap, p["lat"], p["lon"],
                     popup=folium.Popup(f"<b>{who}</b><br>Recency: {lab}<br>{p['lat']:.5f}, {p['lon']:.5f}", max_width=260),
                     icon=folium.Icon(color="green", icon="user", prefix="fa")
                 )
-                folium.CircleMarker([p["lat"], p["lon"]],
-                    radius=8, color="#222", weight=2,
+                folium.CircleMarker(
+                    [p["lat"], p["lon"]], radius=8, color="#222", weight=2,
                     fill=True, fill_color=color, fill_opacity=0.9
                 ).add_to(fmap)
 
-            # ✅ FIXED: Removed unsupported use_container_width argument
+            # NOTE: do NOT pass use_container_width (not supported by st_folium)
             st_folium(fmap, height=460)
 
             choices = sorted([(p["driverName"] or p["deviceName"], p["lat"], p["lon"]) for p in points],
@@ -302,7 +311,7 @@ if geotab_enabled_by_secrets:
                         picked_driver_latlon = (c[1], c[2])
                         break
                 if picked_driver_latlon:
-                    start_text = reverse_geocode(gmaps, picked_driver_latlon[0], picked_driver_latlon[1])
+                    start_text = reverse_geocode(gmaps_client, picked_driver_latlon[0], picked_driver_latlon[1])
                     st.success(f"Start set from Geotab: **{picked_driver_choice}** → {start_text}")
         else:
             st.info("Geotab: connected and found devices, but no positions across snapshot, logs, or last trips (≤ 30 days).")
@@ -317,8 +326,8 @@ else:
 # ────────────────────────────────────────────────────────────────────────────────
 st.markdown("---")
 if st.button("🧭 Optimize Route", type="primary"):
-    start_ll = geocode(gmaps, start_text)
-    storage_ll = geocode(gmaps, storage_text) if storage_text else None
+    start_ll = geocode(gmaps_client, start_text)
+    storage_ll = geocode(gmaps_client, storage_text) if storage_text else None
     if not start_ll:
         st.error("Could not geocode the START location.")
         st.stop()
@@ -345,7 +354,7 @@ if st.button("🧭 Optimize Route", type="primary"):
             optimized_waypoints.remove(destination)
 
     try:
-        directions = gmaps.directions(
+        directions = gmaps_client.directions(
             origin=start_text,
             destination=destination,
             mode=travel_mode,
@@ -371,22 +380,27 @@ if st.button("🧭 Optimize Route", type="primary"):
     path = polyline.decode(overview)
     folium.PolyLine(path, weight=7, color="#2196f3", opacity=0.9).add_to(fmap)
 
-    folium.Marker(start_ll, icon=folium.Icon(color="green", icon="play", prefix="fa"),
-                  popup=folium.Popup(f"<b>START</b><br>{start_text}", max_width=260)).add_to(fmap)
+    folium.Marker(
+        start_ll, icon=folium.Icon(color="green", icon="play", prefix="fa"),
+        popup=folium.Popup(f"<b>START</b><br>{start_text}", max_width=260)
+    ).add_to(fmap)
 
     for i, addr in enumerate(ordered_list, start=1):
-        ll = geocode(gmaps, addr)
+        ll = geocode(gmaps_client, addr)
         if not ll:
             continue
-        folium.Marker(ll, popup=folium.Popup(f"<b>{i}</b>. {addr}", max_width=260),
-                      icon=big_number_marker(str(i))).add_to(fmap)
+        folium.Marker(
+            ll, popup=folium.Popup(f"<b>{i}</b>. {addr}", max_width=260),
+            icon=big_number_marker(str(i))
+        ).add_to(fmap)
 
-    end_ll = geocode(gmaps, visit_texts[-1])
+    end_ll = geocode(gmaps_client, visit_texts[-1])
     if end_ll:
-        folium.Marker(end_ll, icon=folium.Icon(color="red", icon="flag-checkered", prefix="fa"),
-                      popup=folium.Popup(f"<b>{'END (Home)' if round_trip else 'END'}</b><br>{visit_texts[-1]}", max_width=260)).add_to(fmap)
+        folium.Marker(
+            end_ll, icon=folium.Icon(color="red", icon="flag-checkered", prefix="fa"),
+            popup=folium.Popup(f"<b>{'END (Home)' if round_trip else 'END'}</b><br>{visit_texts[-1]}", max_width=260)
+        ).add_to(fmap)
 
-    # ✅ FIXED: Removed unsupported use_container_width argument
     st_folium(fmap, height=560)
 
     legs = directions[0]["legs"]
@@ -408,8 +422,13 @@ if st.button("🧭 Optimize Route", type="primary"):
         f"**Total distance:** {km:.1f} km • **Total time:** {mins:.0f} mins "
         f"{'(live traffic)' if travel_mode=='driving' else ''}"
     )
-'''
-with open('/mnt/data/app.py', 'w') as f:
-    f.write(code)
 
-print("Saved to /mnt/data/app.py")
+# ────────────────────────────────────────────────────────────────────────────────
+# Download this script (no file creation; uses module source)
+# ────────────────────────────────────────────────────────────────────────────────
+try:
+    source_text = inspect.getsource(sys.modules[__name__])
+    st.download_button("💾 Download this script (app.py)", data=source_text,
+                       file_name="app.py", mime="text/x-python")
+except Exception:
+    st.caption("Download button unavailable in this environment.")
