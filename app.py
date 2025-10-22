@@ -322,84 +322,82 @@ if geotab_enabled_by_secrets:
             wanted_ids = [label2id[lbl] for lbl in picked_labels]
 
             if wanted_ids:
-    pts = _geotab_positions_for(
-        (G_USER, G_PWD, G_DB, G_SERVER),
-        tuple(wanted_ids),
-        st.session_state.geo_refresh_key
-    )
-    id2name = {d["id"]: d["name"] for d in devs}
-    valid = [p for p in pts if "lat" in p and "lon" in p]
-
-    if valid:
-        avg_lat = sum(p["lat"] for p in valid) / len(valid)
-        avg_lon = sum(p["lon"] for p in valid) / len(valid)
-        fmap = folium.Map(location=[avg_lat, avg_lon], zoom_start=8, tiles="cartodbpositron")
-
-        choice_labels = []
-        for p in valid:
-            device_id = p["deviceId"]
-            device_name = id2name.get(device_id, device_id)
-            label = _label_for_device(device_id, device_name, p.get("driverName"))
-            choice_labels.append(label)
-
-            color, lab = recency_color(p.get("when"))
-            tech_name = label.split(" — ")[0]  # show only the driver/tech name
-
-            # 1) Recency-colored circle + popup (clickable)
-            folium.CircleMarker(
-                [p["lat"], p["lon"]],
-                radius=9, color="#222", weight=2,
-                fill=True, fill_color=color, fill_opacity=0.95,
-                popup=folium.Popup(
-                    f"<b>{label}</b><br>Recency: {lab}<br>{p['lat']:.5f}, {p['lon']:.5f}",
-                    max_width=320
-                ),
-            ).add_to(fmap)
-
-            # 2) Visible name label next to the point
-            folium.Marker(
-                [p["lat"], p["lon"]],
-                icon=folium.DivIcon(
-                    icon_size=(180, 20),
-                    icon_anchor=(0, -16),  # place label just above the circle
-                    html=f"""
-                    <div style="
-                        display:inline-block;
-                        padding:2px 6px;
-                        font-size:12px; font-weight:700; color:#111;
-                        background: rgba(255,255,255,0.9);
-                        border:1px solid #ddd; border-radius:6px;
-                        box-shadow:0 1px 2px rgba(0,0,0,.25);
-                        white-space:nowrap;
-                    ">{tech_name}</div>
-                    """
+                pts = _geotab_positions_for(
+                    (G_USER, G_PWD, G_DB, G_SERVER),
+                    tuple(wanted_ids),
+                    st.session_state.geo_refresh_key
                 )
-            ).add_to(fmap)
+                id2name = {d["id"]: d["name"] for d in devs}
+                valid = [p for p in pts if "lat" in p and "lon" in p]
+                if valid:
+                    avg_lat = sum(p["lat"] for p in valid) / len(valid)
+                    avg_lon = sum(p["lon"] for p in valid) / len(valid)
+                    fmap = folium.Map(location=[avg_lat, avg_lon], zoom_start=8, tiles="cartodbpositron")
 
-        # Render the live fleet map (you can tweak height if you want it taller)
-        st_folium(fmap, height=520)
+                    choice_labels = []
+                    for p in valid:
+                        device_id = p["deviceId"]
+                        device_name = id2name.get(device_id, device_id)
+                        label = _label_for_device(device_id, device_name, p.get("driverName"))
+                        choice_labels.append(label)
 
-        # Use driver/device as route start — auto-fill the START address
-        start_choice = st.selectbox(
-            "Use this driver/device as route start:",
-            ["(none)"] + choice_labels,
-            key="geo_start_choice",
-        )
-        if start_choice != "(none)":
-            chosen = valid[choice_labels.index(start_choice)]
-            picked_addr = reverse_geocode(gmaps_client, chosen["lat"], chosen["lon"])
-            st.session_state.route_start = picked_addr
-            st.success(f"Start set from Geotab: **{start_choice}** → {picked_addr}")
+                        color, lab = recency_color(p.get("when"))
+                        tech_name = label.split(" — ")[0]  # show only the driver/tech name
 
-    guarded = [p for p in pts if p.get("error") == "rate_limit_guard"]
-    if guarded:
-        st.warning("Hit the per-minute safety cap. Click **Refresh** in ~60–90 seconds to load remaining devices.")
-    missing = [p for p in pts if p.get("error") not in (None, "rate_limit_guard") and "error" in p]
-    if missing:
-        st.caption("Some devices returned no recent position or hit a fallback error.")
-else:
-    st.info("Select one or more devices, then click **Refresh** to load positions.")
+                        # 1) Recency-colored circle + popup (clickable)
+                        folium.CircleMarker(
+                            [p["lat"], p["lon"]],
+                            radius=9, color="#222", weight=2,
+                            fill=True, fill_color=color, fill_opacity=0.95,
+                            popup=folium.Popup(
+                                f"<b>{label}</b><br>Recency: {lab}<br>{p['lat']:.5f}, {p['lon']:.5f}",
+                                max_width=320
+                            ),
+                        ).add_to(fmap)
 
+                        # 2) Visible tech name label next to the point
+                        folium.Marker(
+                            [p["lat"], p["lon"]],
+                            icon=folium.DivIcon(
+                                icon_size=(180, 20),
+                                icon_anchor=(0, -16),  # label just above the circle; use (0, 24) to place below
+                                html=f"""
+                                <div style="
+                                    display:inline-block;
+                                    padding:2px 6px;
+                                    font-size:12px; font-weight:700; color:#111;
+                                    background: rgba(255,255,255,0.9);
+                                    border:1px solid #ddd; border-radius:6px;
+                                    box-shadow:0 1px 2px rgba(0,0,0,.25);
+                                    white-space:nowrap;
+                                ">{tech_name}</div>
+                                """
+                            ),
+                            tooltip=label,  # full label on hover
+                        ).add_to(fmap)
+
+                    # Render the live fleet map
+                    st_folium(fmap, height=520)
+
+                    # Use driver/device as route start — auto-fill the START address
+                    start_choice = st.selectbox(
+                        "Use this driver/device as route start:",
+                        ["(none)"] + choice_labels, key="geo_start_choice"
+                    )
+                    if start_choice != "(none)":
+                        chosen = valid[choice_labels.index(start_choice)]
+                        picked_addr = reverse_geocode(gmaps_client, chosen["lat"], chosen["lon"])
+                        st.session_state.route_start = picked_addr
+                        st.success(f"Start set from Geotab: **{start_choice}** → {picked_addr}")
+
+                guarded = [p for p in pts if p.get("error") == "rate_limit_guard"]
+                if guarded:
+                    st.warning("Hit the per-minute safety cap. Click **Refresh** in ~60–90 seconds to load remaining devices.")
+                missing = [p for p in pts if p.get("error") not in (None, "rate_limit_guard") and "error" in p]
+                if missing:
+                    st.caption("Some devices returned no recent position or hit a fallback error.")
+            else:
+                st.info("Select one or more devices, then click **Refresh** to load positions.")
     except Exception as e:
         st.info(f"Geotab disabled due to authentication error: {e}")
 else:
@@ -622,4 +620,3 @@ if res:
             st.warning(f"Map rendering skipped: {e}")
 
     st.success(f"**Total distance:** {km:.1f} km • **Total time:** {mins:.0f} mins (live traffic)")
-
