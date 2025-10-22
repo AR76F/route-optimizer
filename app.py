@@ -19,6 +19,7 @@ import polyline
 import folium
 from streamlit_folium import st_folium
 
+
 # ────────────────────────────────────────────────────────────────────────────────
 # Optional myGeotab import (app still works if it's missing or secrets not set)
 # ────────────────────────────────────────────────────────────────────────────────
@@ -32,24 +33,45 @@ except Exception:
 # Page config
 # ────────────────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Route Optimizer", layout="wide")
+
 # ────────────────────────────────────────────────────────────────────────────────
-# Cummins Header (black logo + styled title)
+# Cummins Header (black logo + styled title) — with robust fallback
 # ────────────────────────────────────────────────────────────────────────────────
-st.markdown(
-    """
-    <div style="display:flex;align-items:center;gap:18px;margin-bottom:20px;">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/f/f2/Cummins_logo_black.svg"
-             width="90" style="margin-right:10px;">
-        <div>
-            <h1 style="margin:0;color:white;">Route Optimizer</h1>
-            <p style="margin:0;color:#888;font-size:15px;">
-                Home ➜ Storage ➜ Optimized Stops (≤ 25) — <b>Cummins Service Fleet</b>
-            </p>
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+def cummins_header():
+    LOGO_SVG_URL = "https://upload.wikimedia.org/wikipedia/commons/f/f2/Cummins_logo_black.svg"
+    LOCAL_LOGO = "assets/cummins_black.svg"   # Optional: add this file to your repo for zero-network render
+
+    col_logo, col_title = st.columns([1, 6], vertical_alignment="center")
+    with col_logo:
+        try:
+            if os.path.exists(LOCAL_LOGO):
+                st.image(LOCAL_LOGO, width=90)
+            else:
+                # st.image tends to render remote SVGs more reliably than raw <img> in markdown
+                st.image(LOGO_SVG_URL, width=90)
+        except Exception:
+            # Last-resort text box if image fails anywhere
+            st.markdown(
+                "<div style='width:90px;height:90px;display:flex;align-items:center;justify-content:center;"
+                "border:1px solid #444;border-radius:8px;color:#bbb;'>Cummins</div>",
+                unsafe_allow_html=True
+            )
+
+    with col_title:
+        st.markdown(
+            """
+            <div style="margin-bottom:2px;">
+              <h1 style="margin:0;color:white;">Route Optimizer</h1>
+            </div>
+            <div style="color:#9aa0a6;font-size:14px;">
+              Home ➜ Storage ➜ Optimized Stops (≤ 25) — <b>Cummins Service Fleet</b>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+# Render header
+cummins_header()
 
 
 # Single source of truth for START address (Geotab -> Route stops)
