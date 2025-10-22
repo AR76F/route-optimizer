@@ -149,7 +149,7 @@ stops_text = st.text_area(
 other_stops_input = [s.strip() for s in stops_text.splitlines() if s.strip()]
 
 # ────────────────────────────────────────────────────────────────────────────────
-# Geotab (via secrets only) — rate-limit safe, with DRIVER NAMES + manual mapping
+# Geotab (via secrets only) — rate-limit safe, with DRIVER NAMES (id OR name mapped)
 # ────────────────────────────────────────────────────────────────────────────────
 st.markdown("---")
 st.subheader("🚚 Live Fleet (Geotab)")
@@ -160,11 +160,11 @@ G_PWD = secret("GEOTAB_PASSWORD")
 G_SERVER = secret("GEOTAB_SERVER", "my.geotab.com")
 geotab_enabled_by_secrets = GEOTAB_AVAILABLE and all([G_DB, G_USER, G_PWD])
 
-# 1) Manual mapping (fallback)
-#    • You can also set a JSON secrets entry GEOTAB_DEVICE_TO_DRIVER_JSON
-#      e.g. {"01942":"ALI-REZA SABOUR","24735":"PATRICK BELLEFLEUR"}
-DEVICE_TO_DRIVER = {
-    # add/adjust as you like (deviceId -> driver display name)
+# --- Driver mapping (works by device NAME or device ID) ------------------------
+# You can also add/override via secret GEOTAB_DEVICE_TO_DRIVER_JSON
+DEVICE_TO_DRIVER_RAW = {
+    # Keys can be either the visible device NAME ("01942", "00Z8-SUCC. DE CANDIAC")
+    # or the internal device ID (GUID). We’ll normalize and match both.
     "01942": "ALI-REZA SABOUR",
     "24735": "PATRICK BELLEFLEUR",
     "23731": "ÉLIE RAJOTTE-LEMAY",
@@ -179,27 +179,55 @@ DEVICE_TO_DRIVER = {
     "24725": "CHRISTIAN DUBREUIL",
     "23746": "MICHAEL SULTE",
     "24728": "FRANÇOIS RACINE",
-    # add others here…
+    # add more here if you want
 }
-
 import json
 try:
-    _json_override = secret("GEOTAB_DEVICE_TO_DRIVER_JSON")
-    if _json_override:
-        DEVICE_TO_DRIVER.update(json.loads(_json_override))
+    j = secret("GEOTAB_DEVICE_TO_DRIVER_JSON")
+    if j:
+        DEVICE_TO_DRIVER_RAW.update(json.loads(j))
 except Exception:
     pass
 
+def _norm(s: Optional[str]) -> Optional[str]:
+    if s is None:
+        return None
+    return " ".join(str(s).strip().upper().split())
+
+# Build two maps: by name and by id (both normalized)
+NAME2DRIVER = {}
+ID2DRIVER = {}
+for k, v in DEVICE_TO_DRIVER_RAW.items():
+    nk = _norm(k)
+    if not nk: 
+        continue
+    # crude heuristic: GUIDs contain '-' and are long; names like "01942" or "00Z8-SUCC. DE CANDIAC"
+    if len(nk) > 12 or "-" in nk and any(c.isalpha() for c in nk):  # likely an ID/GUID or long label
+        ID2DRIVER[nk] = v
+    else:
+        NAME2DRIVER[nk] = v
+
+def _driver_from_mapping(device_id: Optional[str], device_name: Optional[str]) -> Optional[str]:
+    # Try name first (what you see in Geotab UI), then internal id
+    n_name = _norm(device_name)
+    if n_name and n_name in NAME2DRIVER:
+        return NAME2DRIVER[n_name]
+    n_id = _norm(device_id)
+    if n_id and n_id in ID2DRIVER:
+        return ID2DRIVER[n_id]
+    # also allow cross-match if someone put a NAME into the ID table or vice-versa
+    if n_name and n_name in ID2DRIVER:
+        return ID2DRIVER[n_name]
+    if n_id and n_id in NAME2DRIVER:
+        return NAME2DRIVER[n_id]
+    return None
+
 def _label_for_device(device_id: str, device_name: str, driver_from_api: Optional[str]) -> str:
-    """
-    Prefer API driver; else secrets JSON; else hard-coded dict; else '(no driver)'.
-    """
-    driver = driver_from_api or DEVICE_TO_DRIVER.get(device_id) or "(no driver)"
-    # e.g. "ALI-REZA SABOUR — 01942" or "ALI-REZA SABOUR — 00Z8-SUCC. DE CANDIAC"
+    driver = driver_from_api or _driver_from_mapping(device_id, device_name) or "(no driver)"
     dev_label = device_name or device_id
     return f"{driver} — {dev_label}"
 
-# Refresh key (manual)
+# manual refresh key to avoid rate limits
 if "geo_refresh_key" not in st.session_state:
     st.session_state.geo_refresh_key = 0
 if st.button("🔄 Refresh Geotab now"):
@@ -217,25 +245,19 @@ def _geotab_devices_cached(user, pwd, db, server):
     devs = api.call("Get", typeName="Device", search={"isActive": True}) or []
     return [{"id": d["id"], "name": d.get("name") or d.get("serialNumber") or "unit"} for d in devs]
 
-@st.cache_data(ttl=75, show_spinner=False)  # ~1 min
+@st.cache_data(ttl=75, show_spinner=False)   # ~1 min
 def _geotab_positions_for(api_params, device_ids, refresh_key):
-    """
-    Get last position for a small set of devices.
-    Returns list of dicts: {deviceId, lat, lon, when, driverName?}
-    """
     user, pwd, db, server = api_params
     api = _geotab_api_cached(user, pwd, db, server)
 
     results = []
     calls_made = 0
-    limit_per_min = 9  # headroom
+    limit_per_min = 9
 
     for did in device_ids:
         if calls_made >= limit_per_min:
             results.append({"deviceId": did, "error": "rate_limit_guard"})
             continue
-
-        # 1) DeviceStatusInfo (includes current driver if assigned)
         try:
             dsi = api.call("Get", typeName="DeviceStatusInfo", search={"deviceSearch": {"id": did}})
             calls_made += 1
@@ -258,7 +280,6 @@ def _geotab_positions_for(api_params, device_ids, refresh_key):
             results.append({"deviceId": did, "error": f"dsi:{e}"})
             continue
 
-        # 2) Fallback: latest LogRecord (driver unknown here)
         if calls_made >= limit_per_min:
             results.append({"deviceId": did, "error": "rate_limit_guard"})
             continue
@@ -280,7 +301,6 @@ def _geotab_positions_for(api_params, device_ids, refresh_key):
             results.append({"deviceId": did, "error": "no_position"})
         except Exception as e:
             results.append({"deviceId": did, "error": f"log:{e}"})
-
     return results
 
 if geotab_enabled_by_secrets:
@@ -289,17 +309,21 @@ if geotab_enabled_by_secrets:
         if not devs:
             st.info("No active devices found.")
         else:
-            id2devname = {d["id"]: d["name"] for d in devs}
-            # Show device names in the multiselect, but we’ll label with driver when we have it
+            # Build friendly labels for the selector BEFORE querying positions
+            options = []
+            label2id = {}
+            for d in devs:
+                label = _label_for_device(d["id"], d["name"], None)  # mapping-only at this stage
+                options.append(label)
+                label2id[label] = d["id"]
+
             picked_labels = st.multiselect(
                 "Select drivers/devices to show:",
-                options=[d["name"] for d in devs],
+                options=sorted(options),
                 default=[],
                 help="Pick a few devices, then click Refresh."
             )
-            # Map selected device names back to ids
-            name2id = {d["name"]: d["id"] for d in devs}
-            wanted_ids = [name2id[n] for n in picked_labels]
+            wanted_ids = [label2id[lbl] for lbl in picked_labels]
 
             if wanted_ids:
                 pts = _geotab_positions_for(
@@ -307,6 +331,9 @@ if geotab_enabled_by_secrets:
                     tuple(wanted_ids),
                     st.session_state.geo_refresh_key
                 )
+                # quick map id -> name for display
+                id2name = {d["id"]: d["name"] for d in devs}
+
                 valid = [p for p in pts if "lat" in p and "lon" in p]
                 if valid:
                     avg_lat = sum(p["lat"] for p in valid) / len(valid)
@@ -316,7 +343,7 @@ if geotab_enabled_by_secrets:
                     choice_labels = []
                     for p in valid:
                         device_id = p["deviceId"]
-                        device_name = id2devname.get(device_id, device_id)
+                        device_name = id2name.get(device_id, device_id)
                         label = _label_for_device(device_id, device_name, p.get("driverName"))
                         choice_labels.append(label)
 
@@ -331,14 +358,12 @@ if geotab_enabled_by_secrets:
 
                     st_folium(fmap, height=420)
 
-                    # Use driver/device as route start (driver-first label)
                     start_choice = st.selectbox("Use this driver/device as route start:", ["(none)"] + choice_labels)
                     if start_choice != "(none)":
                         chosen = valid[choice_labels.index(start_choice)]
                         start_text = reverse_geocode(gmaps_client, chosen["lat"], chosen["lon"])
                         st.success(f"Start set from Geotab: **{start_choice}** → {start_text}")
 
-                # Info/warnings
                 guarded = [p for p in pts if p.get("error") == "rate_limit_guard"]
                 if guarded:
                     st.warning("Hit the per-minute safety cap. Click **Refresh** in ~60–90 seconds to load remaining devices.")
