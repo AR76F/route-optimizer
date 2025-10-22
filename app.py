@@ -1,4 +1,4 @@
-# app.py
+    # app.py
 # Streamlit Route Optimizer — Home ➜ Storage ➜ Optimized Stops (≤ 25)
 # Notes:
 # - No filesystem writes (GitHub/Streamlit Cloud often block /mnt/data).
@@ -419,8 +419,14 @@ with tabs[0]:
     else:
         st.info("Geotab désactivé. Ajoutez `GEOTAB_DATABASE`, `GEOTAB_USERNAME`, `GEOTAB_PASSWORD` dans les Secrets.")
         
-# ============= TAB 2 – TECHNICIAN HOME (with Entrepôts + always-visible labels) =============
+# ============= TAB 2 – TECHNICIAN HOME (with Entrepôts + visible labels + auto-fill Start/Storage) =============
 with tabs[1]:
+    # Initialize session variables for Start & Storage
+    if "route_start" not in st.session_state:
+        st.session_state.route_start = ""
+    if "storage_input" not in st.session_state:
+        st.session_state.storage_input = ""
+
     TECH_HOME = {
         "Alain": "1110 rue Proulx, Les Cèdres, QC J7T 1E6",
         "Alex": "163 21e ave, Sabrevois, J0J 2G0",
@@ -454,8 +460,6 @@ with tabs[1]:
     st.markdown("### 🏠 Technician Home Bases & 🏭 Entrepôts")
     show_map = st.checkbox("Show technician + entrepôt map", value=True)
 
-    # NOTE: Make sure your Storage text_input uses key="storage_input" elsewhere:
-    # storage_text = st.text_input("Storage location (first stop)", key="storage_input", ...)
     if show_map:
         try:
             points = []
@@ -495,7 +499,7 @@ with tabs[1]:
                 avg_lon = sum(p["lon"] for p in points) / len(points)
                 fmap = folium.Map(location=[avg_lat, avg_lon], zoom_start=8, tiles="cartodbpositron")
 
-                # Add markers with permanent labels
+                # Add markers with always-visible names
                 for p in points:
                     if p["type"] == "technician":
                         m = folium.Marker(
@@ -504,7 +508,6 @@ with tabs[1]:
                             icon=folium.Icon(color="blue", icon="user", prefix="fa")
                         )
                         m.add_to(fmap)
-                        # Always-visible label
                         folium.Tooltip(p["name"], permanent=True, direction="right").add_to(m)
                     else:
                         m = folium.Marker(
@@ -513,7 +516,6 @@ with tabs[1]:
                             icon=folium.Icon(color="red", icon="building", prefix="fa")
                         )
                         m.add_to(fmap)
-                        # Always-visible label
                         folium.Tooltip(f"Entrepôt — {p['name']}", permanent=True, direction="right").add_to(m)
 
                 st_folium(fmap, height=800, width=1800)
@@ -541,7 +543,6 @@ with tabs[1]:
                     key="entrepot_choice_storage"
                 )
                 if ent_choice != "(choose)":
-                    # requires your storage input to use key="storage_input"
                     st.session_state["storage_input"] = ent_name_to_addr[ent_choice]
                     st.success(f"Storage set to **Entrepôt — {ent_choice}** — {ent_name_to_addr[ent_choice]}")
 
