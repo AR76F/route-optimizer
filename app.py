@@ -461,12 +461,18 @@ if st.button("🧭 Optimize Route", type="primary"):
             waypoints_for_api = []
 
     # 4) Call Directions with lat,lng strings (unambiguous)
+    #    IMPORTANT: optimize:true ONLY for DRIVING (other modes don't support it)
+    if travel_mode == "driving" and waypoints_for_api:
+        wp_arg = ["optimize:true"] + waypoints_for_api
+    else:
+        wp_arg = waypoints_for_api if waypoints_for_api else None
+
     try:
         directions = gmaps_client.directions(
             origin=to_ll_str(start_ll),
             destination=destination_llstr,
             mode=travel_mode,
-            waypoints=(["optimize:true"] + waypoints_for_api) if waypoints_for_api else None,
+            waypoints=wp_arg,
             departure_time=departure_dt if travel_mode == "driving" else None,
             traffic_model=traffic_model if travel_mode == "driving" else None,
         )
@@ -475,17 +481,31 @@ if st.button("🧭 Optimize Route", type="primary"):
         st.stop()
 
     if not directions:
-        st.error("No route found from Google Directions. Try replacing remaining postal codes with full addresses.")
+        st.error(
+            "No route returned by Directions. If you’re not **Driving**, try changing mode to Driving "
+            "or replace postal codes with full addresses."
+        )
+        # Debug info to help diagnose
+        with st.expander("Debug (no route)"):
+            st.write({
+                "mode": travel_mode,
+                "round_trip": round_trip,
+                "origin": to_ll_str(start_ll),
+                "destination": destination_llstr,
+                "waypoints_count": len(waypoints_for_api),
+                "waypoints_sample": waypoints_for_api[:5],
+            })
         st.stop()
 
     # 5) Reconstruct the visit order as readable addresses
-    if waypoints_for_api:
+    if travel_mode == "driving" and waypoints_for_api:
         wp_order = directions[0].get("waypoint_order", list(range(len(waypoints_for_api))))
         ordered_wp_addrs = [optimized_waypoints_addrs[i] for i in wp_order]
         if not round_trip and optimized_waypoints_addrs:  # add destination back if we removed it
             ordered_wp_addrs.append(destination_addr)
     else:
-        ordered_wp_addrs = [] if round_trip else [destination_addr]
+        # For non-driving modes we keep the user-entered order (no optimization)
+        ordered_wp_addrs = optimized_waypoints_addrs[:] if round_trip else optimized_waypoints_addrs[:] + [destination_addr]
 
     visit_texts = [start_addr] + ordered_wp_addrs + ([start_addr] if round_trip else [destination_addr])
 
@@ -501,16 +521,9 @@ if st.button("🧭 Optimize Route", type="primary"):
     ).add_to(fmap)
 
     # Put numbered markers at the optimized waypoints
-    # We geocode each address again only if needed; better reuse what we already have
-    numbered_lls = []
-    # Build a quick lookup from address -> ll (from our earlier geocode cache)
     addr2ll = {addr: ll for (_label, addr, ll) in wp_geocoded}
     for i, addr in enumerate(ordered_wp_addrs, start=1):
         ll = addr2ll.get(addr)
-        if not ll:
-            g = geocode_ll(gmaps_client, addr)
-            if g:
-                ll = (g[0], g[1])
         if ll:
             folium.Marker(
                 ll, popup=folium.Popup(f"<b>{i}</b>. {addr}", max_width=260),
