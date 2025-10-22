@@ -419,13 +419,13 @@ with tabs[0]:
     else:
         st.info("Geotab désactivé. Ajoutez `GEOTAB_DATABASE`, `GEOTAB_USERNAME`, `GEOTAB_PASSWORD` dans les Secrets.")
         
-# ============= TAB 2 – TECHNICIAN HOME (with Entrepôts + auto-fill Start & Storage) =============
+# ============= TAB 2 – DOMICILES DES TECHNICIENS ET ENTREPÔTS =============
 with tabs[1]:
-    # Initialize session variables for Start & Storage
+    # Ensure session variables exist
     if "route_start" not in st.session_state:
         st.session_state.route_start = ""
-    if "storage_input" not in st.session_state:
-        st.session_state.storage_input = ""
+    if "storage_text" not in st.session_state:
+        st.session_state.storage_text = ""
 
     TECH_HOME = {
         "Alain": "1110 rue Proulx, Les Cèdres, QC J7T 1E6",
@@ -457,8 +457,10 @@ with tabs[1]:
         "Mirabel": "1600 Montée Guenette, Mirabel, QC, Canada",
     }
 
-    st.markdown("### 🏠 Technician Home Bases & 🏭 Entrepôts")
-    show_map = st.checkbox("Show technician + entrepôt map", value=True)
+    st.markdown("### 🏠 Domiciles des techniciens et entrepôts")
+
+    # Map toggle OFF by default
+    show_map = st.checkbox("Afficher la carte (techniciens + entrepôts)", value=False)
 
     if show_map:
         try:
@@ -471,13 +473,7 @@ with tabs[1]:
                 g = geocode_ll(gmaps_client, addr)
                 if g:
                     lat, lon, formatted = g
-                    points.append({
-                        "name": name,
-                        "address": formatted,
-                        "lat": lat,
-                        "lon": lon,
-                        "type": "technician"
-                    })
+                    points.append({"name": name, "address": formatted, "lat": lat, "lon": lon, "type": "technician"})
                     tech_name_to_addr[name] = formatted
 
             # Geocode entrepôts
@@ -485,13 +481,7 @@ with tabs[1]:
                 g = geocode_ll(gmaps_client, addr)
                 if g:
                     lat, lon, formatted = g
-                    points.append({
-                        "name": name,
-                        "address": formatted,
-                        "lat": lat,
-                        "lon": lon,
-                        "type": "entrepot"
-                    })
+                    points.append({"name": name, "address": formatted, "lat": lat, "lon": lon, "type": "entrepot"})
                     ent_name_to_addr[name] = formatted
 
             if points:
@@ -499,62 +489,57 @@ with tabs[1]:
                 avg_lon = sum(p["lon"] for p in points) / len(points)
                 fmap = folium.Map(location=[avg_lat, avg_lon], zoom_start=8, tiles="cartodbpositron")
 
-                # Add markers with visible names
+                # Markers with permanent labels
                 for p in points:
                     if p["type"] == "technician":
-                        marker = folium.Marker(
+                        m = folium.Marker(
                             [p["lat"], p["lon"]],
                             popup=folium.Popup(f"<b>{p['name']}</b><br>{p['address']}", max_width=300),
-                            icon=folium.Icon(color="blue", icon="user", prefix="fa")
+                            icon=folium.Icon(color="blue", icon="user", prefix="fa"),
                         )
-                        marker.add_to(fmap)
-                        folium.Tooltip(p["name"], permanent=True, direction="right").add_to(marker)
+                        m.add_to(fmap)
+                        folium.Tooltip(p["name"], permanent=True, direction="right").add_to(m)
                     else:
-                        marker = folium.Marker(
+                        m = folium.Marker(
                             [p["lat"], p["lon"]],
                             popup=folium.Popup(f"<b>🏭 Entrepôt — {p['name']}</b><br>{p['address']}", max_width=300),
-                            icon=folium.Icon(color="red", icon="building", prefix="fa")
+                            icon=folium.Icon(color="red", icon="building", prefix="fa"),
                         )
-                        marker.add_to(fmap)
-                        folium.Tooltip(f"Entrepôt — {p['name']}", permanent=True, direction="right").add_to(marker)
+                        m.add_to(fmap)
+                        folium.Tooltip(f"Entrepôt — {p['name']}", permanent=True, direction="right").add_to(m)
 
                 st_folium(fmap, height=800, width=1800)
             else:
-                st.warning("No valid technician or entrepôt locations found.")
-
-            # Selection controls
-            st.markdown("#### Select start/end sources")
-            c1, c2 = st.columns(2)
-
-            with c1:
-                tech_choice = st.selectbox(
-                    "Technician → set as **Start**",
-                    ["(choose)"] + sorted(tech_name_to_addr.keys()),
-                    key="tech_choice_start"
-                )
-                if tech_choice != "(choose)":
-                    st.session_state["route_start"] = tech_name_to_addr[tech_choice]
-                    st.success(f"Start set to **{tech_choice}** — {tech_name_to_addr[tech_choice]}")
-
-            with c2:
-                ent_choice = st.selectbox(
-                    "Entrepôt → set as **Storage**",
-                    ["(choose)"] + sorted(ent_name_to_addr.keys()),
-                    key="entrepot_choice_storage"
-                )
-                if ent_choice != "(choose)":
-                    st.session_state["storage_input"] = ent_name_to_addr[ent_choice]
-                    st.success(f"Storage set to **Entrepôt — {ent_choice}** — {ent_name_to_addr[ent_choice]}")
-
-            # Bind storage input so Entrepôt selection fills it automatically
-            st.text_input(
-                "Storage location (first stop)",
-                key="storage_input",
-                placeholder="e.g., 456 Depot Rd, City, Province"
-            )
+                st.warning("Aucun point géocodé à afficher.")
 
         except Exception as e:
-            st.error(f"Error while loading map: {e}")
+            st.error(f"Erreur lors du chargement de la carte : {e}")
+
+    # Selection controls (no extra input here)
+    st.markdown("#### Sélectionner les sources de départ / fin")
+    c1, c2 = st.columns(2)
+
+    with c1:
+        tech_choice = st.selectbox(
+            "Technicien → définir comme **départ**",
+            ["(choisir)"] + sorted(TECH_HOME.keys()),
+            key="tech_choice_start_tab2",
+        )
+        if tech_choice != "(choisir)":
+            # Set the Start (Route stops START field)
+            st.session_state.route_start = TECH_HOME[tech_choice]
+            st.success(f"Départ défini sur **{tech_choice}** — {TECH_HOME[tech_choice]}")
+
+    with c2:
+        ent_choice = st.selectbox(
+            "Entrepôt → définir comme **stockage**",
+            ["(choisir)"] + sorted(ENTREPOTS.keys()),
+            key="entrepot_choice_storage_tab2",
+        )
+        if ent_choice != "(choisir)":
+            # Set the single Storage input used in Route stops
+            st.session_state.storage_text = ENTREPOTS[ent_choice]
+            st.success(f"Stockage défini sur **Entrepôt — {ent_choice}** — {ENTREPOTS[ent_choice]}")
 
 # Rappel visuel du départ courant
 if st.session_state.route_start:
@@ -569,7 +554,11 @@ start_text = st.text_input(
     key="route_start",  # bound to the value we set from Geotab
     placeholder="e.g., 123 Main St, City, Province"
 )
-storage_text = st.text_input("Storage location (first stop)", placeholder="e.g., 456 Depot Rd, City, Province")
+storage_text = st.text_input(
+    "Storage location (first stop)",
+    key="storage_text",
+    placeholder="e.g., 456 Depot Rd, City, Province",
+)
 stops_text = st.text_area(
     "Other stops (one ZIP/postal code or full address per line)",
     height=140,
