@@ -47,12 +47,24 @@ def secret(name: str, default: Optional[str] = None) -> Optional[str]:
         return st.secrets[name]
     except Exception:
         return os.getenv(name, default)
+        
+def normalize_ca_postal(text: str) -> str:
+    """If the text looks like a CA postal code, normalize e.g. 'J4G1A1' -> 'J4G 1A1, Canada'."""
+    if not text:
+        return text
+    t = str(text).strip().upper().replace(" ", "")
+    if len(t) == 6 and t[:3].isalnum() and t[3:].isalnum():
+        # Insert a space after 3 chars and append country
+        return f"{t[:3]} {t[3:]}, Canada"
+    return text
 
 def geocode(gmaps_client: googlemaps.Client, text: str) -> Optional[Tuple[float, float]]:
+    """Geocode with Canadian bias and postal normalization."""
     if not text:
         return None
+    q = normalize_ca_postal(text)
     try:
-        res = gmaps_client.geocode(text)
+        res = gmaps_client.geocode(q, components={"country": "CA"}, region="ca")
         if res:
             loc = res[0]["geometry"]["location"]
             return float(loc["lat"]), float(loc["lng"])
@@ -381,21 +393,27 @@ other_stops_input = [s.strip() for s in stops_text.splitlines() if s.strip()]
 # ────────────────────────────────────────────────────────────────────────────────
 st.markdown("---")
 if st.button("🧭 Optimize Route", type="primary"):
-    # Always read the START from session (Geotab or user-edited)
+    # Always read START from session (Geotab or user-edited)
     start_text = st.session_state.get("route_start", "")
+    # Normalize storage + each stop to handle postal-only inputs
+    storage_query = normalize_ca_postal(storage_text) if storage_text else storage_text
+    other_stops_queries = [normalize_ca_postal(s) for s in other_stops_input]
+
     start_ll = geocode(gmaps_client, start_text)
-    storage_ll = geocode(gmaps_client, storage_text) if storage_text else None
+    storage_ll = geocode(gmaps_client, storage_query) if storage_query else None
+
     if not start_ll:
-        st.error("Could not geocode the START location.")
+        st.error(f"Could not geocode the START location: `{start_text}`")
         st.stop()
     if not storage_ll:
-        st.error("Could not geocode the STORAGE location.")
+        st.error(f"Could not geocode the STORAGE location: `{storage_text}`")
         st.stop()
 
+    # Build waypoints: storage first, then others
     waypoints = []
-    if storage_text:
-        waypoints.append(storage_text)
-    waypoints.extend(other_stops_input)
+    if storage_query:
+        waypoints.append(storage_query)
+    waypoints.extend(other_stops_queries)
 
     if len(waypoints) > 23:
         st.error("Too many stops. Google allows up to **25 total** (origin + destination + waypoints).")
@@ -405,7 +423,7 @@ if st.button("🧭 Optimize Route", type="primary"):
         destination = start_text
         optimized_waypoints = waypoints[:]
     else:
-        destination = waypoints[-1] if waypoints else storage_text
+        destination = waypoints[-1] if waypoints else storage_query
         optimized_waypoints = waypoints[:]
         if destination in optimized_waypoints:
             optimized_waypoints.remove(destination)
@@ -415,7 +433,7 @@ if st.button("🧭 Optimize Route", type="primary"):
             origin=start_text,
             destination=destination,
             mode=travel_mode,
-            waypoints=["optimize:true"] + optimized_waypoints if optimized_waypoints else None,
+            waypoints=(["optimize:true"] + optimized_waypoints) if optimized_waypoints else None,
             departure_time=departure_dt if travel_mode == "driving" else None,
             traffic_model=traffic_model if travel_mode == "driving" else None,
         )
@@ -424,15 +442,16 @@ if st.button("🧭 Optimize Route", type="primary"):
         st.stop()
 
     if not directions:
-        st.error("No route found from Google Directions.")
+        st.error("No route found from Google Directions. Try replacing postal codes with full addresses.")
         st.stop()
 
+    # Reconstruct visit order (storage + others) from Google's waypoint_order
     wp_order = directions[0].get("waypoint_order")
     ordered_list = [optimized_waypoints[i] for i in wp_order] if wp_order is not None else optimized_waypoints
     visit_texts = [start_text] + ordered_list + ([start_text] if round_trip else [destination])
 
+    # Map
     fmap = folium.Map(location=[start_ll[0], start_ll[1]], zoom_start=9, tiles="cartodbpositron")
-
     overview = directions[0]["overview_polyline"]["points"]
     path = polyline.decode(overview)
     folium.PolyLine(path, weight=7, color="#2196f3", opacity=0.9).add_to(fmap)
@@ -479,3 +498,4 @@ if st.button("🧭 Optimize Route", type="primary"):
         f"**Total distance:** {km:.1f} km • **Total time:** {mins:.0f} mins "
         f"{'(live traffic)' if travel_mode=='driving' else ''}"
     )
+
