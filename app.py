@@ -35,25 +35,45 @@ except Exception:
 st.set_page_config(page_title="Route Optimizer", layout="wide")
 
 # ────────────────────────────────────────────────────────────────────────────────
-# Cummins Header (black logo + styled title) — with robust fallback
+# Cummins Header (black logo + styled title)
+# Supports both root and assets folder (PNG/JPG/SVG)
 # ────────────────────────────────────────────────────────────────────────────────
 def cummins_header():
-    LOGO_SVG_URL = "https://upload.wikimedia.org/wikipedia/commons/f/f2/Cummins_logo_black.svg"
-    LOCAL_LOGO = "assets/cummins_black.svg"   # Optional: add this file to your repo for zero-network render
+    # Candidate logo file paths — checks in root and /assets
+    CANDIDATES = [
+        "Cummins_Logo.png",           # your current logo
+        "Cummins_Logo.jpg",
+        "Cummins_Logo.svg",
+        "assets/cummins_black.svg",
+        "assets/cummins_black.png",
+        "assets/cummins_black.jpg",
+    ]
 
     col_logo, col_title = st.columns([1, 6], vertical_alignment="center")
+
     with col_logo:
-        try:
-            if os.path.exists(LOCAL_LOGO):
-                st.image(LOCAL_LOGO, width=90)
-            else:
-                # st.image tends to render remote SVGs more reliably than raw <img> in markdown
-                st.image(LOGO_SVG_URL, width=90)
-        except Exception:
-            # Last-resort text box if image fails anywhere
+        shown = False
+        for path in CANDIDATES:
+            if os.path.exists(path):
+                try:
+                    st.image(path, width=90)
+                    shown = True
+                    break
+                except Exception:
+                    pass
+
+        if not shown:
+            # Inline fallback logo (simple black “C” emblem)
             st.markdown(
-                "<div style='width:90px;height:90px;display:flex;align-items:center;justify-content:center;"
-                "border:1px solid #444;border-radius:8px;color:#bbb;'>Cummins</div>",
+                """
+                <div style="width:90px;height:90px;display:flex;align-items:center;justify-content:center;">
+                  <svg viewBox="0 0 100 100" width="90" height="90"
+                       xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Cummins">
+                    <rect x="0" y="0" width="100" height="100" fill="#000000"/>
+                    <path d="M70,50a20,20 0 1,1 -20,-20" fill="#ffffff"/>
+                  </svg>
+                </div>
+                """,
                 unsafe_allow_html=True
             )
 
@@ -72,7 +92,6 @@ def cummins_header():
 
 # Render header
 cummins_header()
-
 
 # Single source of truth for START address (Geotab -> Route stops)
 if "route_start" not in st.session_state:
