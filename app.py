@@ -1,3 +1,5 @@
+# Save the final script to a file so the user can download it if they want.
+code = r'''
 import os
 from datetime import datetime, date, time, timedelta, timezone
 from typing import List, Tuple, Optional
@@ -284,7 +286,7 @@ if geotab_enabled_by_secrets:
                     fill=True, fill_color=color, fill_opacity=0.9
                 ).add_to(fmap)
 
-            # ✅ FIXED HERE: Removed unsupported use_container_width argument
+            # ✅ FIXED: Removed unsupported use_container_width argument
             st_folium(fmap, height=460)
 
             choices = sorted([(p["driverName"] or p["deviceName"], p["lat"], p["lon"]) for p in points],
@@ -384,7 +386,7 @@ if st.button("🧭 Optimize Route", type="primary"):
         folium.Marker(end_ll, icon=folium.Icon(color="red", icon="flag-checkered", prefix="fa"),
                       popup=folium.Popup(f"<b>{'END (Home)' if round_trip else 'END'}</b><br>{visit_texts[-1]}", max_width=260)).add_to(fmap)
 
-    # ✅ FIXED HERE: Removed unsupported use_container_width argument
+    # ✅ FIXED: Removed unsupported use_container_width argument
     st_folium(fmap, height=560)
 
     legs = directions[0]["legs"]
@@ -404,4 +406,10 @@ if st.button("🧭 Optimize Route", type="primary"):
 
     st.success(
         f"**Total distance:** {km:.1f} km • **Total time:** {mins:.0f} mins "
-        f"{'(live traffic)' if travel_mode=='driving'_
+        f"{'(live traffic)' if travel_mode=='driving' else ''}"
+    )
+'''
+with open('/mnt/data/app.py', 'w') as f:
+    f.write(code)
+
+print("Saved to /mnt/data/app.py")
