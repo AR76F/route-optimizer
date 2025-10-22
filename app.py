@@ -672,12 +672,42 @@ if st.button("🧭 Optimize Route", type="primary"):
 
         visit_texts = [start_addr] + ordered_wp_addrs + ([start_addr] if round_trip else [destination_addr])
 
-        # 5) Totals (duration_in_traffic preferred)
+                # 5) Totals (duration_in_traffic preferred)
         legs = directions[0].get("legs", [])
         total_dist_m = sum(leg.get("distance", {}).get("value", 0) for leg in legs)
         total_sec = sum((leg.get("duration_in_traffic") or leg.get("duration") or {}).get("value", 0) for leg in legs)
         km = total_dist_m / 1000.0 if total_dist_m else 0.0
         mins = total_sec / 60.0 if total_sec else 0.0
+
+        # --- Per-stop timing details (arrival time, leg distance, leg duration) ---
+        # Legs correspond to movements: from visit_texts[i-1] to visit_texts[i]
+        per_leg = []
+        current_dt = departure_dt  # start from the chosen departure time
+
+        for i, leg in enumerate(legs, start=1):
+            # Prefer live traffic duration
+            dur = leg.get("duration_in_traffic") or leg.get("duration") or {}
+            dur_sec = int(dur.get("value", 0))
+            leg_mins = round(dur_sec / 60.0)
+
+            # distance
+            dist_m = int(leg.get("distance", {}).get("value", 0))
+            dist_km = dist_m / 1000.0
+
+            # arrival time at the end of this leg (local time for readability)
+            current_dt = current_dt + timedelta(seconds=dur_sec)
+            arr_str = current_dt.astimezone().strftime("%H:%M")
+
+            # stop we arrive to at end of this leg
+            stop_addr = visit_texts[i] if i < len(visit_texts) else ""
+
+            per_leg.append({
+                "idx": i,
+                "to": stop_addr,
+                "dist_km": dist_km,
+                "mins": leg_mins,
+                "arrive": arr_str,
+            })
 
         # 6) Persist everything needed to re-render after reruns (e.g., Show map toggle)
         st.session_state.route_result = {
@@ -688,6 +718,7 @@ if st.button("🧭 Optimize Route", type="primary"):
             "wp_geocoded": wp_geocoded,
             "round_trip": round_trip,
             "overview": directions[0].get("overview_polyline", {}).get("points"),
+            "per_leg": per_leg,  # <-- added
         }
 
     except Exception as e:
@@ -706,6 +737,7 @@ if res:
     wp_geocoded = res["wp_geocoded"]
     round_trip = res["round_trip"]
     overview = res.get("overview")
+    per_leg  = res.get("per_leg", [])
 
     st.markdown("#### Optimized order (Driving)")
     for ix, addr in enumerate(visit_texts):
@@ -715,6 +747,16 @@ if res:
             st.write(f"**END** — {addr}")
         else:
             st.write(f"**{ix}** — {addr}")
+
+# --- Stop-by-stop timing (arrival time, leg distance, leg duration)
+    if per_leg:
+        st.markdown("#### Stop-by-stop timing")
+        for leg in per_leg:
+            st.write(
+                f"**{leg['idx']}** → _{leg['to']}_  •  "
+                f"{leg['dist_km']:.1f} km  •  {leg['mins']} mins  •  **ETA {leg['arrive']}**"
+            )
+
 
     # Toggle map rendering (off by default for stability)
     show_map = st.checkbox("Show map", value=False, key="show_map_toggle")
