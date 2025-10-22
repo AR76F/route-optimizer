@@ -58,7 +58,7 @@ def cummins_header():
             if os.path.exists(path):
                 try:
                     # Display the logo larger (150px width)
-                    st.image(path, width=150)
+                    st.image(path, width=300)
                     shown = True
                     break
                 except Exception:
@@ -83,10 +83,10 @@ def cummins_header():
         st.markdown(
             """
             <div style="margin-bottom:2px;">
-              <h1 style="margin:0;color:white;font-size:42px;">Route Optimizer</h1>
+              <h1 style="margin:0;color:white;font-size:42px;">Optimisation du trajet des techniciens</h1>
             </div>
             <div style="color:#9aa0a6;font-size:16px;">
-              Home ➜ Storage ➜ Optimized Stops (≤ 25) — <b>Cummins Service Fleet</b>
+              Domicile ➜ Entrepot ➜ Clients (MAXIMUM 25 TRAJETS) — <b>Cummins Service Fleet</b>
             </div>
             """,
             unsafe_allow_html=True
