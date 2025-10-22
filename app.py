@@ -392,19 +392,18 @@ stops_text = st.text_area(
 other_stops_input = [s.strip() for s in stops_text.splitlines() if s.strip()]
 
 # ────────────────────────────────────────────────────────────────────────────────
-# Optimize route — DRIVING ONLY (safe + simple)
+# Optimize route — DRIVING ONLY • No map (stable)
 # ────────────────────────────────────────────────────────────────────────────────
 st.markdown("---")
 if st.button("🧭 Optimize Route", type="primary"):
     try:
-        # 1) Gather inputs and normalize postal codes
+        # 1) Gather inputs and normalize
         start_text = st.session_state.get("route_start", "").strip()
         storage_query = normalize_ca_postal(storage_text.strip()) if storage_text else ""
         other_stops_queries = [normalize_ca_postal(s.strip()) for s in other_stops_input if s.strip()]
 
-        # 2) Geocode everything up-front (clear message on any failure)
+        # 2) Geocode all inputs; fail with a clear list if any are bad
         failures = []
-
         start_g = geocode_ll(gmaps_client, start_text)
         if not start_g:
             failures.append(f"START: `{start_text}`")
@@ -419,7 +418,7 @@ if st.button("🧭 Optimize Route", type="primary"):
         for i, q in enumerate(other_stops_queries, start=1):
             wp_raw.append((f"Stop {i}", q))
 
-        wp_geocoded: List[Tuple[str, str, Tuple[float, float]]] = []  # (label, pretty_addr, (lat,lon))
+        wp_geocoded: List[Tuple[str, str, Tuple[float, float]]] = []
         for label, q in wp_raw:
             g = geocode_ll(gmaps_client, q)
             if not g:
@@ -433,14 +432,13 @@ if st.button("🧭 Optimize Route", type="primary"):
                      "\n\nTip: use full street addresses if a postal code fails.")
             st.stop()
 
-        # 3) Build waypoints/destination
+        # 3) Build Directions request (DRIVING + optimize:true)
         def to_ll_str(ll: Tuple[float, float]) -> str:
             return f"{ll[0]:.7f},{ll[1]:.7f}"
 
         start_ll = (start_g[0], start_g[1])
         start_addr = start_g[2]
 
-        # Addresses and lat,lng strings in the order the user entered (Storage first)
         wp_addrs = [addr for (_lbl, addr, _ll) in wp_geocoded]
         wp_llstr = [to_ll_str(ll) for (_lbl, _addr, ll) in wp_geocoded]
 
@@ -448,19 +446,17 @@ if st.button("🧭 Optimize Route", type="primary"):
             st.error("Too many stops. Google allows up to **25 total** (origin + destination + waypoints).")
             st.stop()
 
-        # For round-trip we keep all as waypoints and return to start.
-        # For one-way we use the last stop as destination and the rest as waypoints.
         if round_trip:
             destination_addr = start_addr
             destination_llstr = to_ll_str(start_ll)
-            waypoints_for_api = wp_llstr[:]    # include all
+            waypoints_for_api = wp_llstr[:]            # include all
         else:
             if wp_llstr:
                 destination_addr = wp_addrs[-1]
                 destination_llstr = wp_llstr[-1]
-                waypoints_for_api = wp_llstr[:-1]  # everything except the destination
+                waypoints_for_api = wp_llstr[:-1]      # all except final destination
             else:
-                # No other stops: go START -> STORAGE (if present) else START -> START
+                # no other stops
                 if storage_g:
                     destination_addr = storage_g[2]
                     destination_llstr = to_ll_str((storage_g[0], storage_g[1]))
@@ -469,7 +465,6 @@ if st.button("🧭 Optimize Route", type="primary"):
                     destination_llstr = to_ll_str(start_ll)
                 waypoints_for_api = []
 
-        # 4) Request directions (DRIVING + optimize:true)
         wp_arg = (["optimize:true"] + waypoints_for_api) if waypoints_for_api else None
 
         directions = gmaps_client.directions(
@@ -477,65 +472,39 @@ if st.button("🧭 Optimize Route", type="primary"):
             destination=destination_llstr,
             mode="driving",
             waypoints=wp_arg,
-            departure_time=departure_dt,     # traffic-aware
+            departure_time=departure_dt,
             traffic_model=traffic_model,
         )
 
         if not directions:
             st.error("No route returned by Google Directions (driving). Try replacing postal codes with full addresses.")
+            st.json({
+                "origin": to_ll_str(start_ll),
+                "destination": destination_llstr,
+                "waypoints": waypoints_for_api,
+            })
             st.stop()
 
-        # 5) Build visit order: follow Google’s waypoint_order
+        # 4) Use Google’s waypoint_order to build the visit list
         if waypoints_for_api:
             order = directions[0].get("waypoint_order", list(range(len(waypoints_for_api))))
-            # Map order (waypoints only) back to readable addresses
             ordered_wp_addrs = [wp_addrs[i] for i in order]
             if not round_trip and wp_addrs:
-                ordered_wp_addrs.append(destination_addr)  # add destination back for display
+                ordered_wp_addrs.append(destination_addr)
         else:
             ordered_wp_addrs = [] if round_trip else [destination_addr]
 
         visit_texts = [start_addr] + ordered_wp_addrs + ([start_addr] if round_trip else [destination_addr])
 
-        # 6) Map
-        fmap = folium.Map(location=[start_ll[0], start_ll[1]], zoom_start=9, tiles="cartodbpositron")
-        overview = directions[0].get("overview_polyline", {}).get("points")
-        if overview:
-            path = polyline.decode(overview)
-            folium.PolyLine(path, weight=7, color="#2196f3", opacity=0.9).add_to(fmap)
-
-        folium.Marker(
-            start_ll, icon=folium.Icon(color="green", icon="play", prefix="fa"),
-            popup=folium.Popup(f"<b>START</b><br>{start_addr}", max_width=260)
-        ).add_to(fmap)
-
-        addr2ll = {addr: ll for (_lbl, addr, ll) in wp_geocoded}
-        for i, addr in enumerate(ordered_wp_addrs, start=1):
-            ll = addr2ll.get(addr)
-            if ll:
-                folium.Marker(
-                    ll, popup=folium.Popup(f"<b>{i}</b>. {addr}", max_width=260),
-                    icon=big_number_marker(str(i))
-                ).add_to(fmap)
-
-        end_g = geocode_ll(gmaps_client, visit_texts[-1])
-        if end_g:
-            end_ll = (end_g[0], end_g[1])
-            folium.Marker(
-                end_ll, icon=folium.Icon(color="red", icon="flag-checkered", prefix="fa"),
-                popup=folium.Popup(f"<b>{'END (Home)' if round_trip else 'END'}</b><br>{visit_texts[-1]}", max_width=260)
-            ).add_to(fmap)
-
-        st_folium(fmap, height=560)
-
-        # 7) Totals (duration_in_traffic preferred)
+        # 5) Totals (duration_in_traffic preferred)
         legs = directions[0].get("legs", [])
         total_dist_m = sum(leg.get("distance", {}).get("value", 0) for leg in legs)
         total_sec = sum((leg.get("duration_in_traffic") or leg.get("duration") or {}).get("value", 0) for leg in legs)
         km = total_dist_m / 1000.0 if total_dist_m else 0.0
         mins = total_sec / 60.0 if total_sec else 0.0
 
-        st.markdown("#### Optimized order")
+        # 6) Show results (list only; no map)
+        st.markdown("#### Optimized order (Driving)")
         for ix, addr in enumerate(visit_texts):
             if ix == 0:
                 st.write(f"**START** — {addr}")
