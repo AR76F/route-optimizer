@@ -404,6 +404,117 @@ else:
     st.caption("Geotab live view is disabled. Add `GEOTAB_DATABASE`, `GEOTAB_USERNAME`, and `GEOTAB_PASSWORD` in Secrets.")
 
 # ────────────────────────────────────────────────────────────────────────────────
+# 🏠 Team Home-Base Map (optional)
+# ────────────────────────────────────────────────────────────────────────────────
+st.markdown("---")
+st.subheader("🏠 Technician home bases (optional)")
+
+# Name -> Address (add ", Canada" automatically where useful)
+TECH_HOME = {
+    "Alain":     "1110 rue Proulx, Les Cèdres, QC J7T 1E6",
+    "Alex":      "163 21e ave, Sabrevois, J0J 2G0",
+    "Ali":       "226 rue Felx, Saint-Clet, QC J0P 1S0",
+    "Ben C":     "34 rue de la Digue, Saint-Jérôme, QC, Canada",
+    "Ben L":     "12 rue de Beaudry, Mercier, J6R 2N7",
+    "Christian": "31 rue des Roitelets, Delson, J5B 1T6",
+    "Donald":    "Montée Saint-Régis, Sainte-Catherine, QC, Canada",
+    "Elie":      "3700 Montée du 4e Rang, Les Maskoutains, J0H 1S0",
+    "Francois":  "80 rue de Beaujeu, Coteau-du-Lac, J0P 1B0",
+    "Fredy":     "312 rue de Valcourt, Blainville, J7B 1H3",
+    "George":    "Rue René-Lévesque, Saint-Eustache, J7R 7L4",
+    "Kevin":     "943 rue des Marquises, Beloeil, J3G 6T9",
+    "Louis":     "5005 rue Domville, Saint-Hubert, J3Y 1Y2",
+    "Martin":    "1444 rue de l'Orchidée, L'Assomption, QC J5W 6B3",
+    "Maxime":    "3e ave, Île aux Noix, QC, Canada",
+    "Michael":   "2020 Chem. de Covey Hill, Hinchinbrooke, QC, Canada",
+    "Patrick":   "222 rue Charles-Gadiou, L'Assomption, J5W 0J4",
+    "PL":        "143 rue Ashby, Marieville, J3M 1P2",
+    "Seb":       "Saint-Valentin, QC, Canada",
+    "Sergio":    "791 rue des Marquises, Beloeil, QC J3G 6M6",
+}
+
+def _canon_addr(a: str) -> str:
+    """Normalize postal codes and gently bias to Canada."""
+    a = (a or "").strip()
+    if not a:
+        return a
+    a = normalize_ca_postal(a)
+    # Ensure country appears for partials
+    if "canada" not in a.lower() and "qc" in a.lower():
+        a = f"{a}, Canada"
+    return a
+
+@st.cache_data(ttl=86400, show_spinner=False)  # cache 24h to avoid quota churn
+def _geocode_team(homes: dict):
+    rows = []
+    for name, raw in homes.items():
+        q = _canon_addr(raw)
+        g = geocode_ll(gmaps_client, q)
+        if g:
+            lat, lon, pretty = g
+            rows.append({"name": name, "address": pretty, "lat": lat, "lon": lon})
+    return rows
+
+show_team_map = st.checkbox("Show team home-base map", value=False, key="team_map_toggle")
+team_rows = _geocode_team(TECH_HOME)
+
+# Selector to inject a tech's home address into the START field
+if team_rows:
+    pick_list = [f"{r['name']} — {r['address']}" for r in team_rows]
+    tech_pick = st.selectbox(
+        "Use this technician’s home as route START:",
+        ["(none)"] + pick_list,
+        index=0,
+        help="This will fill the 'Technician home (START)' field below."
+    )
+    if tech_pick != "(none)":
+        # set route start
+        chosen = team_rows[pick_list.index(tech_pick)]
+        st.session_state.route_start = chosen["address"]
+        st.success(f"Start set to **{chosen['name']}** — {chosen['address']}")
+
+if show_team_map and team_rows:
+    # center on average
+    avg_lat = sum(r["lat"] for r in team_rows) / len(team_rows)
+    avg_lon = sum(r["lon"] for r in team_rows) / len(team_rows)
+    fmap = folium.Map(location=[avg_lat, avg_lon], zoom_start=8, tiles="cartodbpositron")
+
+    for r in team_rows:
+        name, addr, lat, lon = r["name"], r["address"], r["lat"], r["lon"]
+
+        # A small pin/circle
+        folium.CircleMarker(
+            [lat, lon], radius=7, color="#1b4332", weight=2,
+            fill=True, fill_color="#2d6a4f", fill_opacity=0.95,
+            popup=folium.Popup(f"<b>{name}</b><br>{addr}", max_width=320),
+        ).add_to(fmap)
+
+        # A readable label right above the point
+        folium.Marker(
+            [lat, lon],
+            icon=folium.DivIcon(
+                icon_size=(220, 20),
+                icon_anchor=(0, -14),
+                html=f"""
+                <div style="
+                    display:inline-block; padding:2px 6px;
+                    font-size:12px; font-weight:700; color:#111;
+                    background:rgba(255,255,255,.95);
+                    border:1px solid #ddd; border-radius:6px;
+                    box-shadow:0 1px 2px rgba(0,0,0,.25);
+                    white-space:nowrap;">
+                    {name}
+                </div>
+                """
+            ),
+            tooltip=f"{name} — {addr}",
+        ).add_to(fmap)
+
+    st_folium(fmap, height=600, width=1200)
+elif show_team_map:
+    st.info("No technician locations could be geocoded yet.")
+
+# ────────────────────────────────────────────────────────────────────────────────
 # Route stops (AFTER Geotab so the start can be auto-filled)
 # ────────────────────────────────────────────────────────────────────────────────
 st.markdown("### Route stops")
