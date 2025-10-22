@@ -158,18 +158,17 @@ else:
     departure_dt = naive.replace(tzinfo=timezone.utc)
 
 # ────────────────────────────────────────────────────────────────────────────────
-# 🎯 Point de départ : Live Fleet (Geotab) + Technician Home (uniquement pour le départ)
+# 🎯 Point de départ : Live Fleet (Geotab) + Technician Home
 # ────────────────────────────────────────────────────────────────────────────────
 st.markdown("---")
 st.subheader("🎯 Point de départ")
 
-# Assure une valeur dans la session
 if "route_start" not in st.session_state:
     st.session_state.route_start = ""
 
 tabs = st.tabs(["🚚 Live Fleet (Geotab)", "🏠 Technician Home"])
 
-# ===============  TAB 1 — LIVE FLEET (GEOTAB)  ==================
+# ===============  TAB 1 — LIVE FLEET (GEOTAB, MULTI-SÉLECTION + GRANDE CARTE)  ===============
 with tabs[0]:
     G_DB = secret("GEOTAB_DATABASE")
     G_USER = secret("GEOTAB_USERNAME")
@@ -178,13 +177,14 @@ with tabs[0]:
     geotab_enabled_by_secrets = GEOTAB_AVAILABLE and all([G_DB, G_USER, G_PWD])
 
     if geotab_enabled_by_secrets:
-        # rafraîchissement manuel léger
+
+        # Rafraîchissement manuel pour éviter la saturation API
         if "geo_refresh_key" not in st.session_state:
             st.session_state.geo_refresh_key = 0
-        if st.button("🔄 Rafraîchir Geotab"):
+        if st.button("🔄 Rafraîchir Geotab maintenant"):
             st.session_state.geo_refresh_key += 1
 
-        # Fonctions cache (si elles n'existent pas déjà)
+        # Caches si non définis ailleurs
         if "_geotab_api_cached" not in globals():
             @st.cache_resource(show_spinner=False)
             def _geotab_api_cached(user, pwd, db, server):
@@ -204,90 +204,161 @@ with tabs[0]:
             def _geotab_positions_for(api_params, device_ids, refresh_key):
                 user, pwd, db, server = api_params
                 api = _geotab_api_cached(user, pwd, db, server)
-                out = []
+                results = []
                 for did in device_ids:
                     try:
-                        dsi = api.call("Get", typeName="DeviceStatusInfo", search={"deviceSearch": {"id": did}})
+                        dsi = api.call("Get", typeName="DeviceStatusInfo",
+                                       search={"deviceSearch": {"id": did}})
+                        lat = lon = when = None
+                        driver_name = None
                         if dsi:
                             row = dsi[0]
                             lat, lon = row.get("latitude"), row.get("longitude")
                             when = row.get("dateTime") or row.get("lastCommunicated") or row.get("workDate")
                             if (lat is None or lon is None) and isinstance(row.get("location"), dict):
                                 lat = row["location"].get("y"); lon = row["location"].get("x")
-                            if lat is not None and lon is not None:
-                                out.append({"deviceId": did, "lat": float(lat), "lon": float(lon), "when": when})
-                                continue
+                            drv = row.get("driver")
+                            if isinstance(drv, dict):
+                                driver_name = drv.get("name")
+                        if lat is not None and lon is not None:
+                            results.append({"deviceId": did, "lat": float(lat), "lon": float(lon),
+                                            "when": when, "driverName": driver_name})
+                        else:
+                            results.append({"deviceId": did, "error": "no_position"})
                     except Exception:
-                        pass
-                    out.append({"deviceId": did, "error": "no_position"})
-                return out
+                        results.append({"deviceId": did, "error": "error"})
+                return results
 
-        # mapping pilote (si vous l'avez déjà ailleurs, vous pouvez l'ôter ici)
+        # Mapping (optionnel) pour associer un nom de conducteur si l'API ne le renvoie pas
         DEVICE_TO_DRIVER_RAW = {
-            "01942": "ALI-REZA SABOUR","24735": "PATRICK BELLEFLEUR","23731": "ÉLIE RAJOTTE-LEMAY",
-            "18010": "GEORGES YAMNA","23736": "MARTIN BOURBONNIÈRE","23738": "PIER-LUC CÔTÉ",
-            "24724": "LOUIS LAUZON","23744": "BENOÎT CHARETTE","23727": "FREDY DIAZ",
-            "23737": "ALAIN DUGUAY","23730": "BENOÎT LARAMÉE","24725": "CHRISTIAN DUBREUIL",
-            "23746": "MICHAEL SULTE","24728": "FRANÇOIS RACINE","23743": "ALEX PELLETIER-GUAY",
+            "01942": "ALI-REZA SABOUR", "24735": "PATRICK BELLEFLEUR", "23731": "ÉLIE RAJOTTE-LEMAY",
+            "18010": "GEORGES YAMNA", "23736": "MARTIN BOURBONNIÈRE", "23738": "PIER-LUC CÔTÉ",
+            "24724": "LOUIS LAUZON", "23744": "BENOÎT CHARETTE", "23727": "FREDY DIAZ",
+            "23737": "ALAIN DUGUAY", "23730": "BENOÎT LARAMÉE", "24725": "CHRISTIAN DUBREUIL",
+            "23746": "MICHAEL SULTE", "24728": "FRANÇOIS RACINE", "23743": "ALEX PELLETIER-GUAY",
             "23745": "KEVIN DURANCEAU",
         }
         import json
         try:
             j = secret("GEOTAB_DEVICE_TO_DRIVER_JSON")
-            if j: DEVICE_TO_DRIVER_RAW.update(json.loads(j))
+            if j:
+                DEVICE_TO_DRIVER_RAW.update(json.loads(j))
         except Exception:
             pass
 
-        def _norm(s): return " ".join(str(s or "").strip().upper().split())
+        def _norm(s: str) -> str:
+            return " ".join(str(s or "").strip().upper().split())
+
         NAME2DRIVER, ID2DRIVER = {}, {}
         for k, v in DEVICE_TO_DRIVER_RAW.items():
             nk = _norm(k)
-            if not nk: continue
+            if not nk:
+                continue
             if len(nk) > 12 or ("-" in nk and any(c.isalpha() for c in nk)):
                 ID2DRIVER[nk] = v
             else:
                 NAME2DRIVER[nk] = v
-        def _driver_from_mapping(device_id, device_name):
-            n_id, n_name = _norm(device_id), _norm(device_name)
-            return (NAME2DRIVER.get(n_name) or ID2DRIVER.get(n_id) or
-                    ID2DRIVER.get(n_name) or NAME2DRIVER.get(n_id))
-        def _label_for_device(device_id, device_name, driver_from_api=None):
-            driver = driver_from_api or _driver_from_mapping(device_id, device_name) or "(no driver)"
-            return f"{driver} — {device_name or device_id}"
 
-        # UI simple : un select pour choisir un seul véhicule
+        def _driver_from_mapping(device_id: str, device_name: str) -> Optional[str]:
+            n_id, n_name = _norm(device_id), _norm(device_name)
+            return NAME2DRIVER.get(n_name) or ID2DRIVER.get(n_id) or ID2DRIVER.get(n_name) or NAME2DRIVER.get(n_id)
+
+        def _label_for_device(device_id: str, device_name: str, driver_from_api: Optional[str]) -> str:
+            driver = driver_from_api or _driver_from_mapping(device_id, device_name) or "(no driver)"
+            dev_label = device_name or device_id
+            return f"{driver} — {dev_label}"
+
+        # Sélection multiple
         devs = _geotab_devices_cached(G_USER, G_PWD, G_DB, G_SERVER)
         if not devs:
             st.info("Aucun appareil actif trouvé.")
         else:
-            id2name = {d["id"]: d["name"] for d in devs}
-            options = [_label_for_device(d["id"], d["name"], None) for d in devs]
-            label2id = {opt: d["id"] for opt, d in zip(options, devs)}
+            options = []
+            label2id = {}
+            for d in devs:
+                label = _label_for_device(d["id"], d["name"], None)
+                options.append(label)
+                label2id[label] = d["id"]
 
-            pick = st.selectbox("Choisir un véhicule / conducteur :", ["(aucun)"] + sorted(options), index=0)
-            if pick != "(aucun)":
-                did = label2id[pick]
-                pts = _geotab_positions_for((G_USER, G_PWD, G_DB, G_SERVER), (did,), st.session_state.geo_refresh_key)
-                p = next((x for x in pts if "lat" in x), None)
-                if p:
-                    # adresse → set comme départ
-                    addr = reverse_geocode(gmaps_client, p["lat"], p["lon"])
-                    st.session_state.route_start = addr
-                    st.success(f"Départ défini depuis **{pick}** → {addr}")
+            picked_labels = st.multiselect(
+                "Sélectionner un ou plusieurs véhicules/techniciens à afficher :",
+                sorted(options), default=[]
+            )
 
-                    # mini-carte facultative
-                    if st.checkbox("Afficher la position sur une carte", value=False, key="geo_show_one"):
-                        fmap = folium.Map(location=[p["lat"], p["lon"]], zoom_start=12, tiles="cartodbpositron")
-                        folium.Marker([p["lat"], p["lon"]],
-                                      popup=folium.Popup(f"<b>{pick}</b><br>{addr}", max_width=320),
-                                      icon=folium.Icon(color="green", icon="user", prefix="fa")).add_to(fmap)
-                        st_folium(fmap, height=800, width=1800)
+            wanted_ids = [label2id[lbl] for lbl in picked_labels]
+            if wanted_ids:
+                pts = _geotab_positions_for(
+                    (G_USER, G_PWD, G_DB, G_SERVER),
+                    tuple(wanted_ids),
+                    st.session_state.geo_refresh_key
+                )
+                id2name = {d["id"]: d["name"] for d in devs}
+
+                valid = [p for p in pts if "lat" in p and "lon" in p]
+                if valid:
+                    # Carte grande
+                    avg_lat = sum(p["lat"] for p in valid) / len(valid)
+                    avg_lon = sum(p["lon"] for p in valid) / len(valid)
+                    fmap = folium.Map(location=[avg_lat, avg_lon], zoom_start=8, tiles="cartodbpositron")
+
+                    # Liste pour le choix final du départ
+                    choice_labels = []
+                    for p in valid:
+                        device_id = p["deviceId"]
+                        device_name = id2name.get(device_id, device_id)
+                        label = _label_for_device(device_id, device_name, p.get("driverName"))
+                        choice_labels.append(label)
+
+                        color, lab = recency_color(p.get("when"))
+
+                        # Marqueur + étiquette avec le nom (lisible sur la carte)
+                        folium.CircleMarker(
+                            [p["lat"], p["lon"]],
+                            radius=8, color="#222", weight=2,
+                            fill=True, fill_color=color, fill_opacity=0.9
+                        ).add_to(fmap)
+
+                        folium.Marker(
+                            [p["lat"], p["lon"]],
+                            popup=folium.Popup(
+                                f"<b>{label}</b><br>Recency: {lab}<br>{p['lat']:.5f}, {p['lon']:.5f}", max_width=320
+                            ),
+                            tooltip=label,
+                            icon=folium.DivIcon(
+                                icon_size=(240, 22),
+                                icon_anchor=(0, -18),
+                                html=f"""
+                                <div style="
+                                    display:inline-block;padding:2px 6px;
+                                    font-size:12px;font-weight:700;color:#111;
+                                    background:rgba(255,255,255,.95);
+                                    border:1px solid #ddd;border-radius:6px;
+                                    box-shadow:0 1px 2px rgba(0,0,0,.25);white-space:nowrap;">
+                                    {label.split(' — ')[0]}
+                                </div>
+                                """
+                            )
+                        ).add_to(fmap)
+
+                    st_folium(fmap, height=800, width=1800)
+
+                    # Choix final : définir le départ à partir de la liste affichée
+                    start_choice = st.selectbox(
+                        "Utiliser comme point de départ :", ["(aucun)"] + choice_labels, index=0
+                    )
+                    if start_choice != "(aucun)":
+                        chosen = valid[choice_labels.index(start_choice)]
+                        picked_addr = reverse_geocode(gmaps_client, chosen["lat"], chosen["lon"])
+                        st.session_state.route_start = picked_addr
+                        st.success(f"Départ défini depuis **{start_choice}** → {picked_addr}")
                 else:
-                    st.warning("Position introuvable pour cet appareil (essayez de rafraîchir).")
+                    st.warning("Aucune position exploitable pour les éléments sélectionnés (essayez de rafraîchir).")
+            else:
+                st.info("Sélectionnez au moins un véhicule/technicien pour afficher la carte.")
     else:
         st.info("Geotab désactivé. Ajoutez `GEOTAB_DATABASE`, `GEOTAB_USERNAME`, `GEOTAB_PASSWORD` dans les Secrets.")
 
-# ===============  TAB 2 — TECHNICIAN HOME  ==================
+# ===============  TAB 2 — TECHNICIAN HOME (mêmes réglages de taille de carte)  ===============
 with tabs[1]:
     TECH_HOME = {
         "Alain": "1110 rue Proulx, Les Cèdres, QC J7T 1E6",
@@ -314,7 +385,8 @@ with tabs[1]:
 
     def _canon_addr(a: str) -> str:
         a = (a or "").strip()
-        if not a: return a
+        if not a:
+            return a
         a = normalize_ca_postal(a)
         if "canada" not in a.lower() and "qc" in a.lower():
             a = f"{a}, Canada"
@@ -347,12 +419,13 @@ with tabs[1]:
             avg_lon = sum(r["lon"] for r in team_rows) / len(team_rows)
             fmap = folium.Map(location=[avg_lat, avg_lon], zoom_start=8, tiles="cartodbpositron")
             for r in team_rows:
+                # point + label nom
                 folium.CircleMarker([r["lat"], r["lon"]], radius=7, color="#1b4332", weight=2,
-                                    fill=True, fill_color="#2d6a4f", fill_opacity=0.95,
-                                    popup=folium.Popup(f"<b>{r['name']}</b><br>{r['address']}", max_width=320)
-                                    ).add_to(fmap)
+                                    fill=True, fill_color="#2d6a4f", fill_opacity=0.95).add_to(fmap)
                 folium.Marker(
                     [r["lat"], r["lon"]],
+                    popup=folium.Popup(f"<b>{r['name']}</b><br>{r['address']}", max_width=320),
+                    tooltip=f"{r['name']} — {r['address']}",
                     icon=folium.DivIcon(
                         icon_size=(220, 20), icon_anchor=(0, -14),
                         html=f"""<div style="display:inline-block;padding:2px 6px;
@@ -360,10 +433,9 @@ with tabs[1]:
                                  border:1px solid #ddd;border-radius:6px;
                                  box-shadow:0 1px 2px rgba(0,0,0,.25);white-space:nowrap;">
                                  {r['name']}</div>"""
-                    ),
-                    tooltip=f"{r['name']} — {r['address']}",
+                    )
                 ).add_to(fmap)
-            st_folium(fmap, height=520, width=1100)
+            st_folium(fmap, height=800, width=1800)
 
 # Rappel visuel du départ courant
 if st.session_state.route_start:
