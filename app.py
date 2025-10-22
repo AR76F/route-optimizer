@@ -342,11 +342,39 @@ if geotab_enabled_by_secrets:
                         choice_labels.append(label)
 
                         color, lab = recency_color(p.get("when"))
-                        add_marker(
-                            fmap, p["lat"], p["lon"],
-                            popup=folium.Popup(f"<b>{label}</b><br>Recency: {lab}<br>{p['lat']:.5f}, {p['lon']:.5f}", max_width=300),
-                            icon=folium.Icon(color="green", icon="user", prefix="fa")
-                        )
+                        # Display technician name directly on the map
+folium.Marker(
+    [p["lat"], p["lon"]],
+    popup=folium.Popup(f"<b>{label}</b><br>Recency: {lab}<br>{p['lat']:.5f}, {p['lon']:.5f}", max_width=300),
+    tooltip=label,  # shows on hover
+    icon=folium.DivIcon(
+        html=f"""
+        <div style="
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            text-align: center;
+            background-color: #28a745;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            color: white;
+            font-weight: bold;
+            border: 2px solid white;
+            box-shadow: 0 0 3px rgba(0,0,0,0.5);
+        ">T</div>
+        <div style="
+            font-size: 12px;
+            color: #fff;
+            text-shadow: 1px 1px 2px #000;
+            font-weight: 600;
+            margin-top: -5px;
+        ">{label.split(' — ')[0]}</div>
+        """
+    )
+).add_to(fmap)
+
                         folium.CircleMarker([p["lat"], p["lon"]], radius=8, color="#222", weight=2,
                                             fill=True, fill_color=color, fill_opacity=0.9).add_to(fmap)
 
