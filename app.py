@@ -34,6 +34,10 @@ except Exception:
 st.set_page_config(page_title="Route Optimizer", layout="wide")
 st.title("📍 Route Optimizer — Home ➜ Storage ➜ Optimized Stops (≤ 25)")
 
+# Single source of truth for START address (Geotab -> Route stops)
+if "route_start" not in st.session_state:
+    st.session_state.route_start = ""
+
 # ────────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ────────────────────────────────────────────────────────────────────────────────
@@ -136,20 +140,8 @@ else:
     departure_dt = naive.replace(tzinfo=timezone.utc)
 
 # ────────────────────────────────────────────────────────────────────────────────
-# Stops
-# ────────────────────────────────────────────────────────────────────────────────
-st.markdown("### Route stops")
-start_text = st.text_input("Technician home (START)", placeholder="e.g., 123 Main St, City, Province")
-storage_text = st.text_input("Storage location (first stop)", placeholder="e.g., 456 Depot Rd, City, Province")
-stops_text = st.text_area(
-    "Other stops (one ZIP/postal code or full address per line)",
-    height=140,
-    placeholder="H0H0H0\nG2P1L4\n…"
-)
-other_stops_input = [s.strip() for s in stops_text.splitlines() if s.strip()]
-
-# ────────────────────────────────────────────────────────────────────────────────
 # Geotab (via secrets only) — rate-limit safe, with DRIVER NAMES (id OR name mapped)
+# (Placed ABOVE Route stops so the START field can be auto-filled.)
 # ────────────────────────────────────────────────────────────────────────────────
 st.markdown("---")
 st.subheader("🚚 Live Fleet (Geotab)")
@@ -163,8 +155,6 @@ geotab_enabled_by_secrets = GEOTAB_AVAILABLE and all([G_DB, G_USER, G_PWD])
 # --- Driver mapping (works by device NAME or device ID) ------------------------
 # You can also add/override via secret GEOTAB_DEVICE_TO_DRIVER_JSON
 DEVICE_TO_DRIVER_RAW = {
-    # Keys can be either the visible device NAME ("01942", "00Z8-SUCC. DE CANDIAC")
-    # or the internal device ID (GUID). We’ll normalize and match both.
     "01942": "ALI-REZA SABOUR",
     "24735": "PATRICK BELLEFLEUR",
     "23731": "ÉLIE RAJOTTE-LEMAY",
@@ -181,7 +171,6 @@ DEVICE_TO_DRIVER_RAW = {
     "24728": "FRANÇOIS RACINE",
     "23743": "ALEX PELLETIER-GUAY",
     "23745": "KEVIN DURANCEAU",
-    # add more here if you want
 }
 import json
 try:
@@ -197,27 +186,23 @@ def _norm(s: Optional[str]) -> Optional[str]:
     return " ".join(str(s).strip().upper().split())
 
 # Build two maps: by name and by id (both normalized)
-NAME2DRIVER = {}
-ID2DRIVER = {}
+NAME2DRIVER, ID2DRIVER = {}, {}
 for k, v in DEVICE_TO_DRIVER_RAW.items():
     nk = _norm(k)
-    if not nk: 
+    if not nk:
         continue
-    # crude heuristic: GUIDs contain '-' and are long; names like "01942" or "00Z8-SUCC. DE CANDIAC"
-    if len(nk) > 12 or "-" in nk and any(c.isalpha() for c in nk):  # likely an ID/GUID or long label
+    if len(nk) > 12 or "-" in nk and any(c.isalpha() for c in nk):  # likely an ID/GUID/long
         ID2DRIVER[nk] = v
     else:
         NAME2DRIVER[nk] = v
 
 def _driver_from_mapping(device_id: Optional[str], device_name: Optional[str]) -> Optional[str]:
-    # Try name first (what you see in Geotab UI), then internal id
     n_name = _norm(device_name)
     if n_name and n_name in NAME2DRIVER:
         return NAME2DRIVER[n_name]
     n_id = _norm(device_id)
     if n_id and n_id in ID2DRIVER:
         return ID2DRIVER[n_id]
-    # also allow cross-match if someone put a NAME into the ID table or vice-versa
     if n_name and n_name in ID2DRIVER:
         return ID2DRIVER[n_name]
     if n_id and n_id in NAME2DRIVER:
@@ -251,11 +236,7 @@ def _geotab_devices_cached(user, pwd, db, server):
 def _geotab_positions_for(api_params, device_ids, refresh_key):
     user, pwd, db, server = api_params
     api = _geotab_api_cached(user, pwd, db, server)
-
-    results = []
-    calls_made = 0
-    limit_per_min = 9
-
+    results, calls_made, limit_per_min = [], 0, 9
     for did in device_ids:
         if calls_made >= limit_per_min:
             results.append({"deviceId": did, "error": "rate_limit_guard"})
@@ -281,7 +262,6 @@ def _geotab_positions_for(api_params, device_ids, refresh_key):
         except Exception as e:
             results.append({"deviceId": did, "error": f"dsi:{e}"})
             continue
-
         if calls_made >= limit_per_min:
             results.append({"deviceId": did, "error": "rate_limit_guard"})
             continue
@@ -312,8 +292,7 @@ if geotab_enabled_by_secrets:
             st.info("No active devices found.")
         else:
             # Build friendly labels for the selector BEFORE querying positions
-            options = []
-            label2id = {}
+            options, label2id = [], {}
             for d in devs:
                 label = _label_for_device(d["id"], d["name"], None)  # mapping-only at this stage
                 options.append(label)
@@ -333,9 +312,7 @@ if geotab_enabled_by_secrets:
                     tuple(wanted_ids),
                     st.session_state.geo_refresh_key
                 )
-                # quick map id -> name for display
                 id2name = {d["id"]: d["name"] for d in devs}
-
                 valid = [p for p in pts if "lat" in p and "lon" in p]
                 if valid:
                     avg_lat = sum(p["lat"] for p in valid) / len(valid)
@@ -360,11 +337,14 @@ if geotab_enabled_by_secrets:
 
                     st_folium(fmap, height=420)
 
-                    start_choice = st.selectbox("Use this driver/device as route start:", ["(none)"] + choice_labels)
+                    # Use driver/device as route start — auto-fill the START address
+                    start_choice = st.selectbox("Use this driver/device as route start:",
+                                                ["(none)"] + choice_labels, key="geo_start_choice")
                     if start_choice != "(none)":
                         chosen = valid[choice_labels.index(start_choice)]
-                        start_text = reverse_geocode(gmaps_client, chosen["lat"], chosen["lon"])
-                        st.success(f"Start set from Geotab: **{start_choice}** → {start_text}")
+                        picked_addr = reverse_geocode(gmaps_client, chosen["lat"], chosen["lon"])
+                        st.session_state.route_start = picked_addr
+                        st.success(f"Start set from Geotab: **{start_choice}** → {picked_addr}")
 
                 guarded = [p for p in pts if p.get("error") == "rate_limit_guard"]
                 if guarded:
@@ -380,10 +360,29 @@ else:
     st.caption("Geotab live view is disabled. Add `GEOTAB_DATABASE`, `GEOTAB_USERNAME`, and `GEOTAB_PASSWORD` in Secrets.")
 
 # ────────────────────────────────────────────────────────────────────────────────
+# Route stops (AFTER Geotab so the start can be auto-filled)
+# ────────────────────────────────────────────────────────────────────────────────
+st.markdown("### Route stops")
+start_text = st.text_input(
+    "Technician home (START)",
+    key="route_start",  # bound to the value we set from Geotab
+    placeholder="e.g., 123 Main St, City, Province"
+)
+storage_text = st.text_input("Storage location (first stop)", placeholder="e.g., 456 Depot Rd, City, Province")
+stops_text = st.text_area(
+    "Other stops (one ZIP/postal code or full address per line)",
+    height=140,
+    placeholder="H0H0H0\nG2P1L4\n…"
+)
+other_stops_input = [s.strip() for s in stops_text.splitlines() if s.strip()]
+
+# ────────────────────────────────────────────────────────────────────────────────
 # Optimize route
 # ────────────────────────────────────────────────────────────────────────────────
 st.markdown("---")
 if st.button("🧭 Optimize Route", type="primary"):
+    # Always read the START from session (Geotab or user-edited)
+    start_text = st.session_state.get("route_start", "")
     start_ll = geocode(gmaps_client, start_text)
     storage_ll = geocode(gmaps_client, storage_text) if storage_text else None
     if not start_ll:
