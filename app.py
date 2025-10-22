@@ -419,7 +419,7 @@ with tabs[0]:
     else:
         st.info("Geotab désactivé. Ajoutez `GEOTAB_DATABASE`, `GEOTAB_USERNAME`, `GEOTAB_PASSWORD` dans les Secrets.")
         
-# ============= TAB 2 – TECHNICIAN HOME (with Entrepôts + visible labels + auto-fill Start/Storage) =============
+# ============= TAB 2 – TECHNICIAN HOME (with Entrepôts + auto-fill Start & Storage) =============
 with tabs[1]:
     # Initialize session variables for Start & Storage
     if "route_start" not in st.session_state:
@@ -499,30 +499,30 @@ with tabs[1]:
                 avg_lon = sum(p["lon"] for p in points) / len(points)
                 fmap = folium.Map(location=[avg_lat, avg_lon], zoom_start=8, tiles="cartodbpositron")
 
-                # Add markers with always-visible names
+                # Add markers with visible names
                 for p in points:
                     if p["type"] == "technician":
-                        m = folium.Marker(
+                        marker = folium.Marker(
                             [p["lat"], p["lon"]],
                             popup=folium.Popup(f"<b>{p['name']}</b><br>{p['address']}", max_width=300),
                             icon=folium.Icon(color="blue", icon="user", prefix="fa")
                         )
-                        m.add_to(fmap)
-                        folium.Tooltip(p["name"], permanent=True, direction="right").add_to(m)
+                        marker.add_to(fmap)
+                        folium.Tooltip(p["name"], permanent=True, direction="right").add_to(marker)
                     else:
-                        m = folium.Marker(
+                        marker = folium.Marker(
                             [p["lat"], p["lon"]],
                             popup=folium.Popup(f"<b>🏭 Entrepôt — {p['name']}</b><br>{p['address']}", max_width=300),
                             icon=folium.Icon(color="red", icon="building", prefix="fa")
                         )
-                        m.add_to(fmap)
-                        folium.Tooltip(f"Entrepôt — {p['name']}", permanent=True, direction="right").add_to(m)
+                        marker.add_to(fmap)
+                        folium.Tooltip(f"Entrepôt — {p['name']}", permanent=True, direction="right").add_to(marker)
 
                 st_folium(fmap, height=800, width=1800)
             else:
                 st.warning("No valid technician or entrepôt locations found.")
 
-            # Selection controls to auto-fill Start and Storage
+            # Selection controls
             st.markdown("#### Select start/end sources")
             c1, c2 = st.columns(2)
 
@@ -545,6 +545,13 @@ with tabs[1]:
                 if ent_choice != "(choose)":
                     st.session_state["storage_input"] = ent_name_to_addr[ent_choice]
                     st.success(f"Storage set to **Entrepôt — {ent_choice}** — {ent_name_to_addr[ent_choice]}")
+
+            # Bind storage input so Entrepôt selection fills it automatically
+            st.text_input(
+                "Storage location (first stop)",
+                key="storage_input",
+                placeholder="e.g., 456 Depot Rd, City, Province"
+            )
 
         except Exception as e:
             st.error(f"Error while loading map: {e}")
