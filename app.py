@@ -584,7 +584,7 @@ if res:
                     popup=folium.Popup(f"<b>{'END (Home)' if round_trip else 'END'}</b><br>{end_addr}", max_width=260)
                 ).add_to(fmap)
 
-            st_folium(fmap, height=560)
+           st_folium(fmap, height=800, width=1800)
         except Exception as e:
             st.warning(f"Map rendering skipped: {e}")
 
