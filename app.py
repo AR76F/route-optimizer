@@ -83,9 +83,9 @@ def cummins_header():
         st.markdown(
             """
             <div style="margin-bottom:2px;">
-              <h1 style="margin:0;color:white;font-size:42px;">Optimisation du trajet des techniciens</h1>
+              <h1 style="margin:0;color:white;font-size:54px;">Optimisation du trajet des techniciens</h1>
             </div>
-            <div style="color:#9aa0a6;font-size:16px;">
+            <div style="color:#9aa0a6;font-size:32px;">
               Domicile ➜ Entrepot ➜ Clients (MAXIMUM 25 TRAJETS) — <b>Cummins Service Fleet</b>
             </div>
             """,
