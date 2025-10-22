@@ -8,7 +8,9 @@ import polyline
 import folium
 from streamlit_folium import st_folium
 
-# myGeotab is optional; app still works if it's missing or if secrets aren't provided.
+# ────────────────────────────────────────────────────────────────────────────────
+# Optional myGeotab import
+# ────────────────────────────────────────────────────────────────────────────────
 GEOTAB_AVAILABLE = True
 try:
     import mygeotab as myg
@@ -129,13 +131,15 @@ G_SERVER = secret("GEOTAB_SERVER", "my.geotab.com")
 
 geotab_enabled_by_secrets = GEOTAB_AVAILABLE and all([G_DB, G_USER, G_PWD])
 
-# Hidden debug toggle (leave False by default)
-debug = False  # set to True temporarily if you need extra diagnostics on screen
+# Hidden debug toggle (set to True only when needed)
+debug = False
 
 picked_driver_choice = None
 picked_driver_latlon = None
 
 def geotab_connect_from_secrets() -> Optional["myg.API"]:
+    if not geotab_enabled_by_secrets:
+        return None
     try:
         api = myg.API(G_USER, G_PWD, G_DB, G_SERVER)
         api.authenticate()
@@ -146,22 +150,26 @@ def geotab_connect_from_secrets() -> Optional["myg.API"]:
 
 def geotab_devices(api: "myg.API") -> List[dict]:
     try:
-        devices = api.call("Get", "Device", {"search": {"isActive": True}})
+        devices = api.call("Get", typeName="Device", search={"isActive": True})
         return devices or []
     except Exception:
         return []
 
-# Fallback 1: snapshot (DeviceStatusInfo)
+# Snapshot (DeviceStatusInfo)
 def geotab_position_snapshot(api: "myg.API", device_id: str):
     try:
-        dsi = api.call("Get", "DeviceStatusInfo", {"search": {"deviceSearch": {"id": device_id}}})
+        dsi = api.call(
+            "Get",
+            typeName="DeviceStatusInfo",
+            search={"deviceSearch": {"id": device_id}},
+        )
         if dsi:
             dsi = dsi[0]
             lat = dsi.get("latitude")
             lon = dsi.get("longitude")
             when = dsi.get("dateTime") or dsi.get("lastCommunicated") or dsi.get("workDate")
 
-            # some servers use location:{y:lat, x:lon}
+            # Some tenants use location dict {y:lat, x:lon}
             if (lat is None or lon is None) and isinstance(dsi.get("location"), dict):
                 lat = dsi["location"].get("y")
                 lon = dsi["location"].get("x")
@@ -177,15 +185,20 @@ def geotab_position_logrecord(api: "myg.API", device_id: str):
     windows = [timedelta(hours=2), timedelta(hours=24), timedelta(days=7), timedelta(days=30)]
     for win in windows:
         try:
-            from_dt = (datetime.now(timezone.utc) - win).isoformat()
-            logs = api.call("Get", "LogRecord", {
-                "deviceSearch": {"id": device_id},
-                "fromDate": from_dt,
-                "resultsLimit": 1,
-                "sortOrder": "Descending",
-            })
+            from_dt = datetime.now(timezone.utc) - win
+            logs = api.call(
+                "Get",
+                typeName="LogRecord",
+                search={
+                    "deviceSearch": {"id": device_id},
+                    "fromDate": from_dt,
+                    "resultsLimit": 1,
+                    "sortOrder": "Descending",
+                },
+            )
             if logs:
-                lat, lon = logs[0].get("latitude"), logs[0].get("longitude")
+                lat = logs[0].get("latitude")
+                lon = logs[0].get("longitude")
                 if lat is not None and lon is not None:
                     return float(lat), float(lon), logs[0].get("dateTime")
         except Exception:
@@ -195,13 +208,18 @@ def geotab_position_logrecord(api: "myg.API", device_id: str):
 # Fallback 3: last Trip (up to 30 days) → stopPoint or last route point
 def geotab_position_trip(api: "myg.API", device_id: str):
     try:
-        from_dt = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
-        trips = api.call("Get", "Trip", {
-            "deviceSearch": {"id": device_id},
-            "fromDate": from_dt,
-            "resultsLimit": 1,
-            "sortOrder": "Descending",
-        })
+        from_dt = datetime.now(timezone.utc) - timedelta(days=30)
+        trips = api.call(
+            "Get",
+            typeName="Trip",
+            search={
+                "deviceSearch": {"id": device_id},
+                "fromDate": from_dt,
+                "resultsLimit": 1,
+                "sortOrder": "Descending",
+                "detailed": True,  # include stopPoint/route
+            },
+        )
         if trips:
             t = trips[0]
             # best: stopPoint {y:lat, x:lon}
@@ -249,6 +267,9 @@ def recency_color(ts: Optional[str]) -> Tuple[str, str]:
         return "#fb8c00", "≤ 7d"
     return "#9e9e9e", "> 7d"
 
+# ────────────────────────────────────────────────────────────────────────────────
+# Geotab live map + driver picker
+# ────────────────────────────────────────────────────────────────────────────────
 if geotab_enabled_by_secrets:
     api = geotab_connect_from_secrets()
     if api:
@@ -268,7 +289,11 @@ if geotab_enabled_by_secrets:
             # Try to resolve driver name via DeviceStatusInfo
             drv = None
             try:
-                dsi = api.call("Get", "DeviceStatusInfo", {"search": {"deviceSearch": {"id": d["id"]}}})
+                dsi = api.call(
+                    "Get",
+                    typeName="DeviceStatusInfo",
+                    search={"deviceSearch": {"id": d["id"]}},
+                )
                 if dsi and isinstance(dsi[0].get("driver"), dict):
                     drv = dsi[0]["driver"].get("name")
             except Exception:
@@ -302,7 +327,7 @@ if geotab_enabled_by_secrets:
 
             st_folium(fmap, height=460, use_container_width=True)
 
-            # picker
+            # Driver picker → set START from driver
             choices = sorted([(p["driverName"] or p["deviceName"], p["lat"], p["lon"]) for p in points],
                              key=lambda x: x[0].lower())
             picked_driver_choice = st.selectbox(
@@ -395,8 +420,11 @@ if st.button("🧭 Optimize Route", type="primary"):
         ll = geocode(gmaps, addr)
         if not ll:
             continue
-        folium.Marker(ll, popup=folium.Popup(f"<b>{i}</b>. {addr}", max_width=260),
-                      icon=big_number_marker(str(i))).add_to(fmap)
+        folium.Marker(
+            ll,
+            popup=folium.Popup(f"<b>{i}</b>. {addr}", max_width=260),
+            icon=big_number_marker(str(i))
+        ).add_to(fmap)
 
     end_ll = geocode(gmaps, visit_texts[-1])
     if end_ll:
@@ -423,5 +451,7 @@ if st.button("🧭 Optimize Route", type="primary"):
         else:
             st.write(f"**{ix}** — {addr}")
 
-    st.success(f"**Total distance:** {km:.1f} km • **Total time:** {mins:.0f} mins "
-               f"{'(live traffic)' if travel_mode=='driving' else ''}")
+    st.success(
+        f"**Total distance:** {km:.1f} km • **Total time:** {mins:.0f} mins "
+        f"{'(live traffic)' if travel_mode=='driving' else ''}"
+    )
