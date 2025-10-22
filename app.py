@@ -149,7 +149,7 @@ stops_text = st.text_area(
 other_stops_input = [s.strip() for s in stops_text.splitlines() if s.strip()]
 
 # ────────────────────────────────────────────────────────────────────────────────
-# Geotab (via secrets only; optional)
+# Geotab (via secrets only) — rate-limit safe
 # ────────────────────────────────────────────────────────────────────────────────
 st.markdown("---")
 st.subheader("🚚 Live Fleet (Geotab)")
@@ -158,168 +158,154 @@ G_DB = secret("GEOTAB_DATABASE")
 G_USER = secret("GEOTAB_USERNAME")
 G_PWD = secret("GEOTAB_PASSWORD")
 G_SERVER = secret("GEOTAB_SERVER", "my.geotab.com")
-
 geotab_enabled_by_secrets = GEOTAB_AVAILABLE and all([G_DB, G_USER, G_PWD])
 
-picked_driver_choice = None
-picked_driver_latlon = None
+# Refresh key to bust caches only when user explicitly asks
+if "geo_refresh_key" not in st.session_state:
+    st.session_state.geo_refresh_key = 0
 
-def geotab_connect_from_secrets() -> Optional["myg.API"]:
-    if not geotab_enabled_by_secrets:
-        return None
+colA, colB = st.columns([1, 3])
+with colA:
+    want_refresh = st.button("🔄 Refresh Geotab now")
+if want_refresh:
+    st.session_state.geo_refresh_key += 1
+
+@st.cache_resource(show_spinner=False)
+def _geotab_api_cached(user, pwd, db, server):
+    """Cache the API object so we don't re-auth every rerun."""
     try:
-        api = myg.API(G_USER, G_PWD, G_DB, G_SERVER)
+        api = myg.API(user, pwd, db, server)
         api.authenticate()
         return api
     except Exception as e:
-        st.warning(f"Geotab: failed to authenticate: {e}")
-        return None
+        raise RuntimeError(f"Geotab auth failed: {e}")
 
-def geotab_devices(api: "myg.API") -> List[dict]:
-    try:
-        devices = api.call("Get", typeName="Device", search={"isActive": True})
-        return devices or []
-    except Exception:
-        return []
+@st.cache_data(ttl=900, show_spinner=False)  # 15 minutes
+def _geotab_devices_cached(user, pwd, db, server):
+    """List active devices (cached)."""
+    api = _geotab_api_cached(user, pwd, db, server)
+    devs = api.call("Get", typeName="Device", search={"isActive": True}) or []
+    # Return minimal fields to keep cache light
+    return [{"id": d["id"], "name": d.get("name") or d.get("serialNumber") or "unit"} for d in devs]
 
-def geotab_position_snapshot(api: "myg.API", device_id: str):
-    try:
-        dsi = api.call("Get", typeName="DeviceStatusInfo", search={"deviceSearch": {"id": device_id}})
-        if dsi:
-            dsi = dsi[0]
-            lat = dsi.get("latitude")
-            lon = dsi.get("longitude")
-            when = dsi.get("dateTime") or dsi.get("lastCommunicated") or dsi.get("workDate")
-            if (lat is None or lon is None) and isinstance(dsi.get("location"), dict):
-                lat = dsi["location"].get("y")
-                lon = dsi["location"].get("x")
-            if lat is not None and lon is not None:
-                return float(lat), float(lon), when
-    except Exception:
-        pass
-    return None, None, None
+@st.cache_data(ttl=75, show_spinner=False)   # ~1 minute
+def _geotab_positions_for(api_params, device_ids, refresh_key):
+    """
+    Fetch last known position for a SMALL set of devices only.
+    - Uses DeviceStatusInfo first (1 call per device)
+    - Falls back to LogRecord (another call) ONLY if needed
+    TTL keeps us under the 10 calls / minute limit.
+    """
+    user, pwd, db, server = api_params
+    api = _geotab_api_cached(user, pwd, db, server)
 
-def geotab_position_logrecord(api: "myg.API", device_id: str):
-    windows = [timedelta(hours=2), timedelta(hours=24), timedelta(days=7), timedelta(days=30)]
-    for win in windows:
+    results = []
+    calls_made = 0
+    limit_per_min = 9  # leave headroom
+
+    for did in device_ids:
+        if calls_made >= limit_per_min:
+            # Stop early to avoid OverLimit; the rest will be fetched on next refresh.
+            results.append({"deviceId": did, "error": "rate_limit_guard"})
+            continue
+
+        # 1) Try DeviceStatusInfo
         try:
-            from_dt = datetime.now(timezone.utc) - win
+            dsi = api.call("Get", typeName="DeviceStatusInfo", search={"deviceSearch": {"id": did}})
+            calls_made += 1
+            lat = lon = when = None
+            if dsi:
+                row = dsi[0]
+                lat, lon = row.get("latitude"), row.get("longitude")
+                when = row.get("dateTime") or row.get("lastCommunicated") or row.get("workDate")
+                if (lat is None or lon is None) and isinstance(row.get("location"), dict):
+                    lat = row["location"].get("y"); lon = row["location"].get("x")
+            if lat is not None and lon is not None:
+                results.append({"deviceId": did, "lat": float(lat), "lon": float(lon), "when": when})
+                continue
+        except Exception as e:
+            results.append({"deviceId": did, "error": f"dsi:{e}"})
+            continue
+
+        # 2) Fallback: latest LogRecord (only if needed)
+        if calls_made >= limit_per_min:
+            results.append({"deviceId": did, "error": "rate_limit_guard"})
+            continue
+        try:
+            from_dt = datetime.now(timezone.utc) - timedelta(days=7)
             logs = api.call("Get", typeName="LogRecord", search={
-                "deviceSearch": {"id": device_id},
+                "deviceSearch": {"id": did},
                 "fromDate": from_dt,
                 "resultsLimit": 1,
                 "sortOrder": "Descending",
             })
+            calls_made += 1
             if logs:
                 lat, lon = logs[0].get("latitude"), logs[0].get("longitude")
                 if lat is not None and lon is not None:
-                    return float(lat), float(lon), logs[0].get("dateTime")
-        except Exception:
-            pass
-    return None, None, None
+                    results.append({"deviceId": did, "lat": float(lat), "lon": float(lon), "when": logs[0].get("dateTime")})
+                    continue
+            results.append({"deviceId": did, "error": "no_position"})
+        except Exception as e:
+            results.append({"deviceId": did, "error": f"log:{e}"})
 
-def geotab_position_trip(api: "myg.API", device_id: str):
-    try:
-        from_dt = datetime.now(timezone.utc) - timedelta(days=30)
-        trips = api.call("Get", typeName="Trip", search={
-            "deviceSearch": {"id": device_id},
-            "fromDate": from_dt,
-            "resultsLimit": 1,
-            "sortOrder": "Descending",
-            "detailed": True,
-        })
-        if trips:
-            t = trips[0]
-            sp = t.get("stopPoint")
-            if isinstance(sp, dict) and "y" in sp and "x" in sp:
-                return float(sp["y"]), float(sp["x"]), t.get("end")
-            route = t.get("route")
-            if isinstance(route, list) and route:
-                last = route[-1]
-                if isinstance(last, dict) and "y" in last and "x" in last:
-                    return float(last["y"]), float(last["x"]), t.get("end")
-    except Exception:
-        pass
-    return None, None, None
-
-def geotab_last_position(api: "myg.API", device_id: str):
-    lat, lon, when = geotab_position_snapshot(api, device_id)
-    if lat is not None and lon is not None:
-        return lat, lon, when
-    lat, lon, when = geotab_position_logrecord(api, device_id)
-    if lat is not None and lon is not None:
-        return lat, lon, when
-    lat, lon, when = geotab_position_trip(api, device_id)
-    if lat is not None and lon is not None:
-        return lat, lon, when
-    return None, None, None
+    return results
 
 if geotab_enabled_by_secrets:
-    api = geotab_connect_from_secrets()
-    if api:
-        devices = geotab_devices(api)
-        points = []
-        for d in devices:
-            lat, lon, when = geotab_last_position(api, d["id"])
-            if lat is None or lon is None:
-                continue
-            drv = None
-            try:
-                dsi = api.call("Get", typeName="DeviceStatusInfo", search={"deviceSearch": {"id": d["id"]}})
-                if dsi and isinstance(dsi[0].get("driver"), dict):
-                    drv = dsi[0]["driver"].get("name")
-            except Exception:
-                drv = None
-            points.append({
-                "deviceId": d["id"],
-                "deviceName": d.get("name") or d.get("serialNumber") or "unit",
-                "driverName": drv,
-                "lat": lat, "lon": lon, "when": when
-            })
-
-        if points:
-            avg_lat = sum(p["lat"] for p in points) / len(points)
-            avg_lon = sum(p["lon"] for p in points) / len(points)
-            fmap = folium.Map(location=[avg_lat, avg_lon], zoom_start=7, tiles="cartodbpositron")
-
-            for p in points:
-                color, lab = recency_color(p["when"])
-                who = p["driverName"] or p["deviceName"]
-                add_marker(
-                    fmap, p["lat"], p["lon"],
-                    popup=folium.Popup(f"<b>{who}</b><br>Recency: {lab}<br>{p['lat']:.5f}, {p['lon']:.5f}", max_width=260),
-                    icon=folium.Icon(color="green", icon="user", prefix="fa")
-                )
-                folium.CircleMarker(
-                    [p["lat"], p["lon"]], radius=8, color="#222", weight=2,
-                    fill=True, fill_color=color, fill_opacity=0.9
-                ).add_to(fmap)
-
-            # NOTE: do NOT pass use_container_width (not supported by st_folium)
-            st_folium(fmap, height=460)
-
-            choices = sorted([(p["driverName"] or p["deviceName"], p["lat"], p["lon"]) for p in points],
-                             key=lambda x: x[0].lower())
-            picked_driver_choice = st.selectbox(
-                "Use this driver as route start:",
-                ["(none)"] + [c[0] for c in choices],
-                index=0
-            )
-            if picked_driver_choice != "(none)":
-                for c in choices:
-                    if c[0] == picked_driver_choice:
-                        picked_driver_latlon = (c[1], c[2])
-                        break
-                if picked_driver_latlon:
-                    start_text = reverse_geocode(gmaps_client, picked_driver_latlon[0], picked_driver_latlon[1])
-                    st.success(f"Start set from Geotab: **{picked_driver_choice}** → {start_text}")
+    try:
+        # 1) Show a cached list of devices and let the user pick a FEW
+        devs = _geotab_devices_cached(G_USER, G_PWD, G_DB, G_SERVER)
+        if not devs:
+            st.info("No active devices found.")
         else:
-            st.info("Geotab: connected and found devices, but no positions across snapshot, logs, or last trips (≤ 30 days).")
-    else:
-        st.info("Geotab disabled due to authentication error.")
+            # Device selector (no API calls here; uses cached list)
+            names = {d["name"]: d["id"] for d in devs}
+            default_selection = []  # start empty to avoid automatic calls
+            picked = st.multiselect(
+                "Select drivers/devices to show (keep to a small set to respect Geotab limits):",
+                options=list(names.keys()),
+                default=default_selection,
+                help="Tip: Pick 1–5 devices, then click Refresh."
+            )
+            if picked:
+                wanted_ids = [names[n] for n in picked]
+                # 2) Fetch positions for the selected devices only (cached ~75s)
+                pts = _geotab_positions_for((G_USER, G_PWD, G_DB, G_SERVER), tuple(wanted_ids), st.session_state.geo_refresh_key)
+
+                # Map
+                valid = [p for p in pts if "lat" in p and "lon" in p]
+                if valid:
+                    avg_lat = sum(p["lat"] for p in valid) / len(valid)
+                    avg_lon = sum(p["lon"] for p in valid) / len(valid)
+                    fmap = folium.Map(location=[avg_lat, avg_lon], zoom_start=8, tiles="cartodbpositron")
+
+                    # quick lookup name
+                    id2name = {d["id"]: d["name"] for d in devs}
+                    for p in valid:
+                        who = id2name.get(p["deviceId"], p["deviceId"])
+                        color, lab = recency_color(p.get("when"))
+                        add_marker(
+                            fmap, p["lat"], p["lon"],
+                            popup=folium.Popup(f"<b>{who}</b><br>Recency: {lab}<br>{p['lat']:.5f}, {p['lon']:.5f}", max_width=260),
+                            icon=folium.Icon(color="green", icon="user", prefix="fa")
+                        )
+                        folium.CircleMarker([p["lat"], p["lon"]], radius=8, color="#222", weight=2,
+                                            fill=True, fill_color=color, fill_opacity=0.9).add_to(fmap)
+                    st_folium(fmap, height=420)
+
+                # messages for items not fetched due to guard/limit
+                guarded = [p for p in pts if p.get("error") == "rate_limit_guard"]
+                if guarded:
+                    st.warning("Hit the per-minute safety cap. Click **Refresh** in ~60–90 seconds to load remaining devices.")
+                missing = [p for p in pts if p.get("error") not in (None, "rate_limit_guard") and "error" in p]
+                if missing:
+                    st.caption("Some devices returned no recent position or hit a fallback error.")
+            else:
+                st.info("Select one or more devices, then click **Refresh** to load positions.")
+    except RuntimeError as e:
+        st.info(f"Geotab disabled due to authentication error: {e}")
 else:
-    st.caption("Geotab live view is disabled. Add `GEOTAB_DATABASE`, `GEOTAB_USERNAME`, and "
-               "`GEOTAB_PASSWORD` in Secrets to enable it.")
+    st.caption("Geotab live view is disabled. Add `GEOTAB_DATABASE`, `GEOTAB_USERNAME`, and `GEOTAB_PASSWORD` in Secrets.")
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Optimize route
