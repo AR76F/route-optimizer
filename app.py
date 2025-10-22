@@ -179,6 +179,8 @@ DEVICE_TO_DRIVER_RAW = {
     "24725": "CHRISTIAN DUBREUIL",
     "23746": "MICHAEL SULTE",
     "24728": "FRANÇOIS RACINE",
+    "23743": "ALEX PELLETIER-GUAY",
+    "23745": "KEVIN DURANCEAU",
     # add more here if you want
 }
 import json
