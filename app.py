@@ -404,4 +404,4 @@ if st.button("🧭 Optimize Route", type="primary"):
 
     st.success(
         f"**Total distance:** {km:.1f} km • **Total time:** {mins:.0f} mins "
-        f"{'(live traffic)' if travel_mode=='driving'
+        f"{'(live traffic)' if travel_mode=='driving'_
