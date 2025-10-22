@@ -377,7 +377,7 @@ if geotab_enabled_by_secrets:
                         ).add_to(fmap)
 
                     # Render the live fleet map
-                    st_folium(fmap, height=520)
+                    st_folium(fmap, height=800, width=1800)
 
                     # Use driver/device as route start — auto-fill the START address
                     start_choice = st.selectbox(
