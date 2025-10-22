@@ -480,13 +480,3 @@ if st.button("🧭 Optimize Route", type="primary"):
         f"**Total distance:** {km:.1f} km • **Total time:** {mins:.0f} mins "
         f"{'(live traffic)' if travel_mode=='driving' else ''}"
     )
-
-# ────────────────────────────────────────────────────────────────────────────────
-# Download this script (no file creation; uses module source)
-# ────────────────────────────────────────────────────────────────────────────────
-try:
-    source_text = inspect.getsource(sys.modules[__name__])
-    st.download_button("💾 Download this script (app.py)", data=source_text,
-                       file_name="app.py", mime="text/x-python")
-except Exception:
-    st.caption("Download button unavailable in this environment.")
