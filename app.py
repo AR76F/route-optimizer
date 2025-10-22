@@ -132,22 +132,25 @@ gmaps_client = googlemaps.Client(key=GOOGLE_KEY)
 # ────────────────────────────────────────────────────────────────────────────────
 # Inputs — DRIVING ONLY + traffic + round trip
 # ────────────────────────────────────────────────────────────────────────────────
+st.markdown("### Travel options")
+
+# Left column: mode, departure, round-trip
+# Right column: traffic model and planned time
 c1, c2 = st.columns([1.2, 1.2])
+
 with c1:
     st.markdown("**Travel mode:** Driving")
-with c2:
+
+    leave_now = st.checkbox("Leave now", value=True)
+    # 🔽 moved here: round-trip toggle under "Leave now"
     round_trip = st.checkbox("Return to home at the end (round trip)?", value=True)
 
-st.markdown("### Traffic options")
-t1, t2, t3 = st.columns([1, 1, 1])
-with t1:
-    leave_now = st.checkbox("Leave now", value=True)
-with t2:
+with c2:
     traffic_model = st.selectbox("Traffic model", ["best_guess", "pessimistic", "optimistic"], index=0)
-with t3:
     planned_date = st.date_input("Planned departure date", value=date.today(), disabled=leave_now)
     planned_time = st.time_input("Planned departure time", value=datetime.now().time(), disabled=leave_now)
 
+# Departure time logic
 if leave_now:
     departure_dt = datetime.now(timezone.utc)
 else:
