@@ -460,42 +460,46 @@ if st.button("🧭 Optimize Route", type="primary"):
             destination_llstr = to_ll_str(storage_g[:2]) if storage_g else to_ll_str(start_ll)
             waypoints_for_api = []
 
-    # 4) Call Directions with lat,lng strings (unambiguous)
-    #    IMPORTANT: optimize:true ONLY for DRIVING (other modes don't support it)
-    if travel_mode == "driving" and waypoints_for_api:
-        wp_arg = ["optimize:true"] + waypoints_for_api
-    else:
-        wp_arg = waypoints_for_api if waypoints_for_api else None
+# 4) Call Directions with lat,lng strings (unambiguous)
+#    IMPORTANT: optimize:true ONLY for DRIVING (other modes don't support it)
+if travel_mode == "driving" and waypoints_for_api:
+    wp_arg = ["optimize:true"] + waypoints_for_api
+else:
+    wp_arg = waypoints_for_api if waypoints_for_api else None
 
-    try:
-        directions = gmaps_client.directions(
-            origin=to_ll_str(start_ll),
-            destination=destination_llstr,
-            mode=travel_mode,
-            waypoints=wp_arg,
-            departure_time=departure_dt if travel_mode == "driving" else None,
-            traffic_model=traffic_model if travel_mode == "driving" else None,
-        )
-    except Exception as e:
-        st.error(f"Directions API error: {e}")
-        st.stop()
+try:
+    directions = gmaps_client.directions(
+        origin=to_ll_str(start_ll),
+        destination=destination_llstr,
+        mode=travel_mode,
+        waypoints=wp_arg,
+        departure_time=departure_dt if travel_mode == "driving" else None,
+        traffic_model=traffic_model if travel_mode == "driving" else None,
+    )
+except Exception as e:
+    st.error(f"Directions API error: {e}")
+    st.stop()
 
-    if not directions:
-        st.error(
-            "No route returned by Directions. If you’re not **Driving**, try changing mode to Driving "
-            "or replace postal codes with full addresses."
-        )
-        # Debug info to help diagnose
-        with st.expander("Debug (no route)"):
-            st.write({
-                "mode": travel_mode,
-                "round_trip": round_trip,
-                "origin": to_ll_str(start_ll),
-                "destination": destination_llstr,
-                "waypoints_count": len(waypoints_for_api),
-                "waypoints_sample": waypoints_for_api[:5],
-            })
-        st.stop()
+if not directions:
+    st.error(
+        "No route returned by Directions. If you’re not **Driving**, try changing mode to Driving "
+        "or replace postal codes with full addresses."
+    )
+    # Debug info to help diagnose
+    with st.expander("Debug (no route)"):
+        st.json({
+            "mode": travel_mode,
+            "round_trip": round_trip,
+            "origin": to_ll_str(start_ll),
+            "destination": destination_llstr,
+            "waypoints_count": len(waypoints_for_api),
+            "waypoints_sample": waypoints_for_api[:10],
+            "start_text": start_text,
+            "storage_text": storage_text,
+            "other_stops_input": other_stops_input,
+        })
+    st.stop()
+    
 
     # 5) Reconstruct the visit order as readable addresses
     if travel_mode == "driving" and waypoints_for_api:
