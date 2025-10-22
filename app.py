@@ -32,7 +32,7 @@ except Exception:
 # Page config
 # ────────────────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Route Optimizer", layout="wide")
-st.title("📍 Route Optimizer — Home ➜ Storage ➜ Optimized Stops (≤ 25)")
+st.title("📍 Optimisation trajet des techniciens (Maximum 25 trajets à la fois)")
 
 # Single source of truth for START address (Geotab -> Route stops)
 if "route_start" not in st.session_state:
@@ -281,7 +281,7 @@ with tabs[0]:
                         folium.Marker([p["lat"], p["lon"]],
                                       popup=folium.Popup(f"<b>{pick}</b><br>{addr}", max_width=320),
                                       icon=folium.Icon(color="green", icon="user", prefix="fa")).add_to(fmap)
-                        st_folium(fmap, height=320, width=650)
+                        st_folium(fmap, height=800, width=1800)
                 else:
                     st.warning("Position introuvable pour cet appareil (essayez de rafraîchir).")
     else:
