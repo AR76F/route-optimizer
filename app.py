@@ -32,7 +32,25 @@ except Exception:
 # Page config
 # ────────────────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Route Optimizer", layout="wide")
-st.title("📍 Optimisation trajet des techniciens (Maximum 25 trajets à la fois)")
+# ────────────────────────────────────────────────────────────────────────────────
+# Cummins Header (black logo + styled title)
+# ────────────────────────────────────────────────────────────────────────────────
+st.markdown(
+    """
+    <div style="display:flex;align-items:center;gap:18px;margin-bottom:20px;">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/f/f2/Cummins_logo_black.svg"
+             width="90" style="margin-right:10px;">
+        <div>
+            <h1 style="margin:0;color:white;">Route Optimizer</h1>
+            <p style="margin:0;color:#888;font-size:15px;">
+                Home ➜ Storage ➜ Optimized Stops (≤ 25) — <b>Cummins Service Fleet</b>
+            </p>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
 
 # Single source of truth for START address (Geotab -> Route stops)
 if "route_start" not in st.session_state:
