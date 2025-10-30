@@ -1,4 +1,4 @@
-    # app.py
+# app.py
 # Streamlit Route Optimizer — Home ➜ Storage ➜ Optimized Stops (≤ 25)
 # Notes:
 # - No filesystem writes (GitHub/Streamlit Cloud often block /mnt/data).
@@ -18,6 +18,11 @@ import googlemaps
 import polyline
 import folium
 from streamlit_folium import st_folium
+
+# ⬇️ Added for Technician Capabilities
+import io
+import re
+import pandas as pd
 
 
 # ────────────────────────────────────────────────────────────────────────────────
@@ -180,6 +185,77 @@ def recency_color(ts: Optional[str]) -> Tuple[str, str]:
     if age <= timedelta(days=7):
         return "#fb8c00", "≤ 7d"
     return "#9e9e9e", "> 7d"
+
+
+# ────────────────────────────────────────────────────────────────────────────────
+# Technician Capabilities — helpers (added)
+# ────────────────────────────────────────────────────────────────────────────────
+_NEGATIVE_STRINGS = {"not completed", "no", "non", "n/a", ""}
+
+def _tc_find_training_columns(export_df: pd.DataFrame):
+    """Training columns are like '2018-14Q' (exclude *_status)."""
+    return [c for c in export_df.columns if isinstance(c, str) and re.match(r"^\d{4}-\d{2}Q$", c)]
+
+def _tc_norm(val) -> str:
+    if pd.isna(val): return ""
+    return str(val).strip()
+
+def _tc_is_completed(val) -> bool:
+    # Counts as completed unless clearly negative/blank.
+    return _tc_norm(val).lower() not in _NEGATIVE_STRINGS
+
+def _tc_build_code_desc_map(def_df: pd.DataFrame) -> dict:
+    """Map TrainingCode -> Description from your 'Definition ' sheet (robust to messy headers)."""
+    if def_df is None or def_df.empty:
+        return {}
+    code_col = None
+    for c in def_df.columns:
+        if isinstance(c, str) and c.strip().lower() == "training code":
+            code_col = c
+            break
+    if code_col is None:
+        for c in def_df.columns:
+            s = def_df[c].dropna().astype(str).str.match(r"^\d{4}-\d{2}Q$")
+            if s.sum() >= 3:
+                code_col = c
+                break
+    # choose a likely description column
+    desc_col, best = None, -1
+    if code_col:
+        for c in def_df.columns:
+            if c == code_col: continue
+            s = def_df[c].dropna().astype(str)
+            score = (s.str.len() > 6).sum()
+            if score > best:
+                best, desc_col = score, c
+    mapping = {}
+    if code_col:
+        for _, row in def_df.iterrows():
+            code = _tc_norm(row.get(code_col, ""))
+            if re.match(r"^\d{4}-\d{2}Q$", code):
+                desc = _tc_norm(row.get(desc_col, "")) if desc_col else ""
+                mapping[code] = desc
+    return mapping
+
+def _tc_compute_eligible(export_df: pd.DataFrame, jobreq_df: pd.DataFrame, job_type: str, training_cols: list):
+    """Return dataframe of eligible technicians who have *all* required trainings."""
+    if jobreq_df is None or jobreq_df.empty or not job_type:
+        return pd.DataFrame(columns=["Full Name"])
+    req = jobreq_df[jobreq_df["JobType"].astype(str).str.strip() == str(job_type).strip()]
+    req_codes = [c for c in req["TrainingCode"].astype(str).str.strip().tolist() if c in training_cols]
+    if not req_codes:
+        return pd.DataFrame(columns=["Full Name"])
+    masks = []
+    for code in req_codes:
+        masks.append(export_df[code].apply(_tc_is_completed))
+    combined = masks[0]
+    for m in masks[1:]:
+        combined = combined & m
+    out = export_df.loc[combined].copy()
+    keep = [c for c in ["Full Name", "Branch", "PG Status", "Supervisor", "Class Code"] if c in out.columns]
+    if not keep: keep = ["Full Name"]
+    return out[keep].sort_values(by=keep[0]).reset_index(drop=True)
+
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Google Maps API key (secrets only)
@@ -672,7 +748,7 @@ if st.button("🧭 Optimize Route", type="primary"):
 
         visit_texts = [start_addr] + ordered_wp_addrs + ([start_addr] if round_trip else [destination_addr])
 
-                # 5) Totals (duration_in_traffic preferred)
+        # 5) Totals (duration_in_traffic preferred)
         legs = directions[0].get("legs", [])
         total_dist_m = sum(leg.get("distance", {}).get("value", 0) for leg in legs)
         total_sec = sum((leg.get("duration_in_traffic") or leg.get("duration") or {}).get("value", 0) for leg in legs)
@@ -748,7 +824,7 @@ if res:
         else:
             st.write(f"**{ix}** — {addr}")
 
-# --- Stop-by-stop timing (arrival time, leg distance, leg duration)
+    # --- Stop-by-stop timing (arrival time, leg distance, leg duration)
     if per_leg:
         st.markdown("#### Stop-by-stop timing")
         for leg in per_leg:
@@ -756,7 +832,6 @@ if res:
                 f"**{leg['idx']}** → _{leg['to']}_  •  "
                 f"{leg['dist_km']:.1f} km  •  {leg['mins']} mins  •  **ETA {leg['arrive']}**"
             )
-
 
     # Toggle map rendering (off by default for stability)
     show_map = st.checkbox("Show map", value=False, key="show_map_toggle")
@@ -808,3 +883,117 @@ if res:
             st.warning(f"Map rendering skipped: {e}")
 
     st.success(f"**Total distance:** {km:.1f} km • **Total time:** {mins:.0f} mins (live traffic)")
+
+
+# ────────────────────────────────────────────────────────────────────────────────
+# 🧰 Technician Capabilities (inline section — no file writes)
+# ────────────────────────────────────────────────────────────────────────────────
+with st.expander("🧰 Technician Capabilities (find techs who have all required trainings)", expanded=False):
+    st.caption("Upload your Excel with 'Export' and 'Definition ' sheets. Manage job requirements below (CSV-based).")
+    up_xlsx = st.file_uploader("Training workbook (.xlsx)", type=["xlsx"], key="tc_xlsx")
+    if up_xlsx is None:
+        st.info("Upload your Excel to start (the same one you use for trainings).")
+    else:
+        try:
+            xls = pd.ExcelFile(up_xlsx)
+            if "Export" not in xls.sheet_names:
+                st.error("Missing 'Export' sheet in the uploaded file.")
+                st.stop()
+            export_df = pd.read_excel(xls, sheet_name="Export")
+            def_df = pd.read_excel(xls, sheet_name="Definition ") if "Definition " in xls.sheet_names else pd.DataFrame()
+
+            training_cols = _tc_find_training_columns(export_df)
+            if not training_cols:
+                st.error("No training columns like '2018-14Q' were found in 'Export'.")
+                st.stop()
+
+            code_to_desc = _tc_build_code_desc_map(def_df)
+
+            # JobRequirements in-memory editor (CSV-based)
+            st.subheader("Job Requirements (editable)")
+            st.caption("Add one row per required training. *JobType* + *TrainingCode* (dropdown).")
+
+            if "tc_jobreq" not in st.session_state:
+                st.session_state.tc_jobreq = pd.DataFrame(columns=["JobType", "TrainingCode"])
+
+            # Optional CSV upload to pre-fill requirements
+            up_csv = st.file_uploader("Optional: Upload JobRequirements CSV", type=["csv"], key="tc_csv")
+            if up_csv is not None:
+                try:
+                    tmp = pd.read_csv(up_csv).fillna("")
+                    keep = [c for c in ["JobType", "TrainingCode"] if c in tmp.columns]
+                    st.session_state.tc_jobreq = tmp[keep] if keep else pd.DataFrame(columns=["JobType", "TrainingCode"])
+                    st.success("Loaded JobRequirements CSV.")
+                except Exception as e:
+                    st.error(f"Could not read CSV: {e}")
+
+            # Editor
+            base = st.session_state.tc_jobreq.copy()
+            if "JobType" not in base.columns: base["JobType"] = ""
+            if "TrainingCode" not in base.columns: base["TrainingCode"] = ""
+
+            edited = st.data_editor(
+                base,
+                num_rows="dynamic",
+                use_container_width=True,
+                column_config={
+                    "JobType": st.column_config.TextColumn("JobType", width="medium"),
+                    "TrainingCode": st.column_config.SelectboxColumn(
+                        "TrainingCode", options=[""] + sorted(training_cols), width="small"
+                    ),
+                },
+                key="tc_jobreq_editor",
+            )
+
+            # Save edited grid into session
+            st.session_state.tc_jobreq = edited
+
+            # Download
+            st.download_button(
+                "Download JobRequirements (CSV)",
+                edited.to_csv(index=False).encode("utf-8"),
+                file_name="JobRequirements.csv",
+                mime="text/csv",
+                key="tc_dl",
+            )
+
+            st.divider()
+            # Selector → compute eligibility
+            job_types = sorted([j for j in edited["JobType"].dropna().astype(str).str.strip().unique() if j])
+            sel_job = st.selectbox("Select a Job Type", [""] + job_types, index=0, key="tc_sel_job")
+
+            cols = st.columns([1, 2])
+            with cols[0]:
+                st.markdown("**Required Trainings**")
+                if sel_job:
+                    req = edited.loc[edited["JobType"].astype(str).str.strip() == sel_job, "TrainingCode"] \
+                               .astype(str).str.strip().tolist()
+                    req = [r for r in req if r in training_cols]
+                    if req:
+                        req_df = pd.DataFrame({
+                            "TrainingCode": req,
+                            "Description": [code_to_desc.get(x, "") for x in req]
+                        })
+                        st.dataframe(req_df, hide_index=True, use_container_width=True)
+                    else:
+                        st.info("No trainings defined for this job yet.")
+                else:
+                    st.info("Pick a Job Type to view trainings.")
+
+            with cols[1]:
+                st.markdown("**Eligible Technicians (all trainings completed)**")
+                if sel_job:
+                    eligible = _tc_compute_eligible(export_df, edited, sel_job, training_cols)
+                    st.dataframe(eligible, hide_index=True, use_container_width=True)
+                    if not eligible.empty:
+                        st.download_button(
+                            "Download Eligible Technicians (CSV)",
+                            eligible.to_csv(index=False).encode("utf-8"),
+                            file_name=f"eligible_{sel_job.replace(' ','_')}.csv",
+                            mime="text/csv",
+                            key="tc_dl_eligible",
+                        )
+                else:
+                    st.info("Select a Job Type to compute eligibility.")
+        except Exception as e:
+            st.error(f"Technician Capabilities error: {type(e).__name__}: {e}")
