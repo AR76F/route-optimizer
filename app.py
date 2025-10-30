@@ -484,32 +484,56 @@ with tabs[1]:
     st.markdown("### 🏠 Domiciles des techniciens et entrepôts")
     show_map = st.checkbox("Afficher la carte (techniciens + entrepôts)", value=False)
 
-    if show_map:
-        try:
-            points = []
-            for name, addr in {**TECH_HOME, **{f"Entrepôt — {k}": v for k, v in ENTREPOTS.items()}}.items():
-                g = geocode_ll(gmaps_client, addr)
-                if g:
-                    lat, lon, formatted = g
-                    points.append((name, formatted, lat, lon))
+if show_map:
+    try:
+        # Geocode technicians
+        tech_points = []   # {"name","address","lat","lon"}
+        for name, addr in TECH_HOME.items():
+            g = geocode_ll(gmaps_client, addr)
+            if g:
+                lat, lon, formatted = g
+                tech_points.append({"name": name, "address": formatted, "lat": lat, "lon": lon})
 
-            if points:
-                avg_lat = sum(p[2] for p in points) / len(points)
-                avg_lon = sum(p[3] for p in points) / len(points)
-                fmap = folium.Map(location=[avg_lat, avg_lon], zoom_start=8, tiles="cartodbpositron")
-                for name, address, lat, lon in points:
-                    is_entrepot = name.startswith("Entrepôt — ")
-                    folium.Marker(
-                        [lat, lon],
-                        popup=folium.Popup(f"<b>{name}</b><br>{address}", max_width=300),
-                        icon=folium.Icon(color=("red" if is_entrepot else "blue"),
-                                         icon=("building" if is_entrepot else "user"), prefix="fa"),
-                    ).add_to(fmap)
-                st_folium(fmap, height=800, width=1800)
-            else:
-                st.warning("Aucun point géocodé à afficher.")
-        except Exception as e:
-            st.error(f"Erreur lors du chargement de la carte : {e}")
+        # Geocode entrepôts
+        ent_points = []    # {"name","address","lat","lon"}
+        for ent_name, addr in ENTREPOTS.items():
+            g = geocode_ll(gmaps_client, addr)
+            if g:
+                lat, lon, formatted = g
+                ent_points.append({"name": ent_name, "address": formatted, "lat": lat, "lon": lon})
+
+        points_all = tech_points + ent_points
+
+        if points_all:
+            avg_lat = sum(p["lat"] for p in points_all) / len(points_all)
+            avg_lon = sum(p["lon"] for p in points_all) / len(points_all)
+            fmap = folium.Map(location=[avg_lat, avg_lon], zoom_start=8, tiles="cartodbpositron")
+
+            # Entrepôts (red, with entrepôt name)
+            for p in ent_points:
+                m = folium.Marker(
+                    [p["lat"], p["lon"]],
+                    popup=folium.Popup(f"<b>🏭 {p['name']}</b><br>{p['address']}", max_width=320),
+                    icon=folium.Icon(color="red", icon="building", prefix="fa"),
+                )
+                m.add_to(fmap)
+                folium.Tooltip(p["name"], permanent=True, direction="right").add_to(m)
+
+            # Technicians (blue, with technician name)
+            for p in tech_points:
+                m = folium.Marker(
+                    [p["lat"], p["lon"]],
+                    popup=folium.Popup(f"<b>{p['name']}</b><br>{p['address']}", max_width=320),
+                    icon=folium.Icon(color="blue", icon="user", prefix="fa"),
+                )
+                m.add_to(fmap)
+                folium.Tooltip(p["name"], permanent=True, direction="right").add_to(m)
+
+            st_folium(fmap, height=800, width=1800)
+        else:
+            st.warning("Aucun point géocodé à afficher.")
+    except Exception as e:
+        st.error(f"Erreur lors du chargement de la carte : {e}")
 
     st.markdown("#### Sélectionner les sources de départ / fin")
     c1b, c2b = st.columns(2)
