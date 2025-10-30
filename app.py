@@ -3,22 +3,16 @@
 # Notes:
 # - No filesystem writes (GitHub/Streamlit Cloud often block /mnt/data).
 # - Optional Geotab integration guarded behind secrets + import.
-# - Includes a "Download this script" button via inspect (no file creation needed).
 
 import os
-import sys
-import inspect
-from datetime import datetime, date, time, timedelta, timezone
+from datetime import datetime, date, timedelta, timezone
 from typing import List, Tuple, Optional
 
 import streamlit as st
-
-# Third-party libs (make sure these are in your requirements.txt)
 import googlemaps
 import polyline
 import folium
 from streamlit_folium import st_folium
-
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Optional myGeotab import (app still works if it's missing or secrets not set)
@@ -35,33 +29,22 @@ except Exception:
 st.set_page_config(page_title="Route Optimizer", layout="wide")
 
 # ────────────────────────────────────────────────────────────────────────────────
-# Cummins Header (black logo + styled title)
-# Supports both root and assets folder (PNG/JPG/SVG)
+# Header
 # ────────────────────────────────────────────────────────────────────────────────
 def cummins_header():
-    # Candidate logo file paths — checks in root and /assets
     CANDIDATES = [
-        "Cummins_Logo.png",           # your current logo
-        "Cummins_Logo.jpg",
-        "Cummins_Logo.svg",
-        "assets/cummins_black.svg",
-        "assets/cummins_black.png",
-        "assets/cummins_black.jpg",
+        "Cummins_Logo.png", "Cummins_Logo.jpg", "Cummins_Logo.svg",
+        "assets/cummins_black.svg", "assets/cummins_black.png", "assets/cummins_black.jpg",
     ]
-
     col_logo, col_title = st.columns([1, 5], vertical_alignment="center")
-
     with col_logo:
         shown = False
         for path in CANDIDATES:
             if os.path.exists(path):
                 try:
-                    st.image(path, width=300)
-                    shown = True
-                    break
+                    st.image(path, width=300); shown = True; break
                 except Exception:
                     pass
-
         if not shown:
             st.markdown(
                 """
@@ -75,7 +58,6 @@ def cummins_header():
                 """,
                 unsafe_allow_html=True
             )
-
     with col_title:
         st.markdown(
             """
@@ -83,21 +65,16 @@ def cummins_header():
               <h1 style="margin:0;color:white;font-size:54px;">Optimisation du trajet des techniciens</h1>
             </div>
             <div style="color:#9aa0a6;font-size:32px;">
-              Domicile ➜ Entrepot ➜ Clients (MAXIMUM 25 TRAJETS) — <b>Cummins Service Fleet</b>
+              Domicile ➜ Entrepôt ➜ Clients (MAXIMUM 25 TRAJETS) — <b>Cummins Service Fleet</b>
             </div>
             """,
             unsafe_allow_html=True
         )
 
-# Render header
 cummins_header()
 
-# Single source of truth for START address (Geotab -> Route stops)
-if "route_start" not in st.session_state:
-    st.session_state.route_start = ""
-
 # ────────────────────────────────────────────────────────────────────────────────
-# Global helpers
+# Helpers
 # ────────────────────────────────────────────────────────────────────────────────
 def secret(name: str, default: Optional[str] = None) -> Optional[str]:
     try:
@@ -106,16 +83,14 @@ def secret(name: str, default: Optional[str] = None) -> Optional[str]:
         return os.getenv(name, default)
 
 def normalize_ca_postal(text: str) -> str:
-    if not text:
-        return text
+    if not text: return text
     t = str(text).strip().upper().replace(" ", "")
     if len(t) == 6 and t[:3].isalnum() and t[3:].isalnum():
         return f"{t[:3]} {t[3:]}, Canada"
     return text
 
 def geocode_ll(gmaps_client: googlemaps.Client, text: str) -> Optional[Tuple[float, float, str]]:
-    if not text:
-        return None
+    if not text: return None
     q = normalize_ca_postal(text)
     try:
         res = gmaps_client.geocode(q, components={"country": "CA"}, region="ca")
@@ -150,447 +125,20 @@ def big_number_marker(n: str, color_hex: str = "#cc3333"):
     """
     return folium.DivIcon(html=html)
 
-def add_marker(mapobj, lat, lon, popup, icon=None):
-    if icon is None:
-        icon = folium.Icon(color="red", icon="map-marker", prefix="fa")
-    folium.Marker([lat, lon], popup=popup, icon=icon).add_to(mapobj)
-
 def recency_color(ts: Optional[str]) -> Tuple[str, str]:
-    if not ts:
-        return "#9e9e9e", "> 30d"
+    if not ts: return "#9e9e9e", "> 30d"
     try:
         dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
     except Exception:
         return "#9e9e9e", "unknown"
     age = datetime.now(timezone.utc) - dt.astimezone(timezone.utc)
-    if age <= timedelta(hours=2):
-        return "#00c853", "≤ 2h"
-    if age <= timedelta(hours=24):
-        return "#2e7d32", "≤ 24h"
-    if age <= timedelta(days=7):
-        return "#fb8c00", "≤ 7d"
+    if age <= timedelta(hours=2): return "#00c853", "≤ 2h"
+    if age <= timedelta(hours=24): return "#2e7d32", "≤ 24h"
+    if age <= timedelta(days=7): return "#fb8c00", "≤ 7d"
     return "#9e9e9e", "> 7d"
 
-
 # ────────────────────────────────────────────────────────────────────────────────
-# 🧰 Technician Capabilities (before routing) — hard-wired from your current data
-# ────────────────────────────────────────────────────────────────────────────────
-# TRAINING DESCRIPTION -> list of technicians (Completed)
-TECH_BY_TRAINING = {
-    "BETT updated Qualification": [
-        "Alain Duguay",
-        "Alexandre Pelletier guay",
-        "Ali Reza-sabour",
-        "Benoit Charrette-gosselin",
-        "Benoit Laramee",
-        "Christian Dubreuil",
-        "Donald Lagace",
-        "Elie Rajotte-lemay",
-        "Francois Racine",
-        "Fredy Diaz",
-        "Georges Yamna nghuedieu",
-        "Kevin Duranceau",
-        "Louis Lauzon",
-        "Martin Bourbonniere",
-        "Maxime Roy",
-        "Michael Sulte",
-        "Patrick Bellefleur",
-        "Pier-luc Cote",
-        "Sebastien Pepin-millette",
-        "Sergio Mendoza caron",
-    ],
-    "BTPC 1600-3000 amper transfer switch mechanism qualification": [
-        "Alain Duguay",
-        "Alexandre Pelletier guay",
-        "Ali Reza-sabour",
-        "Benoit Charrette-gosselin",
-        "Benoit Laramee",
-        "Christian Dubreuil",
-        "Donald Lagace",
-        "Elie Rajotte-lemay",
-        "Francois Racine",
-        "Fredy Diaz",
-        "Kevin Duranceau",
-        "Louis Lauzon",
-        "Martin Bourbonniere",
-        "Maxime Roy",
-        "Michael Sulte",
-        "Patrick Bellefleur",
-        "Pier-luc Cote",
-        "Sebastien Pepin-millette",
-        "Sergio Mendoza caron",
-    ],
-    "Fundammentals of ATS (Otec transfer switch)": [
-        "Alain Duguay",
-        "Alexandre Pelletier guay",
-        "Ali Reza-sabour",
-        "Benoit Charrette-gosselin",
-        "Benoit Laramee",
-        "Christian Dubreuil",
-        "Donald Lagace",
-        "Elie Rajotte-lemay",
-        "Francois Racine",
-        "Fredy Diaz",
-        "Georges Yamna nghuedieu",
-        "Kevin Duranceau",
-        "Louis Lauzon",
-        "Martin Bourbonniere",
-        "Maxime Roy",
-        "Michael Sulte",
-        "Patrick Bellefleur",
-        "Pier-luc Cote",
-        "Sebastien Pepin-millette",
-        "Sergio Mendoza caron",
-    ],
-    "Fundammentals of Alternator, alternator repair": [
-        "Alain Duguay",
-        "Alexandre Pelletier guay",
-        "Ali Reza-sabour",
-        "Benoit Charrette-gosselin",
-        "Benoit Laramee",
-        "Christian Dubreuil",
-        "Donald Lagace",
-        "Elie Rajotte-lemay",
-        "Francois Racine",
-        "Fredy Diaz",
-        "Georges Yamna nghuedieu",
-        "Kevin Duranceau",
-        "Louis Lauzon",
-        "Martin Bourbonniere",
-        "Maxime Roy",
-        "Michael Sulte",
-        "Patrick Bellefleur",
-        "Pier-luc Cote",
-        "Sebastien Pepin-millette",
-        "Sergio Mendoza caron",
-    ],
-    "InPower Software Qualification": [
-        "Alain Duguay",
-        "Alexandre Pelletier guay",
-        "Ali Reza-sabour",
-        "Benoit Charrette-gosselin",
-        "Benoit Laramee",
-        "Christian Dubreuil",
-        "Donald Lagace",
-        "Elie Rajotte-lemay",
-        "Francois Racine",
-        "Fredy Diaz",
-        "Georges Yamna nghuedieu",
-        "Kevin Duranceau",
-        "Louis Lauzon",
-        "Martin Bourbonniere",
-        "Maxime Roy",
-        "Michael Sulte",
-        "Patrick Bellefleur",
-        "Pier-luc Cote",
-        "Sebastien Pepin-millette",
-        "Sergio Mendoza caron",
-    ],
-    "Load Bank et PM": [
-        "Alain Duguay",
-        "Alexandre Pelletier guay",
-        "Ali Reza-sabour",
-        "Benoit Charrette-gosselin",
-        "Benoit Laramee",
-        "Christian Dubreuil",
-        "Donald Lagace",
-        "Elie Rajotte-lemay",
-        "Francois Racine",
-        "Fredy Diaz",
-        "Georges Yamna nghuedieu",
-        "Kevin Duranceau",
-        "Louis Lauzon",
-        "Martin Bourbonniere",
-        "Maxime Roy",
-        "Michael Sulte",
-        "Patrick Bellefleur",
-        "Pier-luc Cote",
-        "Sebastien Pepin-millette",
-        "Sergio Mendoza caron",
-    ],
-    "NFPA 70e and Cummins safe electrical procedure": [
-        "Alain Duguay",
-        "Alexandre Pelletier guay",
-        "Ali Reza-sabour",
-        "Benoit Charrette-gosselin",
-        "Benoit Laramee",
-        "Christian Dubreuil",
-        "Donald Lagace",
-        "Elie Rajotte-lemay",
-        "Francois Racine",
-        "Fredy Diaz",
-        "Georges Yamna nghuedieu",
-        "Kevin Duranceau",
-        "Louis Lauzon",
-        "Martin Bourbonniere",
-        "Maxime Roy",
-        "Michael Sulte",
-        "Patrick Bellefleur",
-        "Pier-luc Cote",
-        "Sebastien Pepin-millette",
-        "Sergio Mendoza caron",
-    ],
-    "NSPS qualification new source performance standard": [
-        "Alain Duguay",
-        "Alexandre Pelletier guay",
-        "Ali Reza-sabour",
-        "Benoit Charrette-gosselin",
-        "Benoit Laramee",
-        "Christian Dubreuil",
-        "Donald Lagace",
-        "Elie Rajotte-lemay",
-        "Francois Racine",
-        "Fredy Diaz",
-        "Georges Yamna nghuedieu",
-        "Kevin Duranceau",
-        "Louis Lauzon",
-        "Martin Bourbonniere",
-        "Maxime Roy",
-        "Michael Sulte",
-        "Patrick Bellefleur",
-        "Pier-luc Cote",
-        "Sebastien Pepin-millette",
-        "Sergio Mendoza caron",
-    ],
-    "OTPC transfer switch qualification": [
-        "Alain Duguay",
-        "Alexandre Pelletier guay",
-        "Ali Reza-sabour",
-        "Benoit Charrette-gosselin",
-        "Benoit Laramee",
-        "Christian Dubreuil",
-        "Donald Lagace",
-        "Elie Rajotte-lemay",
-        "Francois Racine",
-        "Fredy Diaz",
-        "Georges Yamna nghuedieu",
-        "Kevin Duranceau",
-        "Louis Lauzon",
-        "Martin Bourbonniere",
-        "Maxime Roy",
-        "Michael Sulte",
-        "Patrick Bellefleur",
-        "Pier-luc Cote",
-        "Sebastien Pepin-millette",
-        "Sergio Mendoza caron",
-    ],
-    "PC 3.X 3300 full service qualifications": [
-        "Alain Duguay",
-        "Alexandre Pelletier guay",
-        "Ali Reza-sabour",
-        "Benoit Charrette-gosselin",
-        "Benoit Laramee",
-        "Christian Dubreuil",
-        "Donald Lagace",
-        "Elie Rajotte-lemay",
-        "Francois Racine",
-        "Fredy Diaz",
-        "Georges Yamna nghuedieu",
-        "Kevin Duranceau",
-        "Louis Lauzon",
-        "Martin Bourbonniere",
-        "Maxime Roy",
-        "Michael Sulte",
-        "Patrick Bellefleur",
-        "Pier-luc Cote",
-        "Sebastien Pepin-millette",
-        "Sergio Mendoza caron",
-    ],
-    "P0/P1 and S0/S1 generator frame repair": [
-        "Alain Duguay",
-        "Alexandre Pelletier guay",
-        "Ali Reza-sabour",
-        "Benoit Charrette-gosselin",
-        "Benoit Laramee",
-        "Christian Dubreuil",
-        "Donald Lagace",
-        "Elie Rajotte-lemay",
-        "Francois Racine",
-        "Fredy Diaz",
-        "Georges Yamna nghuedieu",
-        "Kevin Duranceau",
-        "Louis Lauzon",
-        "Martin Bourbonniere",
-        "Maxime Roy",
-        "Michael Sulte",
-        "Patrick Bellefleur",
-        "Pier-luc Cote",
-        "Sebastien Pepin-millette",
-        "Sergio Mendoza caron",
-    ],
-    "PCC 2100 qualification": [
-        "Alain Duguay",
-        "Alexandre Pelletier guay",
-        "Ali Reza-sabour",
-        "Benoit Charrette-gosselin",
-        "Benoit Laramee",
-        "Christian Dubreuil",
-        "Donald Lagace",
-        "Elie Rajotte-lemay",
-        "Francois Racine",
-        "Fredy Diaz",
-        "Georges Yamna nghuedieu",
-        "Kevin Duranceau",
-        "Louis Lauzon",
-        "Martin Bourbonniere",
-        "Maxime Roy",
-        "Michael Sulte",
-        "Patrick Bellefleur",
-        "Pier-luc Cote",
-        "Sebastien Pepin-millette",
-        "Sergio Mendoza caron",
-    ],
-    "PCC 3100 Qualification": [
-        "Alain Duguay",
-        "Alexandre Pelletier guay",
-        "Ali Reza-sabour",
-        "Benoit Charrette-gosselin",
-        "Benoit Laramee",
-        "Christian Dubreuil",
-        "Donald Lagace",
-        "Elie Rajotte-lemay",
-        "Francois Racine",
-        "Fredy Diaz",
-        "Georges Yamna nghuedieu",
-        "Kevin Duranceau",
-        "Louis Lauzon",
-        "Martin Bourbonniere",
-        "Maxime Roy",
-        "Michael Sulte",
-        "Patrick Bellefleur",
-        "Pier-luc Cote",
-        "Sebastien Pepin-millette",
-        "Sergio Mendoza caron",
-    ],
-    "PCC 3200-3201 Qualification": [
-        "Alain Duguay",
-        "Alexandre Pelletier guay",
-        "Ali Reza-sabour",
-        "Benoit Charrette-gosselin",
-        "Benoit Laramee",
-        "Christian Dubreuil",
-        "Donald Lagace",
-        "Elie Rajotte-lemay",
-        "Francois Racine",
-        "Fredy Diaz",
-        "Georges Yamna nghuedieu",
-        "Kevin Duranceau",
-        "Louis Lauzon",
-        "Martin Bourbonniere",
-        "Maxime Roy",
-        "Michael Sulte",
-        "Patrick Bellefleur",
-        "Pier-luc Cote",
-        "Sebastien Pepin-millette",
-        "Sergio Mendoza caron",
-    ],
-    "UC/HC/S4/S5/S6 generator frame repair": [
-        "Alain Duguay",
-        "Alexandre Pelletier guay",
-        "Ali Reza-sabour",
-        "Benoit Charrette-gosselin",
-        "Benoit Laramee",
-        "Christian Dubreuil",
-        "Donald Lagace",
-        "Elie Rajotte-lemay",
-        "Francois Racine",
-        "Fredy Diaz",
-        "Georges Yamna nghuedieu",
-        "Kevin Duranceau",
-        "Louis Lauzon",
-        "Martin Bourbonniere",
-        "Maxime Roy",
-        "Michael Sulte",
-        "Patrick Bellefleur",
-        "Pier-luc Cote",
-        "Sebastien Pepin-millette",
-        "Sergio Mendoza caron",
-    ],
-    "Fundamentals of Controls (PC1.X 1302)": [
-        "Alain Duguay",
-        "Alexandre Pelletier guay",
-        "Ali Reza-sabour",
-        "Benoit Charrette-gosselin",
-        "Benoit Laramee",
-        "Christian Dubreuil",
-        "Donald Lagace",
-        "Elie Rajotte-lemay",
-        "Francois Racine",
-        "Fredy Diaz",
-        "Georges Yamna nghuedieu",
-        "Kevin Duranceau",
-        "Louis Lauzon",
-        "Martin Bourbonniere",
-        "Maxime Roy",
-        "Michael Sulte",
-        "Patrick Bellefleur",
-        "Pier-luc Cote",
-        "Sebastien Pepin-millette",
-        "Sergio Mendoza caron",
-    ],
-    "PCC 3100 Qualification ": [
-        "Alain Duguay",
-        "Alexandre Pelletier guay",
-        "Ali Reza-sabour",
-        "Benoit Charrette-gosselin",
-        "Benoit Laramee",
-        "Christian Dubreuil",
-        "Donald Lagace",
-        "Elie Rajotte-lemay",
-        "Francois Racine",
-        "Fredy Diaz",
-        "Georges Yamna nghuedieu",
-        "Kevin Duranceau",
-        "Louis Lauzon",
-        "Martin Bourbonniere",
-        "Maxime Roy",
-        "Michael Sulte",
-        "Patrick Bellefleur",
-        "Pier-luc Cote",
-        "Sebastien Pepin-millette",
-        "Sergio Mendoza caron",
-    ],
-    "Network Communication RS 485 PCC Net and modbus full service": [
-        "Alain Duguay",
-        "Alexandre Pelletier guay",
-        "Ali Reza-sabour",
-        "Benoit Charrette-gosselin",
-        "Benoit Laramee",
-        "Christian Dubreuil",
-        "Donald Lagace",
-        "Elie Rajotte-lemay",
-        "Francois Racine",
-        "Fredy Diaz",
-        "Georges Yamna nghuedieu",
-        "Kevin Duranceau",
-        "Louis Lauzon",
-        "Martin Bourbonniere",
-        "Maxime Roy",
-        "Michael Sulte",
-        "Patrick Bellefleur",
-        "Pier-luc Cote",
-        "Sebastien Pepin-millette",
-        "Sergio Mendoza caron",
-    ],
-}
-
-st.markdown("### 🧰 Technician Capabilities (avant le point de départ)")
-sel_training = st.selectbox(
-    "Type de service requis (training complété requis)",
-    ["(choisir)"] + sorted(list(TECH_BY_TRAINING.keys())),
-    index=0,
-)
-if sel_training and sel_training != "(choisir)":
-    techs = TECH_BY_TRAINING.get(sel_training, [])
-    st.success(f"{len(techs)} technicien(s) disponible(s) pour **{sel_training}**")
-    for t in techs:
-        st.write(f"• {t}")
-else:
-    st.info("Choisissez un type de service pour voir les techniciens admissibles.")
-
-
-# ────────────────────────────────────────────────────────────────────────────────
-# Google Maps API key (secrets only)
+# Google Maps key
 # ────────────────────────────────────────────────────────────────────────────────
 GOOGLE_KEY = secret("GOOGLE_MAPS_API_KEY")
 if not GOOGLE_KEY:
@@ -599,17 +147,14 @@ if not GOOGLE_KEY:
 gmaps_client = googlemaps.Client(key=GOOGLE_KEY)
 
 # ────────────────────────────────────────────────────────────────────────────────
-# Inputs — DRIVING ONLY + traffic + round trip
+# Travel options
 # ────────────────────────────────────────────────────────────────────────────────
 st.markdown("### Travel options")
-
 c1, c2 = st.columns([1.2, 1.2])
-
 with c1:
     st.markdown("**Travel mode:** Driving")
     leave_now = st.checkbox("Leave now", value=True)
     round_trip = st.checkbox("Return to home at the end (round trip)?", value=True)
-
 with c2:
     traffic_model = st.selectbox("Traffic model", ["best_guess", "pessimistic", "optimistic"], index=0)
     planned_date = st.date_input("Planned departure date", value=date.today(), disabled=leave_now)
@@ -622,21 +167,148 @@ else:
     departure_dt = naive.replace(tzinfo=timezone.utc)
 
 # ────────────────────────────────────────────────────────────────────────────────
+# 🧰 Technician capacities (exactly between Travel options and Point de départ)
+# ────────────────────────────────────────────────────────────────────────────────
+TECHNICIANS = [
+    "Louis Lauzon","Patrick Bellefleur","Martin Bourbonniere","Francois Racine",
+    "Alain Duguay","Benoit Charrette-gosselin","Donald Lagace","Ali Reza-sabour",
+    "Kevin Duranceau","Maxime Roy","Christian Dubreuil","Pier-luc Cote","Fredy Diaz",
+    "Alexandre Pelletier guay","Sergio Mendoza caron","Benoit Laramee","Georges Yamna nghuedieu",
+    "Sebastien Pepin-millette","Elie Rajotte-lemay","Michael Sulte",
+]
+
+TRAININGS = [
+    "Load Bank et PM",
+    "NFPA 70e and Cummins safe electrical procedure",
+    "Fundamentals of Controls (PC1.X 1302)",
+    "Fundammentals of ATS (Otec transfer switch)",
+    "BETT updated Qualification",
+    "InPower Software Qualification",
+    "Fundammentals of Alternator, alternator repair",
+    "UC/HC/S4/S5/S6 generator frame repair",
+    "P0/P1 and S0/S1 generator frame repair",
+    "PCC 2100 qualification",
+    "Network Communication RS 485 PCC Net and modbus full service",
+    "PCC 3100 Qualification",
+    "PCC 3200-3201 Qualification",
+    "NSPS qualification new source performance standard",
+    "PC 3.X 3300 full service qualifications",
+    "BTPC 1600-3000 amper transfer switch mechanism qualification",
+    "OTPC transfer switch qualification",
+]
+
+# EXACT “Not Completed” names from your sheet (for each training).
+NOT_COMPLETED = {
+    # 2018-14Q
+    "Load Bank et PM": {
+        "Sergio Mendoza caron", "Sebastien Pepin-millette", "Elie Rajotte-lemay", "Michael Sulte"
+    },
+    # 2018-15Q
+    "NFPA 70e and Cummins safe electrical procedure": {
+        "Sergio Mendoza caron", "Michael Sulte"
+    },
+    # 2008-08Q
+    "Fundamentals of Controls (PC1.X 1302)": {
+        "Sergio Mendoza caron", "Elie Rajotte-lemay"
+    },
+    # 2008-14Q
+    "Fundammentals of ATS (Otec transfer switch)": {
+        "Sergio Mendoza caron", "Sebastien Pepin-millette", "Elie Rajotte-lemay", "Michael Sulte"
+    },
+    # 2006-13Q
+    "BETT updated Qualification": {
+        "Maxime Roy", "Sergio Mendoza caron", "Benoit Laramee",
+        "Georges Yamna nghuedieu", "Elie Rajotte-lemay", "Michael Sulte"
+    },
+    # 2000-20Q
+    "InPower Software Qualification": {
+        "Patrick Bellefleur", "Alain Duguay", "Donald Lagace", "Ali Reza-sabour",
+        "Kevin Duranceau", "Pier-luc Cote", "Fredy Diaz", "Alexandre Pelletier guay",
+        "Sergio Mendoza caron", "Elie Rajotte-lemay",
+    },
+    # 2014-39Q
+    "Fundammentals of Alternator, alternator repair": {
+        "Christian Dubreuil", "Alexandre Pelletier guay", "Sergio Mendoza caron", "Elie Rajotte-lemay"
+    },
+    # 2013-23Q
+    "UC/HC/S4/S5/S6 generator frame repair": {
+        "Christian Dubreuil", "Alexandre Pelletier guay", "Sergio Mendoza caron", "Elie Rajotte-lemay"
+    },
+    # 2013-21Q
+    "P0/P1 and S0/S1 generator frame repair": {
+        "Christian Dubreuil", "Pier-luc Cote", "Fredy Diaz", "Alexandre Pelletier guay",
+        "Sergio Mendoza caron", "Benoit Laramee", "Georges Yamna nghuedieu", "Elie Rajotte-lemay",
+    },
+    # 2001-28Q
+    "PCC 2100 qualification": {
+        "Fredy Diaz", "Sergio Mendoza caron", "Benoit Laramee", "Georges Yamna nghuedieu", "Elie Rajotte-lemay"
+    },
+    # 2015-20Q
+    "Network Communication RS 485 PCC Net and modbus full service": {
+        "Christian Dubreuil", "Fredy Diaz", "Sergio Mendoza caron",
+        "Sebastien Pepin-millette", "Elie Rajotte-lemay", "Michael Sulte"
+    },
+    # 2002-44Q
+    "PCC 3100 Qualification": {
+        "Christian Dubreuil", "Pier-luc Cote", "Alexandre Pelletier guay",
+        "Sergio Mendoza caron", "Sebastien Pepin-millette", "Elie Rajotte-lemay", "Michael Sulte"
+    },
+    # 2000-19Q
+    "PCC 3200-3201 Qualification": {
+        "Maxime Roy", "Christian Dubreuil", "Pier-luc Cote", "Fredy Diaz",
+        "Alexandre Pelletier guay", "Sergio Mendoza caron", "Benoit Laramee",
+        "Georges Yamna nghuedieu", "Sebastien Pepin-millette", "Elie Rajotte-lemay", "Michael Sulte",
+    },
+    # 2009-43Q
+    "NSPS qualification new source performance standard": {
+        "Maxime Roy", "Christian Dubreuil", "Pier-luc Cote", "Alexandre Pelletier guay",
+        "Sergio Mendoza caron", "Benoit Laramee", "Georges Yamna nghuedieu",
+        "Sebastien Pepin-millette", "Elie Rajotte-lemay", "Michael Sulte",
+    },
+    # 2013-11Q
+    "PC 3.X 3300 full service qualifications": {
+        "Maxime Roy", "Sergio Mendoza caron", "Benoit Laramee",
+        "Georges Yamna nghuedieu", "Sebastien Pepin-millette", "Elie Rajotte-lemay", "Michael Sulte",
+    },
+    # 2011-08Q
+    "BTPC 1600-3000 amper transfer switch mechanism qualification": {
+        "Maxime Roy", "Christian Dubreuil", "Pier-luc Cote", "Fredy Diaz",
+        "Alexandre Pelletier guay", "Sergio Mendoza caron", "Benoit Laramee",
+        "Georges Yamna nghuedieu", "Sebastien Pepin-millette", "Elie Rajotte-lemay", "Michael Sulte",
+    },
+    # 2000-18Q
+    "OTPC transfer switch qualification": {
+        "Sergio Mendoza caron", "Sebastien Pepin-millette", "Elie Rajotte-lemay", "Michael Sulte"
+    },
+}
+
+def eligible_for(training: str):
+    not_ok = NOT_COMPLETED.get(training, set())
+    return [t for t in TECHNICIANS if t not in not_ok]
+
+st.markdown("### 🧰 Technician capacities")
+st.caption("Choisis le type de service. On affiche les techniciens qui ont ce training **complété**.")
+sel_training = st.selectbox("Type de service requis", ["(choisir)"] + TRAININGS, index=0, key="tech_caps_training")
+if sel_training and sel_training != "(choisir)":
+    techs = eligible_for(sel_training)
+    if techs:
+        st.success(f"{len(techs)} technicien(s) disponible(s) pour **{sel_training}**")
+        for t in techs: st.write(f"• {t}")
+    else:
+        st.warning("Aucun technicien avec ce training complété.")
+
+# ────────────────────────────────────────────────────────────────────────────────
 # 🎯 Point de départ
 # ────────────────────────────────────────────────────────────────────────────────
 st.markdown("---")
 st.subheader("🎯 Point de départ")
 
-if "route_start" not in st.session_state:
-    st.session_state.route_start = ""
+if "route_start" not in st.session_state: st.session_state.route_start = ""
+if "storage_text" not in st.session_state: st.session_state.storage_text = ""
 
 tabs = st.tabs(["🚚 Live Fleet (Geotab)", "🏠 Technician Home"])
 
-# (… the rest of your original code remains unchanged …)
-# ⬇️ I’m keeping everything exactly as you had it from here on — live fleet,
-# homes/entrepôts, route stops, optimization, map, etc.
-
-# ===============  TAB 1 — LIVE FLEET (GEOTAB, MULTI-SÉLECTION + GRANDE CARTE)  ===============
+# =============== TAB 1 — GEOTAB LIVE FLEET ===============
 with tabs[0]:
     G_DB = secret("GEOTAB_DATABASE")
     G_USER = secret("GEOTAB_USERNAME")
@@ -646,17 +318,13 @@ with tabs[0]:
 
     if geotab_enabled_by_secrets:
 
-        if "geo_refresh_key" not in st.session_state:
-            st.session_state.geo_refresh_key = 0
-        if st.button("🔄 Rafraîchir Geotab maintenant"):
-            st.session_state.geo_refresh_key += 1
+        if "geo_refresh_key" not in st.session_state: st.session_state.geo_refresh_key = 0
+        if st.button("🔄 Rafraîchir Geotab maintenant"): st.session_state.geo_refresh_key += 1
 
         if "_geotab_api_cached" not in globals():
             @st.cache_resource(show_spinner=False)
             def _geotab_api_cached(user, pwd, db, server):
-                api = myg.API(user, pwd, db, server)
-                api.authenticate()
-                return api
+                api = myg.API(user, pwd, db, server); api.authenticate(); return api
 
         if "_geotab_devices_cached" not in globals():
             @st.cache_data(ttl=900, show_spinner=False)
@@ -673,10 +341,8 @@ with tabs[0]:
                 results = []
                 for did in device_ids:
                     try:
-                        dsi = api.call("Get", typeName="DeviceStatusInfo",
-                                       search={"deviceSearch": {"id": did}})
-                        lat = lon = when = None
-                        driver_name = None
+                        dsi = api.call("Get", typeName="DeviceStatusInfo", search={"deviceSearch": {"id": did}})
+                        lat = lon = when = None; driver_name = None
                         if dsi:
                             row = dsi[0]
                             lat, lon = row.get("latitude"), row.get("longitude")
@@ -684,8 +350,7 @@ with tabs[0]:
                             if (lat is None or lon is None) and isinstance(row.get("location"), dict):
                                 lat = row["location"].get("y"); lon = row["location"].get("x")
                             drv = row.get("driver")
-                            if isinstance(drv, dict):
-                                driver_name = drv.get("name")
+                            if isinstance(drv, dict): driver_name = drv.get("name")
                         if lat is not None and lon is not None:
                             results.append({"deviceId": did, "lat": float(lat), "lon": float(lon),
                                             "when": when, "driverName": driver_name})
@@ -695,6 +360,7 @@ with tabs[0]:
                         results.append({"deviceId": did, "error": "error"})
                 return results
 
+        # Optional mapping to label devices by driver
         DEVICE_TO_DRIVER_RAW = {
             "01942": "ALI-REZA SABOUR", "24735": "PATRICK BELLEFLEUR", "23731": "ÉLIE RAJOTTE-LEMAY",
             "18010": "GEORGES YAMNA", "23736": "MARTIN BOURBONNIÈRE", "23738": "PIER-LUC CÔTÉ",
@@ -706,23 +372,17 @@ with tabs[0]:
         import json
         try:
             j = secret("GEOTAB_DEVICE_TO_DRIVER_JSON")
-            if j:
-                DEVICE_TO_DRIVER_RAW.update(json.loads(j))
+            if j: DEVICE_TO_DRIVER_RAW.update(json.loads(j))
         except Exception:
             pass
 
-        def _norm(s: str) -> str:
-            return " ".join(str(s or "").strip().upper().split())
-
+        def _norm(s: str) -> str: return " ".join(str(s or "").strip().upper().split())
         NAME2DRIVER, ID2DRIVER = {}, {}
         for k, v in DEVICE_TO_DRIVER_RAW.items():
             nk = _norm(k)
-            if not nk:
-                continue
-            if len(nk) > 12 or ("-" in nk and any(c.isalpha() for c in nk)):
-                ID2DRIVER[nk] = v
-            else:
-                NAME2DRIVER[nk] = v
+            if not nk: continue
+            if len(nk) > 12 or ("-" in nk and any(c.isalpha() for c in nk)): ID2DRIVER[nk] = v
+            else: NAME2DRIVER[nk] = v
 
         def _driver_from_mapping(device_id: str, device_name: str) -> Optional[str]:
             n_id, n_name = _norm(device_id), _norm(device_name)
@@ -737,75 +397,46 @@ with tabs[0]:
         if not devs:
             st.info("Aucun appareil actif trouvé.")
         else:
-            options = []
-            label2id = {}
+            options, label2id = [], {}
             for d in devs:
-                label = _label_for_device(d["id"], d["name"], None)
-                options.append(label)
-                label2id[label] = d["id"]
-
-            picked_labels = st.multiselect(
-                "Sélectionner un ou plusieurs véhicules/techniciens à afficher :",
-                sorted(options), default=[]
-            )
-
+                label = _label_for_device(d["id"], d["name"], None); options.append(label); label2id[label] = d["id"]
+            picked_labels = st.multiselect("Sélectionner un ou plusieurs véhicules/techniciens à afficher :",
+                                           sorted(options), default=[])
             wanted_ids = [label2id[lbl] for lbl in picked_labels]
             if wanted_ids:
-                pts = _geotab_positions_for(
-                    (G_USER, G_PWD, G_DB, G_SERVER),
-                    tuple(wanted_ids),
-                    st.session_state.geo_refresh_key
-                )
+                pts = _geotab_positions_for((G_USER, G_PWD, G_DB, G_SERVER), tuple(wanted_ids), st.session_state.geo_refresh_key)
                 id2name = {d["id"]: d["name"] for d in devs}
-
                 valid = [p for p in pts if "lat" in p and "lon" in p]
                 if valid:
                     avg_lat = sum(p["lat"] for p in valid) / len(valid)
                     avg_lon = sum(p["lon"] for p in valid) / len(valid)
                     fmap = folium.Map(location=[avg_lat, avg_lon], zoom_start=8, tiles="cartodbpositron")
-
                     choice_labels = []
                     for p in valid:
-                        device_id = p["deviceId"]
-                        device_name = id2name.get(device_id, device_id)
+                        device_id = p["deviceId"]; device_name = id2name.get(device_id, device_id)
                         label = _label_for_device(device_id, device_name, p.get("driverName"))
                         choice_labels.append(label)
-
                         color, lab = recency_color(p.get("when"))
-
-                        folium.CircleMarker(
-                            [p["lat"], p["lon"]],
-                            radius=8, color="#222", weight=2,
-                            fill=True, fill_color=color, fill_opacity=0.9
-                        ).add_to(fmap)
-
+                        folium.CircleMarker([p["lat"], p["lon"]], radius=8, color="#222", weight=2,
+                                            fill=True, fill_color=color, fill_opacity=0.9).add_to(fmap)
                         folium.Marker(
                             [p["lat"], p["lon"]],
-                            popup=folium.Popup(
-                                f"<b>{label}</b><br>Recency: {lab}<br>{p['lat']:.5f}, {p['lon']:.5f}", max_width=320
-                            ),
+                            popup=folium.Popup(f"<b>{label}</b><br>Recency: {lab}<br>{p['lat']:.5f}, {p['lon']:.5f}",
+                                               max_width=320),
                             tooltip=label,
                             icon=folium.DivIcon(
-                                icon_size=(240, 22),
-                                icon_anchor=(0, -18),
+                                icon_size=(240, 22), icon_anchor=(0, -18),
                                 html=f"""
-                                <div style="
-                                    display:inline-block;padding:2px 6px;
+                                <div style="display:inline-block;padding:2px 6px;
                                     font-size:12px;font-weight:700;color:#111;
-                                    background:rgba(255,255,255,.95);
-                                    border:1px solid #ddd;border-radius:6px;
+                                    background:rgba(255,255,255,.95);border:1px solid #ddd;border-radius:6px;
                                     box-shadow:0 1px 2px rgba(0,0,0,.25);white-space:nowrap;">
                                     {label.split(' — ')[0]}
-                                </div>
-                                """
+                                </div>"""
                             )
                         ).add_to(fmap)
-
                     st_folium(fmap, height=800, width=1800)
-
-                    start_choice = st.selectbox(
-                        "Utiliser comme point de départ :", ["(aucun)"] + choice_labels, index=0
-                    )
+                    start_choice = st.selectbox("Utiliser comme point de départ :", ["(aucun)"] + choice_labels, index=0)
                     if start_choice != "(aucun)":
                         chosen = valid[choice_labels.index(start_choice)]
                         picked_addr = reverse_geocode(gmaps_client, chosen["lat"], chosen["lon"])
@@ -820,11 +451,6 @@ with tabs[0]:
 
 # ============= TAB 2 – DOMICILES DES TECHNICIENS ET ENTREPÔTS =============
 with tabs[1]:
-    if "route_start" not in st.session_state:
-        st.session_state.route_start = ""
-    if "storage_text" not in st.session_state:
-        st.session_state.storage_text = ""
-
     TECH_HOME = {
         "Alain": "1110 rue Proulx, Les Cèdres, QC J7T 1E6",
         "Alex": "163 21e ave, Sabrevois, J0J 2G0",
@@ -861,46 +487,24 @@ with tabs[1]:
     if show_map:
         try:
             points = []
-            tech_name_to_addr = {}
-            ent_name_to_addr = {}
-
-            for name, addr in TECH_HOME.items():
+            for name, addr in {**TECH_HOME, **{f"Entrepôt — {k}": v for k, v in ENTREPOTS.items()}}.items():
                 g = geocode_ll(gmaps_client, addr)
                 if g:
                     lat, lon, formatted = g
-                    points.append({"name": name, "address": formatted, "lat": lat, "lon": lon, "type": "technician"})
-                    tech_name_to_addr[name] = formatted
-
-            for name, addr in ENTREPOTS.items():
-                g = geocode_ll(gmaps_client, addr)
-                if g:
-                    lat, lon, formatted = g
-                    points.append({"name": name, "address": formatted, "lat": lat, "lon": lon, "type": "entrepot"})
-                    ent_name_to_addr[name] = formatted
+                    points.append((name, formatted, lat, lon))
 
             if points:
-                avg_lat = sum(p["lat"] for p in points) / len(points)
-                avg_lon = sum(p["lon"] for p in points) / len(points)
+                avg_lat = sum(p[2] for p in points) / len(points)
+                avg_lon = sum(p[3] for p in points) / len(points)
                 fmap = folium.Map(location=[avg_lat, avg_lon], zoom_start=8, tiles="cartodbpositron")
-
-                for p in points:
-                    if p["type"] == "technician":
-                        m = folium.Marker(
-                            [p["lat"], p["lon"]],
-                            popup=folium.Popup(f"<b>{p['name']}</b><br>{p['address']}", max_width=300),
-                            icon=folium.Icon(color="blue", icon="user", prefix="fa"),
-                        )
-                        m.add_to(fmap)
-                        folium.Tooltip(p["name"], permanent=True, direction="right").add_to(m)
-                    else:
-                        m = folium.Marker(
-                            [p["lat"], p["lon"]],
-                            popup=folium.Popup(f"<b>🏭 Entrepôt — {p['name']}</b><br>{p['address']}", max_width=300),
-                            icon=folium.Icon(color="red", icon="building", prefix="fa"),
-                        )
-                        m.add_to(fmap)
-                        folium.Tooltip(f"Entrepôt — {p['name']}", permanent=True, direction="right").add_to(m)
-
+                for name, address, lat, lon in points:
+                    is_entrepot = name.startswith("Entrepôt — ")
+                    folium.Marker(
+                        [lat, lon],
+                        popup=folium.Popup(f"<b>{name}</b><br>{address}", max_width=300),
+                        icon=folium.Icon(color=("red" if is_entrepot else "blue"),
+                                         icon=("building" if is_entrepot else "user"), prefix="fa"),
+                    ).add_to(fmap)
                 st_folium(fmap, height=800, width=1800)
             else:
                 st.warning("Aucun point géocodé à afficher.")
@@ -908,28 +512,22 @@ with tabs[1]:
             st.error(f"Erreur lors du chargement de la carte : {e}")
 
     st.markdown("#### Sélectionner les sources de départ / fin")
-    c1, c2 = st.columns(2)
-
-    with c1:
-        tech_choice = st.selectbox(
-            "Technicien → définir comme **départ**",
-            ["(choisir)"] + sorted(TECH_HOME.keys()),
-            key="tech_choice_start_tab2",
-        )
+    c1b, c2b = st.columns(2)
+    with c1b:
+        tech_choice = st.selectbox("Technicien → définir comme **départ**", ["(choisir)"] + sorted(TECH_HOME.keys()),
+                                   key="tech_choice_start_tab2")
         if tech_choice != "(choisir)":
             st.session_state.route_start = TECH_HOME[tech_choice]
             st.success(f"Départ défini sur **{tech_choice}** — {TECH_HOME[tech_choice]}")
-
-    with c2:
-        ent_choice = st.selectbox(
-            "Entrepôt → définir comme **stockage**",
-            ["(choisir)"] + sorted(ENTREPOTS.keys()),
-            key="entrepot_choice_storage_tab2",
-        )
+    with c2b:
+        ent_choice = st.selectbox("Entrepôt → définir comme **stockage**",
+                                  ["(choisir)"] + sorted(ENTREPOTS.keys()),
+                                  key="entrepot_choice_storage_tab2")
         if ent_choice != "(choisir)":
             st.session_state.storage_text = ENTREPOTS[ent_choice]
             st.success(f"Stockage défini sur **Entrepôt — {ent_choice}** — {ENTREPOTS[ent_choice]}")
 
+# Rappel visuel du départ courant
 if st.session_state.route_start:
     st.info(f"📍 **Point de départ sélectionné :** {st.session_state.route_start}")
 
@@ -937,9 +535,12 @@ if st.session_state.route_start:
 # Route stops
 # ────────────────────────────────────────────────────────────────────────────────
 st.markdown("### Route stops")
-start_text = st.text_input("Technician home (START)", key="route_start", placeholder="e.g., 123 Main St, City, Province")
-storage_text = st.text_input("Storage location (first stop)", key="storage_text", placeholder="e.g., 456 Depot Rd, City, Province")
-stops_text = st.text_area("Other stops (one ZIP/postal code or full address per line)", height=140, placeholder="H0H0H0\nG2P1L4\n…")
+start_text = st.text_input("Technician home (START)", key="route_start",
+                           placeholder="e.g., 123 Main St, City, Province")
+storage_text = st.text_input("Storage location (first stop)", key="storage_text",
+                             placeholder="e.g., 456 Depot Rd, City, Province")
+stops_text = st.text_area("Other stops (one ZIP/postal code or full address per line)",
+                          height=140, placeholder="H0H0H0\nG2P1L4\n…")
 other_stops_input = [s.strip() for s in stops_text.splitlines() if s.strip()]
 
 # ────────────────────────────────────────────────────────────────────────────────
@@ -954,38 +555,30 @@ if st.button("🧭 Optimize Route", type="primary"):
 
         failures = []
         start_g = geocode_ll(gmaps_client, start_text)
-        if not start_g:
-            failures.append(f"START: `{start_text}`")
+        if not start_g: failures.append(f"START: `{start_text}`")
 
         storage_g = geocode_ll(gmaps_client, storage_query) if storage_query else None
-        if storage_query and not storage_g:
-            failures.append(f"STORAGE: `{storage_text}`")
+        if storage_query and not storage_g: failures.append(f"STORAGE: `{storage_text}`")
 
         wp_raw = []
-        if storage_query:
-            wp_raw.append(("Storage", storage_query))
-        for i, q in enumerate(other_stops_queries, start=1):
-            wp_raw.append((f"Stop {i}", q))
+        if storage_query: wp_raw.append(("Storage", storage_query))
+        for i, q in enumerate(other_stops_queries, start=1): wp_raw.append((f"Stop {i}", q))
 
         wp_geocoded: List[Tuple[str, str, Tuple[float, float]]] = []
         for label, q in wp_raw:
             g = geocode_ll(gmaps_client, q)
-            if not g:
-                failures.append(f"{label}: `{q}`")
+            if not g: failures.append(f"{label}: `{q}`")
             else:
-                lat, lon, addr = g
-                wp_geocoded.append((label, addr, (lat, lon)))
+                lat, lon, addr = g; wp_geocoded.append((label, addr, (lat, lon)))
 
         if failures:
-            st.error("I couldn’t geocode some locations:\n\n- " + "\n- ".join(failures) + "\n\nTip: use full street addresses if a postal code fails.")
+            st.error("I couldn’t geocode some locations:\n\n- " + "\n- ".join(failures) +
+                     "\n\nTip: use full street addresses if a postal code fails.")
             st.stop()
 
-        def to_ll_str(ll: Tuple[float, float]) -> str:
-            return f"{ll[0]:.7f},{ll[1]:.7f}"
+        def to_ll_str(ll: Tuple[float, float]) -> str: return f"{ll[0]:.7f},{ll[1]:.7f}"
 
-        start_ll = (start_g[0], start_g[1])
-        start_addr = start_g[2]
-
+        start_ll = (start_g[0], start_g[1]); start_addr = start_g[2]
         wp_addrs = [addr for (_lbl, addr, _ll) in wp_geocoded]
         wp_llstr = [to_ll_str(ll) for (_lbl, _addr, ll) in wp_geocoded]
 
@@ -994,32 +587,22 @@ if st.button("🧭 Optimize Route", type="primary"):
             st.stop()
 
         if round_trip:
-            destination_addr = start_addr
-            destination_llstr = to_ll_str(start_ll)
-            waypoints_for_api = wp_llstr[:]
+            destination_addr = start_addr; destination_llstr = to_ll_str(start_ll); waypoints_for_api = wp_llstr[:]
         else:
             if wp_llstr:
-                destination_addr = wp_addrs[-1]
-                destination_llstr = wp_llstr[-1]
-                waypoints_for_api = wp_llstr[:-1]
+                destination_addr = wp_addrs[-1]; destination_llstr = wp_llstr[-1]; waypoints_for_api = wp_llstr[:-1]
             else:
                 if storage_g:
-                    destination_addr = storage_g[2]
-                    destination_llstr = to_ll_str((storage_g[0], storage_g[1]))
+                    destination_addr = storage_g[2]; destination_llstr = to_ll_str((storage_g[0], storage_g[1]))
                 else:
-                    destination_addr = start_addr
-                    destination_llstr = to_ll_str(start_ll)
+                    destination_addr = start_addr; destination_llstr = to_ll_str(start_ll)
                 waypoints_for_api = []
 
         wp_arg = (["optimize:true"] + waypoints_for_api) if waypoints_for_api else None
 
         directions = gmaps_client.directions(
-            origin=to_ll_str(start_ll),
-            destination=destination_llstr,
-            mode="driving",
-            waypoints=wp_arg,
-            departure_time=departure_dt,
-            traffic_model=traffic_model,
+            origin=to_ll_str(start_ll), destination=destination_llstr, mode="driving",
+            waypoints=wp_arg, departure_time=departure_dt, traffic_model=traffic_model,
         )
 
         if not directions:
@@ -1030,8 +613,7 @@ if st.button("🧭 Optimize Route", type="primary"):
         if waypoints_for_api:
             order = directions[0].get("waypoint_order", list(range(len(waypoints_for_api))))
             ordered_wp_addrs = [wp_addrs[i] for i in order]
-            if not round_trip and wp_addrs:
-                ordered_wp_addrs.append(destination_addr)
+            if not round_trip and wp_addrs: ordered_wp_addrs.append(destination_addr)
         else:
             ordered_wp_addrs = [] if round_trip else [destination_addr]
 
@@ -1047,25 +629,15 @@ if st.button("🧭 Optimize Route", type="primary"):
         current_dt = departure_dt
         for i, leg in enumerate(legs, start=1):
             dur = leg.get("duration_in_traffic") or leg.get("duration") or {}
-            dur_sec = int(dur.get("value", 0))
-            leg_mins = round(dur_sec / 60.0)
-
-            dist_m = int(leg.get("distance", {}).get("value", 0))
-            dist_km = dist_m / 1000.0
-
-            current_dt = current_dt + timedelta(seconds=dur_sec)
-            arr_str = current_dt.astimezone().strftime("%H:%M")
+            dur_sec = int(dur.get("value", 0)); leg_mins = round(dur_sec / 60.0)
+            dist_m = int(leg.get("distance", {}).get("value", 0)); dist_km = dist_m / 1000.0
+            current_dt = current_dt + timedelta(seconds=dur_sec); arr_str = current_dt.astimezone().strftime("%H:%M")
             stop_addr = visit_texts[i] if i < len(visit_texts) else ""
-
             per_leg.append({"idx": i, "to": stop_addr, "dist_km": dist_km, "mins": leg_mins, "arrive": arr_str})
 
         st.session_state.route_result = {
-            "visit_texts": visit_texts,
-            "km": km,
-            "mins": mins,
-            "start_ll": start_ll,
-            "wp_geocoded": wp_geocoded,
-            "round_trip": round_trip,
+            "visit_texts": visit_texts, "km": km, "mins": mins, "start_ll": start_ll,
+            "wp_geocoded": wp_geocoded, "round_trip": round_trip,
             "overview": directions[0].get("overview_polyline", {}).get("points"),
             "per_leg": per_leg,
         }
@@ -1075,27 +647,20 @@ if st.button("🧭 Optimize Route", type="primary"):
         st.exception(e)
 
 # ────────────────────────────────────────────────────────────────────────────────
-# Render last optimized result
+# Render result
 # ────────────────────────────────────────────────────────────────────────────────
 res = st.session_state.get("route_result")
 if res:
-    visit_texts = res["visit_texts"]
-    km = res["km"]
-    mins = res["mins"]
-    start_ll = tuple(res["start_ll"])
-    wp_geocoded = res["wp_geocoded"]
-    round_trip = res["round_trip"]
-    overview = res.get("overview")
+    visit_texts = res["visit_texts"]; km = res["km"]; mins = res["mins"]
+    start_ll = tuple(res["start_ll"]); wp_geocoded = res["wp_geocoded"]
+    round_trip = res["round_trip"]; overview = res.get("overview")
     per_leg  = res.get("per_leg", [])
 
     st.markdown("#### Optimized order (Driving)")
     for ix, addr in enumerate(visit_texts):
-        if ix == 0:
-            st.write(f"**START** — {addr}")
-        elif ix == len(visit_texts) - 1:
-            st.write(f"**END** — {addr}")
-        else:
-            st.write(f"**{ix}** — {addr}")
+        if ix == 0: st.write(f"**START** — {addr}")
+        elif ix == len(visit_texts) - 1: st.write(f"**END** — {addr}")
+        else: st.write(f"**{ix}** — {addr}")
 
     if per_leg:
         st.markdown("#### Stop-by-stop timing")
@@ -1106,7 +671,6 @@ if res:
     if show_map:
         try:
             fmap = folium.Map(location=[start_ll[0], start_ll[1]], zoom_start=9, tiles="cartodbpositron")
-
             if overview:
                 try:
                     path = polyline.decode(overview)
@@ -1114,23 +678,23 @@ if res:
                 except Exception:
                     pass
 
+            # Start marker
             folium.Marker(
                 start_ll, icon=folium.Icon(color="green", icon="play", prefix="fa"),
                 popup=folium.Popup(f"<b>START</b><br>{visit_texts[0]}", max_width=260)
             ).add_to(fmap)
 
+            # Waypoints
             addr2ll = {addr: ll for (_lbl, addr, ll) in wp_geocoded}
             for i, addr in enumerate(visit_texts[1:-1], start=1):
                 ll = addr2ll.get(addr)
                 if ll:
-                    folium.Marker(ll, popup=folium.Popup(f"<b>{i}</b>. {addr}", max_width=260), icon=big_number_marker(str(i))).add_to(fmap)
+                    folium.Marker(ll, popup=folium.Popup(f"<b>{i}</b>. {addr}", max_width=260),
+                                  icon=big_number_marker(str(i))).add_to(fmap)
 
+            # End marker
             end_addr = visit_texts[-1]
-            end_ll = addr2ll.get(end_addr)
-            if not end_ll:
-                g = geocode_ll(gmaps_client, end_addr)
-                if g:
-                    end_ll = (g[0], g[1])
+            end_ll = addr2ll.get(end_addr) or (geocode_ll(gmaps_client, end_addr)[:2] if geocode_ll(gmaps_client, end_addr) else None)
             if end_ll:
                 folium.Marker(
                     end_ll, icon=folium.Icon(color="red", icon="flag-checkered", prefix="fa"),
