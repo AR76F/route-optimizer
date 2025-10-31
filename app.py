@@ -363,11 +363,11 @@ with tabs[0]:
         # Optional mapping to label devices by driver
         DEVICE_TO_DRIVER_RAW = {
             "01942": "ALI-REZA SABOUR", "24735": "PATRICK BELLEFLEUR", "23731": "ÉLIE RAJOTTE-LEMAY",
-            "18010": "GEORGES YAMNA", "23736": "MARTIN BOURBONNIÈRE", "23738": "PIER-LUC CÔTÉ",
+            "19004": "GEORGES YAMNA", "22736": "MARTIN BOURBONNIÈRE", "23738": "PIER-LUC CÔTÉ",
             "24724": "LOUIS LAUZON", "23744": "BENOÎT CHARETTE", "23727": "FREDY DIAZ",
             "23737": "ALAIN DUGUAY", "23730": "BENOÎT LARAMÉE", "24725": "CHRISTIAN DUBREUIL",
             "23746": "MICHAEL SULTE", "24728": "FRANÇOIS RACINE", "23743": "ALEX PELLETIER-GUAY",
-            "23745": "KEVIN DURANCEAU",
+            "23745": "KEVIN DURANCEAU", "23739": "MAXIME ROY",
         }
         import json
         try:
