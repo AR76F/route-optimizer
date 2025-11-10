@@ -197,6 +197,18 @@ TRAININGS = [
     "OTPC transfer switch qualification",
 ]
 
+# 🔗 Lien SharePoint (ouvre la feuille dans un nouvel onglet)
+EXCEL_URL = "https://cummins365.sharepoint.com/:x:/r/sites/GRP_CC40846-AdministrationFSPG/Shared%20Documents/Administration%20FSPG/Info%20des%20techs%20pour%20booking/CapaciteTechs_CandiacEtOttawa.xlsx?d=wc1ab3f7d2d324c6eb1bb0a81247cd554&csf=1&web=1&e=oKYFQH"
+
+# Header + button side-by-side
+hcol, bcol = st.columns([3, 2], vertical_alignment="center")
+with hcol:
+    st.markdown("### 🧰 Technician capacities")
+with bcol:
+    st.link_button("📎 Informations supplémentaires sur les techniciens", EXCEL_URL)
+
+st.caption("Choisis le type de service. On affiche les techniciens qui ont ce training **complété**.")
+
 # EXACT “Not Completed” names from your sheet (for each training).
 NOT_COMPLETED = {
     # 2018-14Q
@@ -286,14 +298,13 @@ def eligible_for(training: str):
     not_ok = NOT_COMPLETED.get(training, set())
     return [t for t in TECHNICIANS if t not in not_ok]
 
-st.markdown("### 🧰 Technician capacities")
-st.caption("Choisis le type de service. On affiche les techniciens qui ont ce training **complété**.")
 sel_training = st.selectbox("Type de service requis", ["(choisir)"] + TRAININGS, index=0, key="tech_caps_training")
 if sel_training and sel_training != "(choisir)":
     techs = eligible_for(sel_training)
     if techs:
         st.success(f"{len(techs)} technicien(s) disponible(s) pour **{sel_training}**")
-        for t in techs: st.write(f"• {t}")
+        for t in techs:
+            st.write(f"• {t}")
     else:
         st.warning("Aucun technicien avec ce training complété.")
 
