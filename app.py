@@ -177,8 +177,11 @@ TECHNICIANS = [
     "Sebastien Pepin-millette","Elie Rajotte-lemay","Michael Sulte",
 ]
 
-# 🔗 Lien SharePoint (ouvre la feuille dans un nouvel onglet)
+# 🔗 SharePoint webview (for humans to open/edit)
 EXCEL_URL = "https://cummins365.sharepoint.com/:x:/r/sites/GRP_CC40846-AdministrationFSPG/Shared%20Documents/Administration%20FSPG/Info%20des%20techs%20pour%20booking/CapaciteTechs_CandiacEtOttawa.xlsx?d=wc1ab3f7d2d324c6eb1bb0a81247cd554&csf=1&web=1&e=oKYFQH"
+
+# 🔗 GitHub RAW (public, read-only for pandas) ← uses your repo
+GITHUB_RAW_URL = "https://raw.githubusercontent.com/AR76F/route-optimizer/main/CapaciteTechs_CandiacEtOttawa.xlsx"
 
 # Header + button side-by-side
 hcol, bcol = st.columns([3, 2], vertical_alignment="center")
@@ -189,11 +192,19 @@ with bcol:
 
 st.caption("Choisis le type de service. On affiche les techniciens qui ont ce training **complété**.")
 
-# ── Dynamic trainings + availability from Excel ────────────────────────────────
-import pandas as pd  # ensure this is also in your global imports
+# ── Dynamic trainings + availability from Excel (via GitHub RAW) ───────────────
+import pandas as pd
+import requests
+from io import BytesIO
 
-# Convert SharePoint web link to a direct download link that pandas can read
-DOWNLOAD_URL = EXCEL_URL.replace("web=1", "download=1")
+# Optional: manual refresh to bypass cache after you push a new Excel to GitHub
+if st.button("🔄 Recharger les données des trainings (GitHub)"):
+    st.cache_data.clear()
+
+def _fetch_excel_df_from_github(raw_url: str, sheet: str, header=None) -> pd.DataFrame:
+    r = requests.get(raw_url, timeout=30)
+    r.raise_for_status()
+    return pd.read_excel(BytesIO(r.content), sheet_name=sheet, header=header)
 
 def _norm_name(s: str) -> str:
     return " ".join(str(s or "").strip().lower().split())
@@ -214,9 +225,9 @@ DATA_ROW_START = 3               # data rows 3..22
 DATA_ROW_END = 22
 
 @st.cache_data(ttl=300, show_spinner=False)
-def get_training_options(excel_url: str, sheet_name: str = SHEET_NAME):
+def get_training_options() -> list[tuple[str, int]]:
     """Return a list of (label, column_index) from row 2, cols H..X."""
-    df = pd.read_excel(excel_url, sheet_name=sheet_name, header=None)
+    df = _fetch_excel_df_from_github(GITHUB_RAW_URL, sheet=SHEET_NAME, header=None)
     r = HEADER_ROW - 1
     c_start = _excel_col_to_idx(TRAINING_COL_RANGE[0])
     c_end = _excel_col_to_idx(TRAINING_COL_RANGE[1])
@@ -226,18 +237,16 @@ def get_training_options(excel_url: str, sheet_name: str = SHEET_NAME):
         val = df.iat[r, c] if (r < len(df) and c < df.shape[1]) else None
         label = str(val).strip() if val is not None and str(val).strip().lower() not in ("", "nan") else ""
         if label:
-            options.append((label, c))  # keep the column index
+            options.append((label, c))
     return options
 
 @st.cache_data(ttl=300, show_spinner=False)
-def get_not_completed_by_col(excel_url: str, training_col_idx: int,
-                             sheet_name: str = SHEET_NAME) -> set:
+def get_not_completed_by_col(training_col_idx: int) -> set:
     """
     Scan rows 3..22. If the status in the selected training column is 'Not Completed',
     collect the technician name from column C and return the set of normalized names.
     """
-    df = pd.read_excel(excel_url, sheet_name=sheet_name, header=None)
-
+    df = _fetch_excel_df_from_github(GITHUB_RAW_URL, sheet=SHEET_NAME, header=None)
     name_col_idx = _excel_col_to_idx(NAMES_COL_LETTER)
     r_start = max(0, DATA_ROW_START - 1)
     r_end = min(len(df) - 1, DATA_ROW_END - 1)
@@ -246,18 +255,18 @@ def get_not_completed_by_col(excel_url: str, training_col_idx: int,
     sub.columns = ["name", "status"]
     sub["status_norm"] = sub["status"].astype(str).str.strip().str.lower()
 
-    # Accept common variants just in case (e.g., "not completed", "incomplete")
+    # Accept common variants just in case
     not_completed_mask = sub["status_norm"].isin({"not completed", "notcompleted", "incomplete"})
     not_completed = sub[not_completed_mask]["name"].dropna()
 
     return {_norm_name(n) for n in not_completed.tolist()}
 
 def eligible_for(training_label: str, training_col_idx: int):
-    not_ok_norm = get_not_completed_by_col(DOWNLOAD_URL, training_col_idx)
+    not_ok_norm = get_not_completed_by_col(training_col_idx)
     return [t for t in TECHNICIANS if _norm_name(t) not in not_ok_norm]
 
 # Build training list from Excel (row 2, H..X)
-_training_pairs = get_training_options(DOWNLOAD_URL)      # [(label, col_idx), ...]
+_training_pairs = get_training_options()      # [(label, col_idx), ...]
 _training_labels = ["(choisir)"] + [p[0] for p in _training_pairs]
 label_to_col = {label: col for (label, col) in _training_pairs}
 
