@@ -177,26 +177,6 @@ TECHNICIANS = [
     "Sebastien Pepin-millette","Elie Rajotte-lemay","Michael Sulte",
 ]
 
-TRAININGS = [
-    "Load Bank et PM",
-    "NFPA 70e and Cummins safe electrical procedure",
-    "Fundamentals of Controls (PC1.X 1302)",
-    "Fundammentals of ATS (Otec transfer switch)",
-    "BETT updated Qualification",
-    "InPower Software Qualification",
-    "Fundammentals of Alternator, alternator repair",
-    "UC/HC/S4/S5/S6 generator frame repair",
-    "P0/P1 and S0/S1 generator frame repair",
-    "PCC 2100 qualification",
-    "Network Communication RS 485 PCC Net and modbus full service",
-    "PCC 3100 Qualification",
-    "PCC 3200-3201 Qualification",
-    "NSPS qualification new source performance standard",
-    "PC 3.X 3300 full service qualifications",
-    "BTPC 1600-3000 amper transfer switch mechanism qualification",
-    "OTPC transfer switch qualification",
-]
-
 # 🔗 Lien SharePoint (ouvre la feuille dans un nouvel onglet)
 EXCEL_URL = "https://cummins365.sharepoint.com/:x:/r/sites/GRP_CC40846-AdministrationFSPG/Shared%20Documents/Administration%20FSPG/Info%20des%20techs%20pour%20booking/CapaciteTechs_CandiacEtOttawa.xlsx?d=wc1ab3f7d2d324c6eb1bb0a81247cd554&csf=1&web=1&e=oKYFQH"
 
@@ -209,98 +189,83 @@ with bcol:
 
 st.caption("Choisis le type de service. On affiche les techniciens qui ont ce training **complété**.")
 
-# EXACT “Not Completed” names from your sheet (for each training).
-NOT_COMPLETED = {
-    # 2018-14Q
-    "Load Bank et PM": {
-        "Sergio Mendoza caron", "Sebastien Pepin-millette", "Elie Rajotte-lemay", "Michael Sulte"
-    },
-    # 2018-15Q
-    "NFPA 70e and Cummins safe electrical procedure": {
-        "Sergio Mendoza caron", "Michael Sulte"
-    },
-    # 2008-08Q
-    "Fundamentals of Controls (PC1.X 1302)": {
-        "Sergio Mendoza caron", "Elie Rajotte-lemay"
-    },
-    # 2008-14Q
-    "Fundammentals of ATS (Otec transfer switch)": {
-        "Sergio Mendoza caron", "Sebastien Pepin-millette", "Elie Rajotte-lemay", "Michael Sulte"
-    },
-    # 2006-13Q
-    "BETT updated Qualification": {
-        "Maxime Roy", "Sergio Mendoza caron", "Benoit Laramee",
-        "Georges Yamna nghuedieu", "Elie Rajotte-lemay", "Michael Sulte"
-    },
-    # 2000-20Q
-    "InPower Software Qualification": {
-        "Patrick Bellefleur", "Alain Duguay", "Donald Lagace", "Ali Reza-sabour",
-        "Kevin Duranceau", "Pier-luc Cote", "Fredy Diaz", "Alexandre Pelletier guay",
-        "Sergio Mendoza caron", "Elie Rajotte-lemay",
-    },
-    # 2014-39Q
-    "Fundammentals of Alternator, alternator repair": {
-        "Christian Dubreuil", "Alexandre Pelletier guay", "Sergio Mendoza caron", "Elie Rajotte-lemay"
-    },
-    # 2013-23Q
-    "UC/HC/S4/S5/S6 generator frame repair": {
-        "Christian Dubreuil", "Alexandre Pelletier guay", "Sergio Mendoza caron", "Elie Rajotte-lemay"
-    },
-    # 2013-21Q
-    "P0/P1 and S0/S1 generator frame repair": {
-        "Christian Dubreuil", "Pier-luc Cote", "Fredy Diaz", "Alexandre Pelletier guay",
-        "Sergio Mendoza caron", "Benoit Laramee", "Georges Yamna nghuedieu", "Elie Rajotte-lemay",
-    },
-    # 2001-28Q
-    "PCC 2100 qualification": {
-        "Fredy Diaz", "Sergio Mendoza caron", "Benoit Laramee", "Georges Yamna nghuedieu", "Elie Rajotte-lemay"
-    },
-    # 2015-20Q
-    "Network Communication RS 485 PCC Net and modbus full service": {
-        "Christian Dubreuil", "Fredy Diaz", "Sergio Mendoza caron",
-        "Sebastien Pepin-millette", "Elie Rajotte-lemay", "Michael Sulte"
-    },
-    # 2002-44Q
-    "PCC 3100 Qualification": {
-        "Christian Dubreuil", "Pier-luc Cote", "Alexandre Pelletier guay",
-        "Sergio Mendoza caron", "Sebastien Pepin-millette", "Elie Rajotte-lemay", "Michael Sulte"
-    },
-    # 2000-19Q
-    "PCC 3200-3201 Qualification": {
-        "Maxime Roy", "Christian Dubreuil", "Pier-luc Cote", "Fredy Diaz",
-        "Alexandre Pelletier guay", "Sergio Mendoza caron", "Benoit Laramee",
-        "Georges Yamna nghuedieu", "Sebastien Pepin-millette", "Elie Rajotte-lemay", "Michael Sulte",
-    },
-    # 2009-43Q
-    "NSPS qualification new source performance standard": {
-        "Maxime Roy", "Christian Dubreuil", "Pier-luc Cote", "Alexandre Pelletier guay",
-        "Sergio Mendoza caron", "Benoit Laramee", "Georges Yamna nghuedieu",
-        "Sebastien Pepin-millette", "Elie Rajotte-lemay", "Michael Sulte",
-    },
-    # 2013-11Q
-    "PC 3.X 3300 full service qualifications": {
-        "Maxime Roy", "Sergio Mendoza caron", "Benoit Laramee",
-        "Georges Yamna nghuedieu", "Sebastien Pepin-millette", "Elie Rajotte-lemay", "Michael Sulte",
-    },
-    # 2011-08Q
-    "BTPC 1600-3000 amper transfer switch mechanism qualification": {
-        "Maxime Roy", "Christian Dubreuil", "Pier-luc Cote", "Fredy Diaz",
-        "Alexandre Pelletier guay", "Sergio Mendoza caron", "Benoit Laramee",
-        "Georges Yamna nghuedieu", "Sebastien Pepin-millette", "Elie Rajotte-lemay", "Michael Sulte",
-    },
-    # 2000-18Q
-    "OTPC transfer switch qualification": {
-        "Sergio Mendoza caron", "Sebastien Pepin-millette", "Elie Rajotte-lemay", "Michael Sulte"
-    },
-}
+# ── Dynamic trainings + availability from Excel ────────────────────────────────
+import pandas as pd  # ensure this is also in your global imports
 
-def eligible_for(training: str):
-    not_ok = NOT_COMPLETED.get(training, set())
-    return [t for t in TECHNICIANS if t not in not_ok]
+# Convert SharePoint web link to a direct download link that pandas can read
+DOWNLOAD_URL = EXCEL_URL.replace("web=1", "download=1")
 
-sel_training = st.selectbox("Type de service requis", ["(choisir)"] + TRAININGS, index=0, key="tech_caps_training")
+def _norm_name(s: str) -> str:
+    return " ".join(str(s or "").strip().lower().split())
+
+def _excel_col_to_idx(col_letter: str) -> int:
+    col_letter = col_letter.strip().upper()
+    idx = 0
+    for ch in col_letter:
+        idx = idx * 26 + (ord(ch) - ord('A') + 1)
+    return idx - 1  # 0-based
+
+# Layout constants (Excel-style, 1-based)
+SHEET_NAME = "trainings"
+NAMES_COL_LETTER = "C"          # technician names in column C
+HEADER_ROW = 2                   # training labels on row 2
+TRAINING_COL_RANGE = ("H", "X")  # trainings are columns H..X inclusive
+DATA_ROW_START = 3               # data rows 3..22
+DATA_ROW_END = 22
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_training_options(excel_url: str, sheet_name: str = SHEET_NAME):
+    """Return a list of (label, column_index) from row 2, cols H..X."""
+    df = pd.read_excel(excel_url, sheet_name=sheet_name, header=None)
+    r = HEADER_ROW - 1
+    c_start = _excel_col_to_idx(TRAINING_COL_RANGE[0])
+    c_end = _excel_col_to_idx(TRAINING_COL_RANGE[1])
+
+    options = []
+    for c in range(c_start, c_end + 1):
+        val = df.iat[r, c] if (r < len(df) and c < df.shape[1]) else None
+        label = str(val).strip() if val is not None and str(val).strip().lower() not in ("", "nan") else ""
+        if label:
+            options.append((label, c))  # keep the column index
+    return options
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_not_completed_by_col(excel_url: str, training_col_idx: int,
+                             sheet_name: str = SHEET_NAME) -> set:
+    """
+    Scan rows 3..22. If the status in the selected training column is 'Not Completed',
+    collect the technician name from column C and return the set of normalized names.
+    """
+    df = pd.read_excel(excel_url, sheet_name=sheet_name, header=None)
+
+    name_col_idx = _excel_col_to_idx(NAMES_COL_LETTER)
+    r_start = max(0, DATA_ROW_START - 1)
+    r_end = min(len(df) - 1, DATA_ROW_END - 1)
+
+    sub = df.iloc[r_start:r_end + 1, [name_col_idx, training_col_idx]].copy()
+    sub.columns = ["name", "status"]
+    sub["status_norm"] = sub["status"].astype(str).str.strip().str.lower()
+
+    # Accept common variants just in case (e.g., "not completed", "incomplete")
+    not_completed_mask = sub["status_norm"].isin({"not completed", "notcompleted", "incomplete"})
+    not_completed = sub[not_completed_mask]["name"].dropna()
+
+    return {_norm_name(n) for n in not_completed.tolist()}
+
+def eligible_for(training_label: str, training_col_idx: int):
+    not_ok_norm = get_not_completed_by_col(DOWNLOAD_URL, training_col_idx)
+    return [t for t in TECHNICIANS if _norm_name(t) not in not_ok_norm]
+
+# Build training list from Excel (row 2, H..X)
+_training_pairs = get_training_options(DOWNLOAD_URL)      # [(label, col_idx), ...]
+_training_labels = ["(choisir)"] + [p[0] for p in _training_pairs]
+label_to_col = {label: col for (label, col) in _training_pairs}
+
+# UI: dynamic select + filtered technicians
+sel_training = st.selectbox("Type de service requis", _training_labels, index=0, key="tech_caps_training")
 if sel_training and sel_training != "(choisir)":
-    techs = eligible_for(sel_training)
+    col_idx = label_to_col.get(sel_training)
+    techs = eligible_for(sel_training, col_idx) if col_idx is not None else []
     if techs:
         st.success(f"{len(techs)} technicien(s) disponible(s) pour **{sel_training}**")
         for t in techs:
