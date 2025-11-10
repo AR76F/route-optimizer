@@ -171,10 +171,10 @@ else:
 # ────────────────────────────────────────────────────────────────────────────────
 TECHNICIANS = [
     "Louis Lauzon","Patrick Bellefleur","Martin Bourbonniere","Francois Racine",
-    "Alain Duguay","Benoit Charrette-gosselin","Donald Lagace","Ali Reza-sabour",
+    "Alain Duguay","Benoit Charrette-gosselin","Donald Lagace (IN SHOP)","Ali Reza-sabour",
     "Kevin Duranceau","Maxime Roy","Christian Dubreuil","Pier-luc Cote","Fredy Diaz",
     "Alexandre Pelletier guay","Sergio Mendoza caron","Benoit Laramee","Georges Yamna nghuedieu",
-    "Sebastien Pepin-millette","Elie Rajotte-lemay","Michael Sulte",
+    "Sebastien Pepin-millette (IN SHOP)","Elie Rajotte-lemay","Michael Sulte",
 ]
 
 # 🔗 SharePoint webview (for humans to open/edit)
