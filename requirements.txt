@@ -5,3 +5,6 @@ folium==0.17.0
 streamlit-folium==0.6.4
 requests==2.32.3
 mygeotab==0.8.2 
+pandas
+openpyxl==3.1.5
+requests
