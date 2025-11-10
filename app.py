@@ -159,7 +159,7 @@ with c2:
     traffic_model = st.selectbox("Traffic model", ["best_guess", "pessimistic", "optimistic"], index=0)
     planned_date = st.date_input("Planned departure date", value=date.today(), disabled=leave_now)
     planned_time = st.time_input("Planned departure time", value=datetime.now().time(), disabled=leave_now)
-
+st.markdown("<hr style='margin:30px 0; border:1px solid #444;'>", unsafe_allow_html=True)
 if leave_now:
     departure_dt = datetime.now(timezone.utc)
 else:
