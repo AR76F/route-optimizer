@@ -180,7 +180,7 @@ TECHNICIANS = [
 # 🔗 SharePoint webview (for humans to open/edit)
 EXCEL_URL = "https://cummins365.sharepoint.com/:x:/r/sites/GRP_CC40846-AdministrationFSPG/Shared%20Documents/Administration%20FSPG/Info%20des%20techs%20pour%20booking/CapaciteTechs_CandiacEtOttawa.xlsx?d=wc1ab3f7d2d324c6eb1bb0a81247cd554&csf=1&web=1&e=oKYFQH"
 
-# 🔗 GitHub RAW (public, read-only for pandas) ← uses your repo
+# 🔗 GitHub RAW (public, read-only for pandas)
 GITHUB_RAW_URL = "https://raw.githubusercontent.com/AR76F/route-optimizer/main/CapaciteTechs_CandiacEtOttawa.xlsx"
 
 # Header + button side-by-side
@@ -197,14 +197,15 @@ import pandas as pd
 import requests
 from io import BytesIO
 
-# Optional: manual refresh to bypass cache after you push a new Excel to GitHub
+# Optional: manual refresh to bypass cache after a new Excel push to GitHub
 if st.button("🔄 Recharger les données des trainings (GitHub)"):
     st.cache_data.clear()
 
 def _fetch_excel_df_from_github(raw_url: str, sheet: str, header=None) -> pd.DataFrame:
+    """Download Excel from GitHub (RAW link) and return as DataFrame."""
     r = requests.get(raw_url, timeout=30)
     r.raise_for_status()
-    return pd.read_excel(BytesIO(r.content), sheet_name=sheet, header=header)
+    return pd.read_excel(BytesIO(r.content), sheet_name=sheet, header=header, engine="openpyxl")
 
 def _norm_name(s: str) -> str:
     return " ".join(str(s or "").strip().lower().split())
@@ -255,7 +256,6 @@ def get_not_completed_by_col(training_col_idx: int) -> set:
     sub.columns = ["name", "status"]
     sub["status_norm"] = sub["status"].astype(str).str.strip().str.lower()
 
-    # Accept common variants just in case
     not_completed_mask = sub["status_norm"].isin({"not completed", "notcompleted", "incomplete"})
     not_completed = sub[not_completed_mask]["name"].dropna()
 
