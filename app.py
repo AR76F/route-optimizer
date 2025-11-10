@@ -218,7 +218,7 @@ def _excel_col_to_idx(col_letter: str) -> int:
     return idx - 1  # 0-based
 
 # Layout constants (Excel-style, 1-based)
-SHEET_NAME = "trainings"
+SHEET_NAME = "Trainings"
 NAMES_COL_LETTER = "C"          # technician names in column C
 HEADER_ROW = 2                   # training labels on row 2
 TRAINING_COL_RANGE = ("H", "X")  # trainings are columns H..X inclusive
