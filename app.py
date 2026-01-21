@@ -458,6 +458,22 @@ with tabs[1]:
         "Sebastien Pepin (IN SHOP)": "Saint-Valentin, QC, Canada",
         "Sergio Mendoza": "791 Rue des Marquises, Beloeil, QC J3G 6M6",
     }
+     # --- Build tech_home dataframe for page 2 ---
+    import pandas as pd
+    import re
+
+    def _extract_postal(addr: str) -> str:
+        if not addr:
+            return ""
+        m = re.search(r"\b([A-Z]\d[A-Z])\s?(\d[A-Z]\d)\b", str(addr).upper())
+        return (m.group(1) + m.group(2)) if m else ""
+
+    tech_home_df = pd.DataFrame(
+        [{"tech_name": name, "home_address": addr, "postal": _extract_postal(addr)}
+         for name, addr in TECH_HOME.items()]
+    )
+
+    st.session_state["tech_home"] = tech_home_df
 
     ENTREPOTS = {
         "Candiac": "315 Liberté, Candiac, QC J5R 6Z7",
