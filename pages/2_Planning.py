@@ -4,6 +4,9 @@
 # - Jobs: upload Excel avec onglet "Export"
 # - Déplacements: Google Distance Matrix via googlemaps (même lib que ta page 1)
 
+import streamlit as st
+st.title("PAGE 2 OK ✅")
+
 import os
 import re
 import math
