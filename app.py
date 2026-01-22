@@ -1,34 +1,88 @@
 # app.py
-# Streamlit Route Optimizer — Home ➜ Storage ➜ Optimized Stops (≤ 25)
-# Notes:
-# - No filesystem writes (GitHub/Streamlit Cloud often block /mnt/data).
-# - Optional Geotab integration guarded behind secrets + import.
-
 import os
 from datetime import datetime, date, timedelta, timezone
 from typing import List, Tuple, Optional
 
 import streamlit as st
+import pandas as pd
 import googlemaps
 import polyline
 import folium
 from streamlit_folium import st_folium
 
-# ────────────────────────────────────────────────────────────────────────────────
-# Page config
-# ────────────────────────────────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="Route Optimizer",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-# --- Navigation (multipage manuel) ---
+# ─────────────────────────────────────────────────────────────
+# Page config (UNE SEULE FOIS)
+# ─────────────────────────────────────────────────────────────
+st.set_page_config(page_title="Route Optimizer", layout="wide", initial_sidebar_state="expanded")
+
+# ─────────────────────────────────────────────────────────────
+# Helpers communs
+# ─────────────────────────────────────────────────────────────
+def secret(name: str, default: Optional[str] = None) -> Optional[str]:
+    try:
+        return st.secrets[name]
+    except Exception:
+        return os.getenv(name, default)
+
+GOOGLE_KEY = secret("GOOGLE_MAPS_API_KEY")
+if not GOOGLE_KEY:
+    st.error("Missing Google Maps key. Add it in **App settings → Secrets** as `GOOGLE_MAPS_API_KEY`.")
+    st.stop()
+
+gmaps_client = googlemaps.Client(key=GOOGLE_KEY)
+
+# ─────────────────────────────────────────────────────────────
+# Navigation (multipage manuel)
+# ─────────────────────────────────────────────────────────────
 page = st.sidebar.radio(
     "Menu",
     ["🏠 Route Optimizer", "📅 Planning (Page 2)"],
     index=0
 )
+
+# ─────────────────────────────────────────────────────────────
+# ROUTE OPTIMIZER (PAGE 1)
+# ─────────────────────────────────────────────────────────────
+def render_route_optimizer():
+    # ✅ Mets ici TOUT ton code actuel "Route Optimizer"
+    # (À partir de "Optional myGeotab import" jusqu'à la fin de la carte / optimize route)
+    st.title("🏠 Route Optimizer")
+
+    # Exemple: si tu veux garder ton header existant, colle-le ici.
+    # IMPORTANT: ne remets PAS st.set_page_config ici.
+
+    st.info("Colle ici ton code Route Optimizer (page 1).")
+
+# ─────────────────────────────────────────────────────────────
+# PLANNING (PAGE 2)
+# ─────────────────────────────────────────────────────────────
+def render_planning():
+    st.title("📅 Planning (Page 2)")
+    st.error("✅ TU ES SUR LA PAGE 2 (Planning)")  # debug
+
+    tech_df = st.session_state.get("tech_home")
+    if tech_df is None or len(tech_df) == 0:
+        st.warning("⚠️ Je ne trouve pas `tech_home`. Va d’abord sur la page principale (Route Optimizer).")
+        st.stop()
+
+    st.subheader("👷 Techniciens (depuis la page 1)")
+    st.dataframe(tech_df, use_container_width=True)
+
+    st.subheader("📤 Jobs – Upload Excel")
+    file = st.file_uploader("Upload ton fichier Excel jobs", type=["xlsx"])
+    if not file:
+        st.info("Upload le fichier Excel pour continuer.")
+        st.stop()
+
+    jobs_raw = pd.read_excel(file, sheet_name=0, engine="openpyxl")
+    st.caption(f"Jobs détectés: {len(jobs_raw)}")
+    st.dataframe(jobs_raw.head(30), use_container_width=True)
+
+# ─────────────────────────────────────────────────────────────
+# Router
+# ─────────────────────────────────────────────────────────────
 if page == "🏠 Route Optimizer":
+    
 # ────────────────────────────────────────────────────────────────────────────────
 # Optional myGeotab import (app still works if it's missing or secrets not set)
 # ────────────────────────────────────────────────────────────────────────────────
@@ -1087,3 +1141,4 @@ if run:
 
     if (visits_df["techs_needed"] > 1).any():
         st.warning("⚠️ Certains jobs demandent >1 technicien. V1 les affiche, mais ne fait pas encore le pairing automatique.")
+
