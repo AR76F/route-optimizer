@@ -1,9 +1,10 @@
 # app.py
-# Streamlit Route Optimizer — Page 1 (ton code) + Page 2 (Planning)
-# IMPORTANT:
-# - Un seul système de navigation (radio) pour éviter les pages "blanches".
-# - Page 2 persiste grâce à st.session_state (upload bytes + résultats planning).
-# - Sur Page 1, SEUL changement: la map Tech Home + Entrepôts affiche les noms (labels permanents).
+# Streamlit Route Optimizer — Page 1 + Page 2 (Planning)
+# FIXED:
+# - Page 2 code moved into render_page_2() (no global execution)
+# - Only ONE st.set_page_config()
+# - Persistent session_state for: navigation, upload bytes, route_result, planning_result
+# - Page 1 map (Tech Home + Entrepôts) shows permanent labels (names)
 
 import os
 import re
@@ -63,7 +64,9 @@ def cummins_header():
         for path in CANDIDATES:
             if os.path.exists(path):
                 try:
-                    st.image(path, width=300); shown = True; break
+                    st.image(path, width=300)
+                    shown = True
+                    break
                 except Exception:
                     pass
         if not shown:
@@ -93,7 +96,7 @@ def cummins_header():
         )
 
 # ────────────────────────────────────────────────────────────────
-# Helpers (ton code)
+# Helpers
 # ────────────────────────────────────────────────────────────────
 def secret(name: str, default: Optional[str] = None) -> Optional[str]:
     try:
@@ -102,14 +105,16 @@ def secret(name: str, default: Optional[str] = None) -> Optional[str]:
         return os.getenv(name, default)
 
 def normalize_ca_postal(text: str) -> str:
-    if not text: return text
+    if not text:
+        return text
     t = str(text).strip().upper().replace(" ", "")
     if len(t) == 6 and t[:3].isalnum() and t[3:].isalnum():
         return f"{t[:3]} {t[3:]}, Canada"
     return text
 
 def geocode_ll(gmaps_client: googlemaps.Client, text: str) -> Optional[Tuple[float, float, str]]:
-    if not text: return None
+    if not text:
+        return None
     q = normalize_ca_postal(text)
     try:
         res = gmaps_client.geocode(q, components={"country": "CA"}, region="ca")
@@ -145,15 +150,19 @@ def big_number_marker(n: str, color_hex: str = "#cc3333"):
     return folium.DivIcon(html=html)
 
 def recency_color(ts: Optional[str]) -> Tuple[str, str]:
-    if not ts: return "#9e9e9e", "> 30d"
+    if not ts:
+        return "#9e9e9e", "> 30d"
     try:
         dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
     except Exception:
         return "#9e9e9e", "unknown"
     age = datetime.now(timezone.utc) - dt.astimezone(timezone.utc)
-    if age <= timedelta(hours=2): return "#00c853", "≤ 2h"
-    if age <= timedelta(hours=24): return "#2e7d32", "≤ 24h"
-    if age <= timedelta(days=7): return "#fb8c00", "≤ 7d"
+    if age <= timedelta(hours=2):
+        return "#00c853", "≤ 2h"
+    if age <= timedelta(hours=24):
+        return "#2e7d32", "≤ 24h"
+    if age <= timedelta(days=7):
+        return "#fb8c00", "≤ 7d"
     return "#9e9e9e", "> 7d"
 
 # ────────────────────────────────────────────────────────────────
@@ -166,7 +175,7 @@ if not GOOGLE_KEY:
 gmaps_client = googlemaps.Client(key=GOOGLE_KEY)
 
 # ────────────────────────────────────────────────────────────────
-# Shared data: TECH_HOME / ENTREPOTS (comme ton code)
+# Shared data: TECH_HOME / ENTREPOTS
 # ────────────────────────────────────────────────────────────────
 TECH_HOME = {
     "Alain Duguay": "1110 rue Proulx, Les Cèdres, QC J7T 1E6",
@@ -211,10 +220,8 @@ def add_labeled_marker(fmap: folium.Map, lat: float, lon: float, label: str, kin
     else:
         icon = folium.Icon(color="blue", icon="user", prefix="fa")
 
-    # base marker
     folium.Marker([lat, lon], icon=icon, popup=folium.Popup(label, max_width=320), tooltip=label).add_to(fmap)
 
-    # permanent label
     folium.Marker(
         [lat, lon],
         icon=folium.DivIcon(
@@ -233,7 +240,7 @@ def add_labeled_marker(fmap: folium.Map, lat: float, lon: float, label: str, kin
     ).add_to(fmap)
 
 # ────────────────────────────────────────────────────────────────
-# PAGE 1 (ton code, avec seul changement: map avec labels)
+# PAGE 1 (Route Optimizer)
 # ────────────────────────────────────────────────────────────────
 def render_page_1():
     cummins_header()
@@ -243,21 +250,22 @@ def render_page_1():
     c1, c2 = st.columns([1.2, 1.2])
     with c1:
         st.markdown("**Travel mode:** Driving")
-        leave_now = st.checkbox("Leave now", value=True)
-        round_trip = st.checkbox("Return to home at the end (round trip)?", value=True)
+        leave_now = st.checkbox("Leave now", value=True, key="leave_now")
+        round_trip = st.checkbox("Return to home at the end (round trip)?", value=True, key="round_trip")
     with c2:
-        traffic_model = st.selectbox("Traffic model", ["best_guess", "pessimistic", "optimistic"], index=0)
-        planned_date = st.date_input("Planned departure date", value=date.today(), disabled=leave_now)
-        planned_time = st.time_input("Planned departure time", value=datetime.now().time(), disabled=leave_now)
+        traffic_model = st.selectbox("Traffic model", ["best_guess", "pessimistic", "optimistic"], index=0, key="traffic_model")
+        planned_date = st.date_input("Planned departure date", value=date.today(), disabled=leave_now, key="planned_date")
+        planned_time = st.time_input("Planned departure time", value=datetime.now().time(), disabled=leave_now, key="planned_time")
 
     st.markdown("<hr style='margin:30px 0; border:1px solid #444;'>", unsafe_allow_html=True)
+
     if leave_now:
         departure_dt = datetime.now(timezone.utc)
     else:
         naive = datetime.combine(planned_date, planned_time)
         departure_dt = naive.replace(tzinfo=timezone.utc)
 
-    # Technician capacities (ton code)
+    # Technician capacities
     TECHNICIANS = [
         "Louis Lauzon","Patrick Bellefleur","Martin Bourbonniere","Francois Racine",
         "Alain Duguay","Benoit Charrette-gosselin","Donald Lagace","Ali Reza-sabour",
@@ -277,7 +285,7 @@ def render_page_1():
 
     st.caption("Choisis le type de service. On affiche les techniciens qui ont ce training **complété**.")
 
-    if st.button("🔄 Recharger les données des trainings (GitHub)"):
+    if st.button("🔄 Recharger les données des trainings (GitHub)", key="refresh_trainings"):
         st.cache_data.clear()
 
     def _fetch_excel_df_from_github(raw_url: str, sheet: str, header=None) -> pd.DataFrame:
@@ -331,7 +339,7 @@ def render_page_1():
         not_completed = sub[not_completed_mask]["name"].dropna()
         return {_norm_name(n) for n in not_completed.tolist()}
 
-    def eligible_for(training_label: str, training_col_idx: int):
+    def eligible_for(training_col_idx: int):
         not_ok_norm = get_not_completed_by_col(training_col_idx)
         return [t for t in TECHNICIANS if _norm_name(t) not in not_ok_norm]
 
@@ -342,7 +350,7 @@ def render_page_1():
     sel_training = st.selectbox("Type de service requis", _training_labels, index=0, key="tech_caps_training")
     if sel_training and sel_training != "(choisir)":
         col_idx = label_to_col.get(sel_training)
-        techs = eligible_for(sel_training, col_idx) if col_idx is not None else []
+        techs = eligible_for(col_idx) if col_idx is not None else []
         if techs:
             st.success(f"{len(techs)} technicien(s) disponible(s) pour **{sel_training}**")
             for t in techs:
@@ -354,12 +362,14 @@ def render_page_1():
     st.markdown("---")
     st.subheader("🎯 Point de départ")
 
-    if "route_start" not in st.session_state: st.session_state.route_start = ""
-    if "storage_text" not in st.session_state: st.session_state.storage_text = ""
+    if "route_start" not in st.session_state:
+        st.session_state.route_start = ""
+    if "storage_text" not in st.session_state:
+        st.session_state.storage_text = ""
 
     tabs = st.tabs(["🚚 Live Fleet (Geotab)", "🏠 Technician Home"])
 
-    # TAB 1 — GEOTAB LIVE FLEET (ton code inchangé)
+    # TAB 1 — GEOTAB LIVE FLEET
     with tabs[0]:
         G_DB = secret("GEOTAB_DATABASE")
         G_USER = secret("GEOTAB_USERNAME")
@@ -368,47 +378,51 @@ def render_page_1():
         geotab_enabled_by_secrets = GEOTAB_AVAILABLE and all([G_DB, G_USER, G_PWD])
 
         if geotab_enabled_by_secrets:
-            if "geo_refresh_key" not in st.session_state: st.session_state.geo_refresh_key = 0
-            if st.button("🔄 Rafraîchir Geotab maintenant"): st.session_state.geo_refresh_key += 1
+            if "geo_refresh_key" not in st.session_state:
+                st.session_state.geo_refresh_key = 0
+            if st.button("🔄 Rafraîchir Geotab maintenant", key="geo_refresh_btn"):
+                st.session_state.geo_refresh_key += 1
 
-            if "_geotab_api_cached" not in globals():
-                @st.cache_resource(show_spinner=False)
-                def _geotab_api_cached(user, pwd, db, server):
-                    api = myg.API(user, pwd, db, server); api.authenticate(); return api
+            @st.cache_resource(show_spinner=False)
+            def _geotab_api_cached(user, pwd, db, server):
+                api = myg.API(user, pwd, db, server)
+                api.authenticate()
+                return api
 
-            if "_geotab_devices_cached" not in globals():
-                @st.cache_data(ttl=900, show_spinner=False)
-                def _geotab_devices_cached(user, pwd, db, server):
-                    api = _geotab_api_cached(user, pwd, db, server)
-                    devs = api.call("Get", typeName="Device", search={"isActive": True}) or []
-                    return [{"id": d["id"], "name": d.get("name") or d.get("serialNumber") or "unit"} for d in devs]
+            @st.cache_data(ttl=900, show_spinner=False)
+            def _geotab_devices_cached(user, pwd, db, server):
+                api = _geotab_api_cached(user, pwd, db, server)
+                devs = api.call("Get", typeName="Device", search={"isActive": True}) or []
+                return [{"id": d["id"], "name": d.get("name") or d.get("serialNumber") or "unit"} for d in devs]
 
-            if "_geotab_positions_for" not in globals():
-                @st.cache_data(ttl=75, show_spinner=False)
-                def _geotab_positions_for(api_params, device_ids, refresh_key):
-                    user, pwd, db, server = api_params
-                    api = _geotab_api_cached(user, pwd, db, server)
-                    results = []
-                    for did in device_ids:
-                        try:
-                            dsi = api.call("Get", typeName="DeviceStatusInfo", search={"deviceSearch": {"id": did}})
-                            lat = lon = when = None; driver_name = None
-                            if dsi:
-                                row = dsi[0]
-                                lat, lon = row.get("latitude"), row.get("longitude")
-                                when = row.get("dateTime") or row.get("lastCommunicated") or row.get("workDate")
-                                if (lat is None or lon is None) and isinstance(row.get("location"), dict):
-                                    lat = row["location"].get("y"); lon = row["location"].get("x")
-                                drv = row.get("driver")
-                                if isinstance(drv, dict): driver_name = drv.get("name")
-                            if lat is not None and lon is not None:
-                                results.append({"deviceId": did, "lat": float(lat), "lon": float(lon),
-                                                "when": when, "driverName": driver_name})
-                            else:
-                                results.append({"deviceId": did, "error": "no_position"})
-                        except Exception:
-                            results.append({"deviceId": did, "error": "error"})
-                    return results
+            @st.cache_data(ttl=75, show_spinner=False)
+            def _geotab_positions_for(api_params, device_ids, refresh_key):
+                user, pwd, db, server = api_params
+                api = _geotab_api_cached(user, pwd, db, server)
+                results = []
+                for did in device_ids:
+                    try:
+                        dsi = api.call("Get", typeName="DeviceStatusInfo", search={"deviceSearch": {"id": did}})
+                        lat = lon = when = None
+                        driver_name = None
+                        if dsi:
+                            row = dsi[0]
+                            lat, lon = row.get("latitude"), row.get("longitude")
+                            when = row.get("dateTime") or row.get("lastCommunicated") or row.get("workDate")
+                            if (lat is None or lon is None) and isinstance(row.get("location"), dict):
+                                lat = row["location"].get("y")
+                                lon = row["location"].get("x")
+                            drv = row.get("driver")
+                            if isinstance(drv, dict):
+                                driver_name = drv.get("name")
+                        if lat is not None and lon is not None:
+                            results.append({"deviceId": did, "lat": float(lat), "lon": float(lon),
+                                            "when": when, "driverName": driver_name})
+                        else:
+                            results.append({"deviceId": did, "error": "no_position"})
+                    except Exception:
+                        results.append({"deviceId": did, "error": "error"})
+                return results
 
             DEVICE_TO_DRIVER_RAW = {
                 "01942": "ALI-REZA SABOUR", "24735": "PATRICK BELLEFLEUR", "23731": "ÉLIE RAJOTTE-LEMAY",
@@ -422,17 +436,23 @@ def render_page_1():
             import json
             try:
                 j = secret("GEOTAB_DEVICE_TO_DRIVER_JSON")
-                if j: DEVICE_TO_DRIVER_RAW.update(json.loads(j))
+                if j:
+                    DEVICE_TO_DRIVER_RAW.update(json.loads(j))
             except Exception:
                 pass
 
-            def _norm(s: str) -> str: return " ".join(str(s or "").strip().upper().split())
+            def _norm(s: str) -> str:
+                return " ".join(str(s or "").strip().upper().split())
+
             NAME2DRIVER, ID2DRIVER = {}, {}
             for k, v in DEVICE_TO_DRIVER_RAW.items():
                 nk = _norm(k)
-                if not nk: continue
-                if len(nk) > 12 or ("-" in nk and any(c.isalpha() for c in nk)): ID2DRIVER[nk] = v
-                else: NAME2DRIVER[nk] = v
+                if not nk:
+                    continue
+                if len(nk) > 12 or ("-" in nk and any(c.isalpha() for c in nk)):
+                    ID2DRIVER[nk] = v
+                else:
+                    NAME2DRIVER[nk] = v
 
             def _driver_from_mapping(device_id: str, device_name: str) -> Optional[str]:
                 n_id, n_name = _norm(device_id), _norm(device_name)
@@ -449,10 +469,18 @@ def render_page_1():
             else:
                 options, label2id = [], {}
                 for d in devs:
-                    label = _label_for_device(d["id"], d["name"], None); options.append(label); label2id[label] = d["id"]
-                picked_labels = st.multiselect("Sélectionner un ou plusieurs véhicules/techniciens à afficher :",
-                                               sorted(options), default=[])
+                    lbl = _label_for_device(d["id"], d["name"], None)
+                    options.append(lbl)
+                    label2id[lbl] = d["id"]
+
+                picked_labels = st.multiselect(
+                    "Sélectionner un ou plusieurs véhicules/techniciens à afficher :",
+                    sorted(options),
+                    default=[],
+                    key="geo_pick_labels",
+                )
                 wanted_ids = [label2id[lbl] for lbl in picked_labels]
+
                 if wanted_ids:
                     pts = _geotab_positions_for((G_USER, G_PWD, G_DB, G_SERVER), tuple(wanted_ids), st.session_state.geo_refresh_key)
                     id2name = {d["id"]: d["name"] for d in devs}
@@ -461,32 +489,49 @@ def render_page_1():
                         avg_lat = sum(p["lat"] for p in valid) / len(valid)
                         avg_lon = sum(p["lon"] for p in valid) / len(valid)
                         fmap = folium.Map(location=[avg_lat, avg_lon], zoom_start=8, tiles="cartodbpositron")
+
                         choice_labels = []
                         for p in valid:
-                            device_id = p["deviceId"]; device_name = id2name.get(device_id, device_id)
+                            device_id = p["deviceId"]
+                            device_name = id2name.get(device_id, device_id)
                             label = _label_for_device(device_id, device_name, p.get("driverName"))
                             choice_labels.append(label)
+
                             color, lab = recency_color(p.get("when"))
-                            folium.CircleMarker([p["lat"], p["lon"]], radius=8, color="#222", weight=2,
-                                                fill=True, fill_color=color, fill_opacity=0.9).add_to(fmap)
+                            folium.CircleMarker(
+                                [p["lat"], p["lon"]],
+                                radius=8,
+                                color="#222",
+                                weight=2,
+                                fill=True,
+                                fill_color=color,
+                                fill_opacity=0.9
+                            ).add_to(fmap)
+
                             folium.Marker(
                                 [p["lat"], p["lon"]],
-                                popup=folium.Popup(f"<b>{label}</b><br>Recency: {lab}<br>{p['lat']:.5f}, {p['lon']:.5f}",
-                                                   max_width=320),
+                                popup=folium.Popup(
+                                    f"<b>{label}</b><br>Recency: {lab}<br>{p['lat']:.5f}, {p['lon']:.5f}",
+                                    max_width=320
+                                ),
                                 tooltip=label,
                                 icon=folium.DivIcon(
-                                    icon_size=(240, 22), icon_anchor=(0, -18),
+                                    icon_size=(240, 22),
+                                    icon_anchor=(0, -18),
                                     html=f"""
                                     <div style="display:inline-block;padding:2px 6px;
                                         font-size:12px;font-weight:700;color:#111;
-                                        background:rgba(255,255,255,.95);border:1px solid #ddd;border-radius:6px;
+                                        background:rgba(255,255,255,.95);
+                                        border:1px solid #ddd;border-radius:6px;
                                         box-shadow:0 1px 2px rgba(0,0,0,.25);white-space:nowrap;">
                                         {label.split(' — ')[0]}
                                     </div>"""
                                 )
                             ).add_to(fmap)
+
                         st_folium(fmap, height=800, width=1800)
-                        start_choice = st.selectbox("Utiliser comme point de départ :", ["(aucun)"] + choice_labels, index=0)
+
+                        start_choice = st.selectbox("Utiliser comme point de départ :", ["(aucun)"] + choice_labels, index=0, key="geo_start_choice")
                         if start_choice != "(aucun)":
                             chosen = valid[choice_labels.index(start_choice)]
                             picked_addr = reverse_geocode(gmaps_client, chosen["lat"], chosen["lon"])
@@ -499,12 +544,11 @@ def render_page_1():
         else:
             st.info("Geotab désactivé. Ajoutez `GEOTAB_DATABASE`, `GEOTAB_USERNAME`, `GEOTAB_PASSWORD` dans les Secrets.")
 
-    # TAB 2 — DOMICILES DES TECHNICIENS ET ENTREPÔTS (seul changement: labels permanents)
+    # TAB 2 — TECH HOMES + ENTREPOTS (labels permanents)
     with tabs[1]:
         st.markdown("### 🏠 Domiciles des techniciens et entrepôts")
-        show_map = st.checkbox("Afficher la carte (techniciens + entrepôts)", value=False)
+        show_map = st.checkbox("Afficher la carte (techniciens + entrepôts)", value=False, key="techhome_show_map")
 
-        # Build tech_home df for Page 2 (persist)
         def _extract_postal(addr: str) -> str:
             if not addr:
                 return ""
@@ -519,7 +563,6 @@ def render_page_1():
 
         if show_map:
             try:
-                # Geocode technicians
                 tech_points = []
                 for name, addr in TECH_HOME.items():
                     g = geocode_ll(gmaps_client, addr)
@@ -527,7 +570,6 @@ def render_page_1():
                         lat, lon, formatted = g
                         tech_points.append({"name": name, "address": formatted, "lat": lat, "lon": lon})
 
-                # Geocode entrepôts
                 ent_points = []
                 for ent_name, addr in ENTREPOTS.items():
                     g = geocode_ll(gmaps_client, addr)
@@ -541,11 +583,9 @@ def render_page_1():
                     avg_lon = sum(p["lon"] for p in points_all) / len(points_all)
                     fmap = folium.Map(location=[avg_lat, avg_lon], zoom_start=8, tiles="cartodbpositron")
 
-                    # Entrepôts + labels permanents
                     for p in ent_points:
                         add_labeled_marker(fmap, p["lat"], p["lon"], f"🏭 {p['name']}", kind="wh")
 
-                    # Techniciens + labels permanents
                     for p in tech_points:
                         add_labeled_marker(fmap, p["lat"], p["lon"], p["name"], kind="tech")
 
@@ -558,36 +598,40 @@ def render_page_1():
         st.markdown("#### Sélectionner les sources de départ / fin")
         c1b, c2b = st.columns(2)
         with c1b:
-            tech_choice = st.selectbox("Technicien → définir comme **départ**", ["(choisir)"] + sorted(TECH_HOME.keys()),
-                                       key="tech_choice_start_tab2")
+            tech_choice = st.selectbox(
+                "Technicien → définir comme **départ**",
+                ["(choisir)"] + sorted(TECH_HOME.keys()),
+                key="tech_choice_start_tab2"
+            )
             if tech_choice != "(choisir)":
                 st.session_state.route_start = TECH_HOME[tech_choice]
                 st.success(f"Départ défini sur **{tech_choice}** — {TECH_HOME[tech_choice]}")
         with c2b:
-            ent_choice = st.selectbox("Entrepôt → définir comme **stockage**",
-                                      ["(choisir)"] + sorted(ENTREPOTS.keys()),
-                                      key="entrepot_choice_storage_tab2")
+            ent_choice = st.selectbox(
+                "Entrepôt → définir comme **stockage**",
+                ["(choisir)"] + sorted(ENTREPOTS.keys()),
+                key="entrepot_choice_storage_tab2"
+            )
             if ent_choice != "(choisir)":
                 st.session_state.storage_text = ENTREPOTS[ent_choice]
                 st.success(f"Stockage défini sur **Entrepôt — {ent_choice}** — {ENTREPOTS[ent_choice]}")
 
-    # Rappel visuel du départ courant
-    if st.session_state.route_start:
+    if st.session_state.get("route_start"):
         st.info(f"📍 **Point de départ sélectionné :** {st.session_state.route_start}")
 
-    # Route stops (ton code)
+    # Route stops
     st.markdown("### Route stops")
     start_text = st.text_input("Technician home (START)", key="route_start",
                                placeholder="e.g., 123 Main St, City, Province")
     storage_text = st.text_input("Storage location (first stop)", key="storage_text",
                                  placeholder="e.g., 456 Depot Rd, City, Province")
     stops_text = st.text_area("Other stops (one ZIP/postal code or full address per line)",
-                              height=140, placeholder="H0H0H0\nG2P1L4\n…")
+                              height=140, placeholder="H0H0H0\nG2P1L4\n…", key="stops_text")
     other_stops_input = [s.strip() for s in stops_text.splitlines() if s.strip()]
 
-    # Optimize route — DRIVING ONLY (ton code)
+    # Optimize route — DRIVING ONLY
     st.markdown("---")
-    if st.button("🧭 Optimize Route", type="primary"):
+    if st.button("🧭 Optimize Route", type="primary", key="optimize_btn"):
         try:
             start_text = st.session_state.get("route_start", "").strip()
             storage_query = normalize_ca_postal(storage_text.strip()) if storage_text else ""
@@ -595,30 +639,39 @@ def render_page_1():
 
             failures = []
             start_g = geocode_ll(gmaps_client, start_text)
-            if not start_g: failures.append(f"START: `{start_text}`")
+            if not start_g:
+                failures.append(f"START: `{start_text}`")
 
             storage_g = geocode_ll(gmaps_client, storage_query) if storage_query else None
-            if storage_query and not storage_g: failures.append(f"STORAGE: `{storage_text}`")
+            if storage_query and not storage_g:
+                failures.append(f"STORAGE: `{storage_text}`")
 
             wp_raw = []
-            if storage_query: wp_raw.append(("Storage", storage_query))
-            for i, q in enumerate(other_stops_queries, start=1): wp_raw.append((f"Stop {i}", q))
+            if storage_query:
+                wp_raw.append(("Storage", storage_query))
+            for i, q in enumerate(other_stops_queries, start=1):
+                wp_raw.append((f"Stop {i}", q))
 
             wp_geocoded: List[Tuple[str, str, Tuple[float, float]]] = []
             for label, q in wp_raw:
                 g = geocode_ll(gmaps_client, q)
-                if not g: failures.append(f"{label}: `{q}`")
+                if not g:
+                    failures.append(f"{label}: `{q}`")
                 else:
-                    lat, lon, addr = g; wp_geocoded.append((label, addr, (lat, lon)))
+                    lat, lon, addr = g
+                    wp_geocoded.append((label, addr, (lat, lon)))
 
             if failures:
                 st.error("I couldn’t geocode some locations:\n\n- " + "\n- ".join(failures) +
                          "\n\nTip: use full street addresses if a postal code fails.")
                 st.stop()
 
-            def to_ll_str(ll: Tuple[float, float]) -> str: return f"{ll[0]:.7f},{ll[1]:.7f}"
+            def to_ll_str(ll: Tuple[float, float]) -> str:
+                return f"{ll[0]:.7f},{ll[1]:.7f}"
 
-            start_ll = (start_g[0], start_g[1]); start_addr = start_g[2]
+            start_ll = (start_g[0], start_g[1])
+            start_addr = start_g[2]
+
             wp_addrs = [addr for (_lbl, addr, _ll) in wp_geocoded]
             wp_llstr = [to_ll_str(ll) for (_lbl, _addr, ll) in wp_geocoded]
 
@@ -626,23 +679,33 @@ def render_page_1():
                 st.error("Too many stops. Google allows up to **25 total** (origin + destination + waypoints).")
                 st.stop()
 
-            if round_trip:
-                destination_addr = start_addr; destination_llstr = to_ll_str(start_ll); waypoints_for_api = wp_llstr[:]
+            if st.session_state.get("round_trip", True):
+                destination_addr = start_addr
+                destination_llstr = to_ll_str(start_ll)
+                waypoints_for_api = wp_llstr[:]
             else:
                 if wp_llstr:
-                    destination_addr = wp_addrs[-1]; destination_llstr = wp_llstr[-1]; waypoints_for_api = wp_llstr[:-1]
+                    destination_addr = wp_addrs[-1]
+                    destination_llstr = wp_llstr[-1]
+                    waypoints_for_api = wp_llstr[:-1]
                 else:
                     if storage_g:
-                        destination_addr = storage_g[2]; destination_llstr = to_ll_str((storage_g[0], storage_g[1]))
+                        destination_addr = storage_g[2]
+                        destination_llstr = to_ll_str((storage_g[0], storage_g[1]))
                     else:
-                        destination_addr = start_addr; destination_llstr = to_ll_str(start_ll)
+                        destination_addr = start_addr
+                        destination_llstr = to_ll_str(start_ll)
                     waypoints_for_api = []
 
             wp_arg = (["optimize:true"] + waypoints_for_api) if waypoints_for_api else None
 
             directions = gmaps_client.directions(
-                origin=to_ll_str(start_ll), destination=destination_llstr, mode="driving",
-                waypoints=wp_arg, departure_time=departure_dt, traffic_model=traffic_model,
+                origin=to_ll_str(start_ll),
+                destination=destination_llstr,
+                mode="driving",
+                waypoints=wp_arg,
+                departure_time=departure_dt,
+                traffic_model=st.session_state.get("traffic_model", "best_guess"),
             )
 
             if not directions:
@@ -653,11 +716,12 @@ def render_page_1():
             if waypoints_for_api:
                 order = directions[0].get("waypoint_order", list(range(len(waypoints_for_api))))
                 ordered_wp_addrs = [wp_addrs[i] for i in order]
-                if not round_trip and wp_addrs: ordered_wp_addrs.append(destination_addr)
+                if not st.session_state.get("round_trip", True) and wp_addrs:
+                    ordered_wp_addrs.append(destination_addr)
             else:
-                ordered_wp_addrs = [] if round_trip else [destination_addr]
+                ordered_wp_addrs = [] if st.session_state.get("round_trip", True) else [destination_addr]
 
-            visit_texts = [start_addr] + ordered_wp_addrs + ([start_addr] if round_trip else [destination_addr])
+            visit_texts = [start_addr] + ordered_wp_addrs + ([start_addr] if st.session_state.get("round_trip", True) else [destination_addr])
 
             legs = directions[0].get("legs", [])
             total_dist_m = sum(leg.get("distance", {}).get("value", 0) for leg in legs)
@@ -669,15 +733,22 @@ def render_page_1():
             current_dt = departure_dt
             for i, leg in enumerate(legs, start=1):
                 dur = leg.get("duration_in_traffic") or leg.get("duration") or {}
-                dur_sec = int(dur.get("value", 0)); leg_mins = round(dur_sec / 60.0)
-                dist_m = int(leg.get("distance", {}).get("value", 0)); dist_km = dist_m / 1000.0
-                current_dt = current_dt + timedelta(seconds=dur_sec); arr_str = current_dt.astimezone().strftime("%H:%M")
+                dur_sec = int(dur.get("value", 0))
+                leg_mins = round(dur_sec / 60.0)
+                dist_m = int(leg.get("distance", {}).get("value", 0))
+                dist_km = dist_m / 1000.0
+                current_dt = current_dt + timedelta(seconds=dur_sec)
+                arr_str = current_dt.astimezone().strftime("%H:%M")
                 stop_addr = visit_texts[i] if i < len(visit_texts) else ""
                 per_leg.append({"idx": i, "to": stop_addr, "dist_km": dist_km, "mins": leg_mins, "arrive": arr_str})
 
             st.session_state.route_result = {
-                "visit_texts": visit_texts, "km": km, "mins": mins, "start_ll": start_ll,
-                "wp_geocoded": wp_geocoded, "round_trip": round_trip,
+                "visit_texts": visit_texts,
+                "km": km,
+                "mins": mins,
+                "start_ll": start_ll,
+                "wp_geocoded": wp_geocoded,
+                "round_trip": st.session_state.get("round_trip", True),
                 "overview": directions[0].get("overview_polyline", {}).get("points"),
                 "per_leg": per_leg,
             }
@@ -686,26 +757,33 @@ def render_page_1():
             st.error(f"Unexpected error: {type(e).__name__}: {e}")
             st.exception(e)
 
-    # Render result (ton code)
+    # Render result
     res = st.session_state.get("route_result")
     if res:
-        visit_texts = res["visit_texts"]; km = res["km"]; mins = res["mins"]
-        start_ll = tuple(res["start_ll"]); wp_geocoded = res["wp_geocoded"]
-        round_trip = res["round_trip"]; overview = res.get("overview")
-        per_leg  = res.get("per_leg", [])
+        visit_texts = res["visit_texts"]
+        km = res["km"]
+        mins = res["mins"]
+        start_ll = tuple(res["start_ll"])
+        wp_geocoded = res["wp_geocoded"]
+        round_trip_res = res["round_trip"]
+        overview = res.get("overview")
+        per_leg = res.get("per_leg", [])
 
         st.markdown("#### Optimized order (Driving)")
         for ix, addr in enumerate(visit_texts):
-            if ix == 0: st.write(f"**START** — {addr}")
-            elif ix == len(visit_texts) - 1: st.write(f"**END** — {addr}")
-            else: st.write(f"**{ix}** — {addr}")
+            if ix == 0:
+                st.write(f"**START** — {addr}")
+            elif ix == len(visit_texts) - 1:
+                st.write(f"**END** — {addr}")
+            else:
+                st.write(f"**{ix}** — {addr}")
 
         if per_leg:
             st.markdown("#### Stop-by-stop timing")
             for leg in per_leg:
                 st.write(f"**{leg['idx']}** → _{leg['to']}_  •  {leg['dist_km']:.1f} km  •  {leg['mins']} mins  •  **ETA {leg['arrive']}**")
 
-        show_map2 = st.checkbox("Show map", value=False, key="show_map_toggle")
+        show_map2 = st.checkbox("Show map", value=False, key="route_show_map")
         if show_map2:
             try:
                 fmap = folium.Map(location=[start_ll[0], start_ll[1]], zoom_start=9, tiles="cartodbpositron")
@@ -717,7 +795,8 @@ def render_page_1():
                         pass
 
                 folium.Marker(
-                    start_ll, icon=folium.Icon(color="green", icon="play", prefix="fa"),
+                    start_ll,
+                    icon=folium.Icon(color="green", icon="play", prefix="fa"),
                     popup=folium.Popup(f"<b>START</b><br>{visit_texts[0]}", max_width=260)
                 ).add_to(fmap)
 
@@ -725,15 +804,24 @@ def render_page_1():
                 for i, addr in enumerate(visit_texts[1:-1], start=1):
                     ll = addr2ll.get(addr)
                     if ll:
-                        folium.Marker(ll, popup=folium.Popup(f"<b>{i}</b>. {addr}", max_width=260),
-                                      icon=big_number_marker(str(i))).add_to(fmap)
+                        folium.Marker(
+                            ll,
+                            popup=folium.Popup(f"<b>{i}</b>. {addr}", max_width=260),
+                            icon=big_number_marker(str(i))
+                        ).add_to(fmap)
 
                 end_addr = visit_texts[-1]
-                end_ll = addr2ll.get(end_addr) or (geocode_ll(gmaps_client, end_addr)[:2] if geocode_ll(gmaps_client, end_addr) else None)
+                end_ll = addr2ll.get(end_addr)
+                if not end_ll:
+                    g = geocode_ll(gmaps_client, end_addr)
+                    if g:
+                        end_ll = (g[0], g[1])
+
                 if end_ll:
                     folium.Marker(
-                        end_ll, icon=folium.Icon(color="red", icon="flag-checkered", prefix="fa"),
-                        popup=folium.Popup(f"<b>{'END (Home)' if round_trip else 'END'}</b><br>{end_addr}", max_width=260)
+                        end_ll,
+                        icon=folium.Icon(color="red", icon="flag-checkered", prefix="fa"),
+                        popup=folium.Popup(f"<b>{'END (Home)' if round_trip_res else 'END'}</b><br>{end_addr}", max_width=260)
                     ).add_to(fmap)
 
                 st_folium(fmap, height=800, width=1800)
@@ -745,276 +833,247 @@ def render_page_1():
 # ────────────────────────────────────────────────────────────────
 # PAGE 2 (Planning) — persist upload + results
 # ────────────────────────────────────────────────────────────────
-import streamlit as st
-import pandas as pd
-from io import BytesIO
-from datetime import datetime, date, time
-from typing import Optional, List
-import os
-import googlemaps
+def render_page_2():
+    st.title("📅 Planning (Page 2)")
 
-st.title("📅 Planning (Page 2)")
+    # Load tech_home from page 1 (or build fallback)
+    tech_df = st.session_state.get("tech_home")
+    if tech_df is None or len(tech_df) == 0:
+        # fallback build (so page 2 works even if user didn't open the tab on page 1)
+        def _extract_postal(addr: str) -> str:
+            if not addr:
+                return ""
+            m = re.search(r"\b([A-Z]\d[A-Z])\s?(\d[A-Z]\d)\b", str(addr).upper())
+            return (m.group(1) + m.group(2)) if m else ""
 
-# ---------------------------
-# Secrets helper
-# ---------------------------
-def secret(name: str, default: Optional[str] = None) -> Optional[str]:
-    try:
-        return st.secrets[name]
-    except Exception:
-        return os.getenv(name, default)
+        tech_df = pd.DataFrame(
+            [{"tech_name": name, "home_address": addr, "postal": _extract_postal(addr)}
+             for name, addr in TECH_HOME.items()]
+        )
+        st.session_state["tech_home"] = tech_df
 
-GOOGLE_KEY = secret("GOOGLE_MAPS_API_KEY")
-if not GOOGLE_KEY:
-    st.error("Missing Google Maps key (`GOOGLE_MAPS_API_KEY`) in Streamlit Secrets.")
-    st.stop()
-
-gmaps = googlemaps.Client(key=GOOGLE_KEY)
-
-# ---------------------------
-# Load tech_home from page 1
-# ---------------------------
-tech_df = st.session_state.get("tech_home")
-if tech_df is None or len(tech_df) == 0:
-    st.warning("⚠️ Je ne trouve pas `tech_home`. Va d’abord sur la page 1 une fois pour initialiser les domiciles.")
-    st.stop()
-
-# Expected columns
-expected_cols = {"tech_name", "home_address"}
-if not expected_cols.issubset(set(tech_df.columns)):
-    st.error("`tech_home` doit contenir `tech_name` et `home_address`.")
-    st.stop()
-
-# ---------------------------
-# Upload Jobs Excel (persistant)
-# ---------------------------
-st.subheader("📤 Jobs – Upload Excel")
-uploaded = st.file_uploader("Upload ton fichier Excel jobs", type=["xlsx"])
-
-if uploaded:
-    st.session_state["jobs_file_bytes"] = uploaded.getvalue()
-
-if "jobs_file_bytes" not in st.session_state:
-    st.info("Upload un fichier Excel pour continuer (il sera conservé même si tu changes de page).")
-    st.stop()
-
-data = BytesIO(st.session_state["jobs_file_bytes"])
-try:
-    jobs_raw = pd.read_excel(data, sheet_name="Export", engine="openpyxl")
-except Exception:
-    data.seek(0)
-    jobs_raw = pd.read_excel(data, sheet_name=0, engine="openpyxl")
-
-st.caption(f"Jobs détectés: {len(jobs_raw)}")
-st.dataframe(jobs_raw.head(20), use_container_width=True)
-
-# ---------------------------
-# Column mapping helper
-# ---------------------------
-def pick_col(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
-    cols = {c.lower().strip(): c for c in df.columns}
-    for cand in candidates:
-        k = cand.lower().strip()
-        if k in cols:
-            return cols[k]
-    return None
-
-COL_ORDER = pick_col(jobs_raw, ["ORDER #", "ORDER#", "Order", "Job ID", "WO", "Work Order"])
-COL_ADDR1 = pick_col(jobs_raw, ["ADDRESS 1", "ADDRESS1", "Address 1"])
-COL_ADDR2 = pick_col(jobs_raw, ["ADDRESS 2", "ADDRESS2", "Address 2"])
-COL_ADDR3 = pick_col(jobs_raw, ["ADDRESS 3", "ADDRESS3", "Address 3"])
-COL_CITY  = pick_col(jobs_raw, ["SITE CITY", "CITY", "City"])
-COL_PROV  = pick_col(jobs_raw, ["SITE STATE", "STATE", "Province"])
-COL_POST  = pick_col(jobs_raw, ["SITE ZIP CODE", "ZIP", "POSTAL", "Postal Code"])
-COL_DESC  = pick_col(jobs_raw, ["PM SERVICE DESC.", "DESCRIPTION", "Service Desc", "Desc"])
-COL_UP    = pick_col(jobs_raw, ["UPCOMING SERVICES", "Upcoming Services"])
-COL_ONS   = pick_col(jobs_raw, ["ONSITE SRT HRS", "ONSITE HOURS", "ONSITE HRS"])
-COL_SRT   = pick_col(jobs_raw, ["SRT HRS", "SRT HOURS", "HRS"])
-COL_TECHN = pick_col(jobs_raw, ["# OF TECHS NEEDED", "TECHS NEEDED", "Nbr Techs"])
-
-if not COL_ORDER:
-    st.error("Je ne trouve pas la colonne Job/Order (#). Assure-toi qu’elle existe dans ton export.")
-    st.stop()
-
-def build_address(row: pd.Series) -> str:
-    parts = []
-    for c in [COL_ADDR1, COL_ADDR2, COL_ADDR3, COL_CITY, COL_PROV, COL_POST]:
-        if c and pd.notna(row.get(c)) and str(row.get(c)).strip():
-            parts.append(str(row.get(c)).strip())
-    return ", ".join(parts)
-
-jobs = pd.DataFrame()
-jobs["job_id"] = jobs_raw[COL_ORDER].astype(str)
-jobs["address"] = jobs_raw.apply(build_address, axis=1)
-
-desc = jobs_raw[COL_DESC].fillna("").astype(str) if COL_DESC else ""
-up   = jobs_raw[COL_UP].fillna("").astype(str) if COL_UP else ""
-jobs["description"] = (desc + " | " + up).str.strip(" |")
-
-ons = pd.to_numeric(jobs_raw[COL_ONS], errors="coerce") if COL_ONS else None
-srt = pd.to_numeric(jobs_raw[COL_SRT], errors="coerce") if COL_SRT else None
-if ons is not None:
-    hours = ons
-elif srt is not None:
-    hours = srt
-else:
-    st.error("Je ne trouve pas `ONSITE SRT HRS` ni `SRT HRS` pour calculer la durée.")
-    st.stop()
-
-jobs["job_minutes"] = (hours.fillna(0) * 60).round().astype(int)
-
-techs_needed = pd.to_numeric(jobs_raw[COL_TECHN], errors="coerce") if COL_TECHN else None
-jobs["techs_needed"] = techs_needed.fillna(1).astype(int) if techs_needed is not None else 1
-
-# Clean
-jobs = jobs[(jobs["address"].astype(str).str.len() > 8) & (jobs["job_minutes"] > 0)].copy()
-jobs = jobs.drop_duplicates(subset=["job_id"]).reset_index(drop=True)
-
-st.divider()
-st.subheader("🧰 Planning 1 journée / 1 technicien")
-
-# ---------------------------
-# Choose technician + day parameters
-# ---------------------------
-tech_names = tech_df["tech_name"].astype(str).tolist()
-chosen_tech = st.selectbox("Choisir le technicien", sorted(tech_names), index=0)
-
-home_addr = tech_df.loc[tech_df["tech_name"] == chosen_tech, "home_address"].iloc[0]
-st.caption(f"🏠 Adresse domicile: {home_addr}")
-
-c1, c2, c3, c4 = st.columns(4)
-with c1:
-    day_hours = st.number_input("Heures/jour", 4.0, 14.0, 8.0, 0.5)
-with c2:
-    lunch_min = st.number_input("Pause (min)", 0, 120, 30, 5)
-with c3:
-    buffer_job = st.number_input("Buffer/job (min)", 0, 60, 10, 5)
-with c4:
-    max_jobs = st.number_input("Max jobs/jour", 1, 25, 10, 1)
-
-d1, d2 = st.columns(2)
-with d1:
-    depart_date = st.date_input("Date", value=date.today())
-with d2:
-    depart_time = st.time_input("Heure de départ", value=datetime.now().time().replace(second=0, microsecond=0))
-
-# ---------------------------
-# Distance function (cached)
-# ---------------------------
-@st.cache_data(ttl=60*60*12, show_spinner=False)
-def travel_min(origin: str, dest: str) -> int:
-    if not origin or not dest:
-        return 9999
-    try:
-        r = gmaps.distance_matrix([origin], [dest], mode="driving")
-        el = r["rows"][0]["elements"][0]
-        if el.get("status") != "OK":
-            return 9999
-        dur = el.get("duration_in_traffic") or el.get("duration") or {}
-        return int(round(int(dur.get("value", 0)) / 60))
-    except Exception:
-        return 9999
-
-def mm_to_hhmm(m: int) -> str:
-    h = m // 60
-    mm = m % 60
-    return f"{h:02d}:{mm:02d}"
-
-# ---------------------------
-# Build one-day schedule (greedy nearest-next)
-# ---------------------------
-run = st.button("🚀 Générer la journée", type="primary")
-
-if run:
-    available = int(round(day_hours * 60)) - int(lunch_min)
-    remaining = jobs.copy()
-
-    # Optional filter: show only jobs needing 1 tech
-    only_one = st.checkbox("Filtrer: seulement jobs à 1 technicien", value=False)
-    if only_one:
-        remaining = remaining[remaining["techs_needed"] <= 1].copy()
-
-    used = 0
-    seq = 0
-    cur_loc = home_addr
-    day_rows = []
-
-    # simple loop: always pick nearest job that fits remaining time
-    while True:
-        best_idx = None
-        best_cost = None
-        best_t = None
-
-        if remaining.empty:
-            break
-
-        sample = remaining.head(60) if len(remaining) > 60 else remaining
-
-        for idx, job in sample.iterrows():
-            tmin = travel_min(cur_loc, job["address"])
-            need = int(tmin) + int(job["job_minutes"]) + int(buffer_job)
-            if need <= 0:
-                continue
-            if used + need <= available:
-                if best_cost is None or tmin < best_cost:
-                    best_idx = idx
-                    best_cost = tmin
-                    best_t = int(tmin)
-
-        if best_idx is None:
-            break
-
-        job = remaining.loc[best_idx]
-        seq += 1
-
-        start_m = used + best_t
-        end_m = start_m + int(job["job_minutes"]) + int(buffer_job)
-
-        day_rows.append({
-            "technicien": chosen_tech,
-            "sequence": seq,
-            "job_id": job["job_id"],
-            "adresse": job["address"],
-            "travel_min": best_t,
-            "job_min": int(job["job_minutes"]),
-            "buffer_min": int(buffer_job),
-            "debut": mm_to_hhmm(start_m),
-            "fin": mm_to_hhmm(end_m),
-            "description": job["description"],
-            "techs_needed": int(job["techs_needed"]),
-        })
-
-        used = end_m
-        cur_loc = job["address"]
-        remaining = remaining[remaining["job_id"] != job["job_id"]].copy()
-
-        if seq >= int(max_jobs):
-            break
-
-    st.divider()
-    st.subheader("📋 Horaire de la journée")
-
-    if not day_rows:
-        st.warning("Aucun job ne rentre dans la journée (essaie d’augmenter les heures/jour ou réduire buffer/pause).")
+    expected_cols = {"tech_name", "home_address"}
+    if not expected_cols.issubset(set(tech_df.columns)):
+        st.error("`tech_home` doit contenir `tech_name` et `home_address`.")
         st.stop()
 
-    day_df = pd.DataFrame(day_rows)
-    st.dataframe(day_df, use_container_width=True)
+    # Upload Jobs Excel (persistant)
+    st.subheader("📤 Jobs – Upload Excel")
+    uploaded = st.file_uploader("Upload ton fichier Excel jobs", type=["xlsx"], key="jobs_uploader")
 
-    total_travel = int(day_df["travel_min"].sum())
-    total_job = int(day_df["job_min"].sum())
-    total_buffer = int(day_df["buffer_min"].sum())
-    total = total_travel + total_job + total_buffer
+    if uploaded:
+        st.session_state["jobs_file_bytes"] = uploaded.getvalue()
+        st.session_state["jobs_file_name"] = uploaded.name
 
-    st.subheader("📊 Résumé")
-    st.write(f"**Total travel:** {total_travel} min")
-    st.write(f"**Total job:** {total_job} min")
-    st.write(f"**Total buffer:** {total_buffer} min")
-    st.write(f"**Total utilisé:** {total} / {available} min  (reste {max(0, available-total)} min)")
+    if "jobs_file_bytes" not in st.session_state:
+        st.info("Upload un fichier Excel pour continuer (il sera conservé même si tu changes de page).")
+        st.stop()
 
-    st.subheader("🧩 Jobs non planifiés")
-    st.caption(f"Reste: {len(remaining)} job(s)")
-    st.dataframe(remaining.head(100), use_container_width=True)
+    data = BytesIO(st.session_state["jobs_file_bytes"])
+    try:
+        jobs_raw = pd.read_excel(data, sheet_name="Export", engine="openpyxl")
+    except Exception:
+        data.seek(0)
+        jobs_raw = pd.read_excel(data, sheet_name=0, engine="openpyxl")
+
+    st.caption(f"Jobs détectés: {len(jobs_raw)}")
+    st.dataframe(jobs_raw.head(20), use_container_width=True)
+
+    # Column mapping helper
+    def pick_col(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
+        cols = {c.lower().strip(): c for c in df.columns}
+        for cand in candidates:
+            k = cand.lower().strip()
+            if k in cols:
+                return cols[k]
+        return None
+
+    COL_ORDER = pick_col(jobs_raw, ["ORDER #", "ORDER#", "Order", "Job ID", "WO", "Work Order"])
+    COL_ADDR1 = pick_col(jobs_raw, ["ADDRESS 1", "ADDRESS1", "Address 1"])
+    COL_ADDR2 = pick_col(jobs_raw, ["ADDRESS 2", "ADDRESS2", "Address 2"])
+    COL_ADDR3 = pick_col(jobs_raw, ["ADDRESS 3", "ADDRESS3", "Address 3"])
+    COL_CITY  = pick_col(jobs_raw, ["SITE CITY", "CITY", "City"])
+    COL_PROV  = pick_col(jobs_raw, ["SITE STATE", "STATE", "Province"])
+    COL_POST  = pick_col(jobs_raw, ["SITE ZIP CODE", "ZIP", "POSTAL", "Postal Code"])
+    COL_DESC  = pick_col(jobs_raw, ["PM SERVICE DESC.", "DESCRIPTION", "Service Desc", "Desc"])
+    COL_UP    = pick_col(jobs_raw, ["UPCOMING SERVICES", "Upcoming Services"])
+    COL_ONS   = pick_col(jobs_raw, ["ONSITE SRT HRS", "ONSITE HOURS", "ONSITE HRS"])
+    COL_SRT   = pick_col(jobs_raw, ["SRT HRS", "SRT HOURS", "HRS"])
+    COL_TECHN = pick_col(jobs_raw, ["# OF TECHS NEEDED", "TECHS NEEDED", "Nbr Techs"])
+
+    if not COL_ORDER:
+        st.error("Je ne trouve pas la colonne Job/Order (#). Assure-toi qu’elle existe dans ton export.")
+        st.stop()
+
+    def build_address(row: pd.Series) -> str:
+        parts = []
+        for c in [COL_ADDR1, COL_ADDR2, COL_ADDR3, COL_CITY, COL_PROV, COL_POST]:
+            if c and pd.notna(row.get(c)) and str(row.get(c)).strip():
+                parts.append(str(row.get(c)).strip())
+        return ", ".join(parts)
+
+    jobs = pd.DataFrame()
+    jobs["job_id"] = jobs_raw[COL_ORDER].astype(str)
+    jobs["address"] = jobs_raw.apply(build_address, axis=1)
+
+    desc = jobs_raw[COL_DESC].fillna("").astype(str) if COL_DESC else ""
+    up   = jobs_raw[COL_UP].fillna("").astype(str) if COL_UP else ""
+    jobs["description"] = (desc + " | " + up).str.strip(" |")
+
+    ons = pd.to_numeric(jobs_raw[COL_ONS], errors="coerce") if COL_ONS else None
+    srt = pd.to_numeric(jobs_raw[COL_SRT], errors="coerce") if COL_SRT else None
+    if ons is not None:
+        hours = ons
+    elif srt is not None:
+        hours = srt
+    else:
+        st.error("Je ne trouve pas `ONSITE SRT HRS` ni `SRT HRS` pour calculer la durée.")
+        st.stop()
+
+    jobs["job_minutes"] = (hours.fillna(0) * 60).round().astype(int)
+
+    techs_needed = pd.to_numeric(jobs_raw[COL_TECHN], errors="coerce") if COL_TECHN else None
+    jobs["techs_needed"] = techs_needed.fillna(1).astype(int) if techs_needed is not None else 1
+
+    # Clean
+    jobs = jobs[(jobs["address"].astype(str).str.len() > 8) & (jobs["job_minutes"] > 0)].copy()
+    jobs = jobs.drop_duplicates(subset=["job_id"]).reset_index(drop=True)
+
+    st.divider()
+    st.subheader("🧰 Planning 1 journée / 1 technicien")
+
+    tech_names = tech_df["tech_name"].astype(str).tolist()
+    chosen_tech = st.selectbox("Choisir le technicien", sorted(tech_names), index=0, key="p2_chosen_tech")
+
+    home_addr = tech_df.loc[tech_df["tech_name"] == chosen_tech, "home_address"].iloc[0]
+    st.caption(f"🏠 Adresse domicile: {home_addr}")
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        day_hours = st.number_input("Heures/jour", 4.0, 14.0, 8.0, 0.5, key="p2_day_hours")
+    with c2:
+        lunch_min = st.number_input("Pause (min)", 0, 120, 30, 5, key="p2_lunch")
+    with c3:
+        buffer_job = st.number_input("Buffer/job (min)", 0, 60, 10, 5, key="p2_buffer")
+    with c4:
+        max_jobs = st.number_input("Max jobs/jour", 1, 25, 10, 1, key="p2_max_jobs")
+
+    _ = st.columns(2)  # kept for layout parity (date/time not used in this v1)
+
+    only_one = st.checkbox("Filtrer: seulement jobs à 1 technicien", value=False, key="p2_only_one")
+
+    # Distance function (cached)
+    @st.cache_data(ttl=60*60*12, show_spinner=False)
+    def travel_min(origin: str, dest: str) -> int:
+        if not origin or not dest:
+            return 9999
+        try:
+            r = gmaps_client.distance_matrix([origin], [dest], mode="driving")
+            el = r["rows"][0]["elements"][0]
+            if el.get("status") != "OK":
+                return 9999
+            dur = el.get("duration_in_traffic") or el.get("duration") or {}
+            return int(round(int(dur.get("value", 0)) / 60))
+        except Exception:
+            return 9999
+
+    def mm_to_hhmm(m: int) -> str:
+        h = m // 60
+        mm = m % 60
+        return f"{h:02d}:{mm:02d}"
+
+    run = st.button("🚀 Générer la journée", type="primary", key="p2_run")
+
+    if run:
+        available = int(round(day_hours * 60)) - int(lunch_min)
+        remaining = jobs.copy()
+
+        if only_one:
+            remaining = remaining[remaining["techs_needed"] <= 1].copy()
+
+        used = 0
+        seq = 0
+        cur_loc = home_addr
+        day_rows = []
+
+        while True:
+            best_idx = None
+            best_cost = None
+            best_t = None
+
+            if remaining.empty:
+                break
+
+            sample = remaining.head(60) if len(remaining) > 60 else remaining
+
+            for idx, job in sample.iterrows():
+                tmin = travel_min(cur_loc, job["address"])
+                need = int(tmin) + int(job["job_minutes"]) + int(buffer_job)
+                if need <= 0:
+                    continue
+                if used + need <= available:
+                    if best_cost is None or tmin < best_cost:
+                        best_idx = idx
+                        best_cost = tmin
+                        best_t = int(tmin)
+
+            if best_idx is None:
+                break
+
+            job = remaining.loc[best_idx]
+            seq += 1
+
+            start_m = used + best_t
+            end_m = start_m + int(job["job_minutes"]) + int(buffer_job)
+
+            day_rows.append({
+                "technicien": chosen_tech,
+                "sequence": seq,
+                "job_id": job["job_id"],
+                "adresse": job["address"],
+                "travel_min": best_t,
+                "job_min": int(job["job_minutes"]),
+                "buffer_min": int(buffer_job),
+                "debut": mm_to_hhmm(start_m),
+                "fin": mm_to_hhmm(end_m),
+                "description": job["description"],
+                "techs_needed": int(job["techs_needed"]),
+            })
+
+            used = end_m
+            cur_loc = job["address"]
+            remaining = remaining[remaining["job_id"] != job["job_id"]].copy()
+
+            if seq >= int(max_jobs):
+                break
+
+        # Persist results so switching pages doesn't reset
+        st.session_state["planning_day_rows"] = day_rows
+        st.session_state["planning_remaining_count"] = len(remaining)
+
+    # Display persisted result if present
+    day_rows_saved = st.session_state.get("planning_day_rows", [])
+    if day_rows_saved:
+        st.divider()
+        st.subheader("📋 Horaire de la journée (persistant)")
+
+        day_df = pd.DataFrame(day_rows_saved)
+        st.dataframe(day_df, use_container_width=True)
+
+        available = int(round(st.session_state.get("p2_day_hours", 8.0) * 60)) - int(st.session_state.get("p2_lunch", 30))
+        total_travel = int(day_df["travel_min"].sum())
+        total_job = int(day_df["job_min"].sum())
+        total_buffer = int(day_df["buffer_min"].sum())
+        total = total_travel + total_job + total_buffer
+
+        st.subheader("📊 Résumé")
+        st.write(f"**Total travel:** {total_travel} min")
+        st.write(f"**Total job:** {total_job} min")
+        st.write(f"**Total buffer:** {total_buffer} min")
+        st.write(f"**Total utilisé:** {total} / {available} min  (reste {max(0, available-total)} min)")
+
+        st.subheader("🧩 Jobs non planifiés")
+        st.caption(f"Reste (approx): {st.session_state.get('planning_remaining_count', '—')} job(s)")
 
 # ────────────────────────────────────────────────────────────────
 # Router
