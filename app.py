@@ -746,8 +746,6 @@ def render_page_1():
 # PAGE 2 (Planning) — persist upload + results
 # ────────────────────────────────────────────────────────────────
 def render_page_2():
-    st.set_page_config  # (no-op reminder: don't call set_page_config here)
-
     st.title("📅 Planning mensuel – Journées techniciens")
 
     # Tech homes from session_state (created in page 1) or fallback
