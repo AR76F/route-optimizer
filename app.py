@@ -22,13 +22,13 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-st.sidebar.title("Menu")
-st.sidebar.markdown(
-    """
-- [🏠 Route Optimizer](/)
-- [📅 Planning (Page 2)](/planning)
-"""
+# --- Navigation (multipage manuel) ---
+page = st.sidebar.radio(
+    "Menu",
+    ["🏠 Route Optimizer", "📅 Planning (Page 2)"],
+    index=0
 )
+if page == "🏠 Route Optimizer":
 # ────────────────────────────────────────────────────────────────────────────────
 # Optional myGeotab import (app still works if it's missing or secrets not set)
 # ────────────────────────────────────────────────────────────────────────────────
@@ -741,3 +741,5 @@ if res:
             st.warning(f"Map rendering skipped: {e}")
 
     st.success(f"**Total distance:** {km:.1f} km • **Total time:** {mins:.0f} mins (live traffic)")
+
+else:
