@@ -22,9 +22,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-st.sidebar.title("Navigation")
-st.sidebar.page_link("app.py", label="🏠 Route Optimizer")
-st.sidebar.page_link("pages/2_Planning.py", label="📅 Planning (Page 2)")
+st.sidebar.title("Menu")
+st.sidebar.write("Utilise la section Pages ci-dessous.")
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Optional myGeotab import (app still works if it's missing or secrets not set)
