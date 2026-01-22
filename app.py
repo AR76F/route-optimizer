@@ -745,316 +745,276 @@ def render_page_1():
 # ────────────────────────────────────────────────────────────────
 # PAGE 2 (Planning) — persist upload + results
 # ────────────────────────────────────────────────────────────────
-def render_page_2():
-    st.title("📅 Planning mensuel – Journées techniciens")
+import streamlit as st
+import pandas as pd
+from io import BytesIO
+from datetime import datetime, date, time
+from typing import Optional, List
+import os
+import googlemaps
 
-    # Tech homes from session_state (created in page 1) or fallback
-    tech_df = st.session_state.get("tech_home")
-    if tech_df is None or len(tech_df) == 0:
-        # fallback build
-        def _extract_postal(addr: str) -> str:
-            if not addr: return ""
-            m = re.search(r"\b([A-Z]\d[A-Z])\s?(\d[A-Z]\d)\b", str(addr).upper())
-            return (m.group(1) + m.group(2)) if m else ""
-        tech_df = pd.DataFrame(
-            [{"tech_name": name, "home_address": addr, "postal": _extract_postal(addr)}
-             for name, addr in TECH_HOME.items()]
-        )
-        st.session_state["tech_home"] = tech_df
+st.title("📅 Planning (Page 2)")
 
-    st.subheader("👷 Techniciens (persistant)")
-    st.dataframe(tech_df[["tech_name", "home_address"]], use_container_width=True)
-    st.divider()
-
-    # Upload persisted
-    st.subheader("📤 Jobs – Upload Excel (onglet Export)")
-    uploaded = st.file_uploader("Upload ton fichier Excel jobs", type=["xlsx"], key="jobs_uploader")
-
-    if uploaded is not None:
-        st.session_state.jobs_file_name = uploaded.name
-        st.session_state.jobs_file_bytes = uploaded.getvalue()
-
-    if "jobs_file_bytes" not in st.session_state:
-        st.info("Upload le fichier Excel pour continuer.")
-        return
-
-    file_like = BytesIO(st.session_state.jobs_file_bytes)
-
-    # Read Excel
+# ---------------------------
+# Secrets helper
+# ---------------------------
+def secret(name: str, default: Optional[str] = None) -> Optional[str]:
     try:
-        jobs_raw = pd.read_excel(file_like, sheet_name="Export", engine="openpyxl")
+        return st.secrets[name]
     except Exception:
-        file_like.seek(0)
-        jobs_raw = pd.read_excel(file_like, sheet_name=0, engine="openpyxl")
+        return os.getenv(name, default)
 
-    st.caption(f"Fichier: {st.session_state.get('jobs_file_name','(unknown)')} • Jobs détectés: {len(jobs_raw)}")
-    st.dataframe(jobs_raw.head(20), use_container_width=True)
+GOOGLE_KEY = secret("GOOGLE_MAPS_API_KEY")
+if not GOOGLE_KEY:
+    st.error("Missing Google Maps key (`GOOGLE_MAPS_API_KEY`) in Streamlit Secrets.")
+    st.stop()
 
-    # Column mapping
-    def pick_col(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
-        cols = {c.lower().strip(): c for c in df.columns}
-        for cand in candidates:
-            k = cand.lower().strip()
-            if k in cols:
-                return cols[k]
-        return None
+gmaps = googlemaps.Client(key=GOOGLE_KEY)
 
-    COL_ORDER = pick_col(jobs_raw, ["ORDER #", "ORDER#", "Order", "Job ID", "WO", "Work Order"])
-    COL_ADDR1 = pick_col(jobs_raw, ["ADDRESS 1", "ADDRESS1", "Address 1"])
-    COL_ADDR2 = pick_col(jobs_raw, ["ADDRESS 2", "ADDRESS2", "Address 2"])
-    COL_ADDR3 = pick_col(jobs_raw, ["ADDRESS 3", "ADDRESS3", "Address 3"])
-    COL_CITY  = pick_col(jobs_raw, ["SITE CITY", "CITY", "City"])
-    COL_PROV  = pick_col(jobs_raw, ["SITE STATE", "STATE", "Province"])
-    COL_POST  = pick_col(jobs_raw, ["SITE ZIP CODE", "ZIP", "POSTAL", "Postal Code"])
-    COL_DESC  = pick_col(jobs_raw, ["PM SERVICE DESC.", "DESCRIPTION", "Service Desc", "Desc"])
-    COL_UP    = pick_col(jobs_raw, ["UPCOMING SERVICES", "Upcoming Services"])
-    COL_ONS   = pick_col(jobs_raw, ["ONSITE SRT HRS", "ONSITE HOURS", "ONSITE HRS"])
-    COL_SRT   = pick_col(jobs_raw, ["SRT HRS", "SRT HOURS", "HRS"])
-    COL_TECHN = pick_col(jobs_raw, ["# OF TECHS NEEDED", "TECHS NEEDED", "Nbr Techs"])
+# ---------------------------
+# Load tech_home from page 1
+# ---------------------------
+tech_df = st.session_state.get("tech_home")
+if tech_df is None or len(tech_df) == 0:
+    st.warning("⚠️ Je ne trouve pas `tech_home`. Va d’abord sur la page 1 une fois pour initialiser les domiciles.")
+    st.stop()
 
-    if not COL_ORDER:
-        st.error("Je ne trouve pas la colonne Job/Order (#).")
-        return
+# Expected columns
+expected_cols = {"tech_name", "home_address"}
+if not expected_cols.issubset(set(tech_df.columns)):
+    st.error("`tech_home` doit contenir `tech_name` et `home_address`.")
+    st.stop()
 
-    def build_address(row: pd.Series) -> str:
-        parts = []
-        for c in [COL_ADDR1, COL_ADDR2, COL_ADDR3, COL_CITY, COL_PROV, COL_POST]:
-            if c and pd.notna(row.get(c)) and str(row.get(c)).strip():
-                parts.append(str(row.get(c)).strip())
-        return ", ".join(parts)
+# ---------------------------
+# Upload Jobs Excel (persistant)
+# ---------------------------
+st.subheader("📤 Jobs – Upload Excel")
+uploaded = st.file_uploader("Upload ton fichier Excel jobs", type=["xlsx"])
 
-    jobs = pd.DataFrame()
-    jobs["job_id"] = jobs_raw[COL_ORDER].astype(str)
-    jobs["address"] = jobs_raw.apply(build_address, axis=1)
+if uploaded:
+    st.session_state["jobs_file_bytes"] = uploaded.getvalue()
 
-    desc = jobs_raw[COL_DESC].fillna("").astype(str) if COL_DESC else ""
-    up   = jobs_raw[COL_UP].fillna("").astype(str) if COL_UP else ""
-    jobs["description"] = (desc + " | " + up).astype(str).str.strip(" |")
+if "jobs_file_bytes" not in st.session_state:
+    st.info("Upload un fichier Excel pour continuer (il sera conservé même si tu changes de page).")
+    st.stop()
 
-    ons = pd.to_numeric(jobs_raw[COL_ONS], errors="coerce") if COL_ONS else None
-    srt = pd.to_numeric(jobs_raw[COL_SRT], errors="coerce") if COL_SRT else None
-    if ons is not None:
-        hours = ons
-    elif srt is not None:
-        hours = srt
-    else:
-        st.error("Je ne trouve pas `ONSITE SRT HRS` ni `SRT HRS` pour calculer la durée.")
-        return
+data = BytesIO(st.session_state["jobs_file_bytes"])
+try:
+    jobs_raw = pd.read_excel(data, sheet_name="Export", engine="openpyxl")
+except Exception:
+    data.seek(0)
+    jobs_raw = pd.read_excel(data, sheet_name=0, engine="openpyxl")
 
-    jobs["job_minutes"] = (hours.fillna(0) * 60).round().astype(int)
-    techs_needed = pd.to_numeric(jobs_raw[COL_TECHN], errors="coerce") if COL_TECHN else None
-    jobs["techs_needed"] = techs_needed.fillna(1).astype(int) if techs_needed is not None else 1
+st.caption(f"Jobs détectés: {len(jobs_raw)}")
+st.dataframe(jobs_raw.head(20), use_container_width=True)
 
-    jobs = jobs[(jobs["address"].astype(str).str.len() > 8) & (jobs["job_minutes"] > 0)].copy()
-    jobs = jobs.drop_duplicates(subset=["job_id"]).reset_index(drop=True)
+# ---------------------------
+# Column mapping helper
+# ---------------------------
+def pick_col(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
+    cols = {c.lower().strip(): c for c in df.columns}
+    for cand in candidates:
+        k = cand.lower().strip()
+        if k in cols:
+            return cols[k]
+    return None
 
-    # zones
-    def zone_from_address(addr: str) -> str:
-        a = (addr or "").lower()
-        rive_nord = ["laval", "terrebonne", "blainville", "mirabel", "boisbriand", "st-jérôme", "saint-jérôme"]
-        rive_sud  = ["longueuil", "brossard", "candiac", "delson", "beloeil", "st-hubert", "saint-hubert",
-                     "chambly", "st-jean", "saint-jean"]
-        if any(k in a for k in rive_nord): return "RIVE_NORD"
-        if any(k in a for k in rive_sud):  return "RIVE_SUD"
-        return "MTL_LAVAL"
+COL_ORDER = pick_col(jobs_raw, ["ORDER #", "ORDER#", "Order", "Job ID", "WO", "Work Order"])
+COL_ADDR1 = pick_col(jobs_raw, ["ADDRESS 1", "ADDRESS1", "Address 1"])
+COL_ADDR2 = pick_col(jobs_raw, ["ADDRESS 2", "ADDRESS2", "Address 2"])
+COL_ADDR3 = pick_col(jobs_raw, ["ADDRESS 3", "ADDRESS3", "Address 3"])
+COL_CITY  = pick_col(jobs_raw, ["SITE CITY", "CITY", "City"])
+COL_PROV  = pick_col(jobs_raw, ["SITE STATE", "STATE", "Province"])
+COL_POST  = pick_col(jobs_raw, ["SITE ZIP CODE", "ZIP", "POSTAL", "Postal Code"])
+COL_DESC  = pick_col(jobs_raw, ["PM SERVICE DESC.", "DESCRIPTION", "Service Desc", "Desc"])
+COL_UP    = pick_col(jobs_raw, ["UPCOMING SERVICES", "Upcoming Services"])
+COL_ONS   = pick_col(jobs_raw, ["ONSITE SRT HRS", "ONSITE HOURS", "ONSITE HRS"])
+COL_SRT   = pick_col(jobs_raw, ["SRT HRS", "SRT HOURS", "HRS"])
+COL_TECHN = pick_col(jobs_raw, ["# OF TECHS NEEDED", "TECHS NEEDED", "Nbr Techs"])
 
-    jobs["zone"] = jobs["address"].apply(zone_from_address)
-    tech_df = tech_df.copy()
-    tech_df["zone"] = tech_df["home_address"].apply(zone_from_address)
+if not COL_ORDER:
+    st.error("Je ne trouve pas la colonne Job/Order (#). Assure-toi qu’elle existe dans ton export.")
+    st.stop()
 
-    st.divider()
-    st.subheader("🧾 Jobs nettoyés")
-    st.dataframe(jobs.head(30), use_container_width=True)
+def build_address(row: pd.Series) -> str:
+    parts = []
+    for c in [COL_ADDR1, COL_ADDR2, COL_ADDR3, COL_CITY, COL_PROV, COL_POST]:
+        if c and pd.notna(row.get(c)) and str(row.get(c)).strip():
+            parts.append(str(row.get(c)).strip())
+    return ", ".join(parts)
 
-    # distance matrix call (cached)
-    @st.cache_data(ttl=60*60*24, show_spinner=False)
-    def travel_min(origin: str, dest: str) -> int:
-        if not origin or not dest:
+jobs = pd.DataFrame()
+jobs["job_id"] = jobs_raw[COL_ORDER].astype(str)
+jobs["address"] = jobs_raw.apply(build_address, axis=1)
+
+desc = jobs_raw[COL_DESC].fillna("").astype(str) if COL_DESC else ""
+up   = jobs_raw[COL_UP].fillna("").astype(str) if COL_UP else ""
+jobs["description"] = (desc + " | " + up).str.strip(" |")
+
+ons = pd.to_numeric(jobs_raw[COL_ONS], errors="coerce") if COL_ONS else None
+srt = pd.to_numeric(jobs_raw[COL_SRT], errors="coerce") if COL_SRT else None
+if ons is not None:
+    hours = ons
+elif srt is not None:
+    hours = srt
+else:
+    st.error("Je ne trouve pas `ONSITE SRT HRS` ni `SRT HRS` pour calculer la durée.")
+    st.stop()
+
+jobs["job_minutes"] = (hours.fillna(0) * 60).round().astype(int)
+
+techs_needed = pd.to_numeric(jobs_raw[COL_TECHN], errors="coerce") if COL_TECHN else None
+jobs["techs_needed"] = techs_needed.fillna(1).astype(int) if techs_needed is not None else 1
+
+# Clean
+jobs = jobs[(jobs["address"].astype(str).str.len() > 8) & (jobs["job_minutes"] > 0)].copy()
+jobs = jobs.drop_duplicates(subset=["job_id"]).reset_index(drop=True)
+
+st.divider()
+st.subheader("🧰 Planning 1 journée / 1 technicien")
+
+# ---------------------------
+# Choose technician + day parameters
+# ---------------------------
+tech_names = tech_df["tech_name"].astype(str).tolist()
+chosen_tech = st.selectbox("Choisir le technicien", sorted(tech_names), index=0)
+
+home_addr = tech_df.loc[tech_df["tech_name"] == chosen_tech, "home_address"].iloc[0]
+st.caption(f"🏠 Adresse domicile: {home_addr}")
+
+c1, c2, c3, c4 = st.columns(4)
+with c1:
+    day_hours = st.number_input("Heures/jour", 4.0, 14.0, 8.0, 0.5)
+with c2:
+    lunch_min = st.number_input("Pause (min)", 0, 120, 30, 5)
+with c3:
+    buffer_job = st.number_input("Buffer/job (min)", 0, 60, 10, 5)
+with c4:
+    max_jobs = st.number_input("Max jobs/jour", 1, 25, 10, 1)
+
+d1, d2 = st.columns(2)
+with d1:
+    depart_date = st.date_input("Date", value=date.today())
+with d2:
+    depart_time = st.time_input("Heure de départ", value=datetime.now().time().replace(second=0, microsecond=0))
+
+# ---------------------------
+# Distance function (cached)
+# ---------------------------
+@st.cache_data(ttl=60*60*12, show_spinner=False)
+def travel_min(origin: str, dest: str) -> int:
+    if not origin or not dest:
+        return 9999
+    try:
+        r = gmaps.distance_matrix([origin], [dest], mode="driving")
+        el = r["rows"][0]["elements"][0]
+        if el.get("status") != "OK":
             return 9999
-        try:
-            r = gmaps_client.distance_matrix([origin], [dest], mode="driving")
-            el = r["rows"][0]["elements"][0]
-            if el.get("status") != "OK":
-                return 9999
-            dur = el.get("duration_in_traffic") or el.get("duration") or {}
-            return int(round(int(dur.get("value", 0)) / 60))
-        except Exception:
-            return 9999
+        dur = el.get("duration_in_traffic") or el.get("duration") or {}
+        return int(round(int(dur.get("value", 0)) / 60))
+    except Exception:
+        return 9999
 
-    def penalty(zone_a: str, zone_b: str, p_ns: int, p_mtl: int) -> int:
-        if zone_a == zone_b:
-            return 0
-        if {"RIVE_NORD","RIVE_SUD"} == {zone_a, zone_b}:
-            return p_ns
-        return p_mtl
+def mm_to_hhmm(m: int) -> str:
+    h = m // 60
+    mm = m % 60
+    return f"{h:02d}:{mm:02d}"
+
+# ---------------------------
+# Build one-day schedule (greedy nearest-next)
+# ---------------------------
+run = st.button("🚀 Générer la journée", type="primary")
+
+if run:
+    available = int(round(day_hours * 60)) - int(lunch_min)
+    remaining = jobs.copy()
+
+    # Optional filter: show only jobs needing 1 tech
+    only_one = st.checkbox("Filtrer: seulement jobs à 1 technicien", value=False)
+    if only_one:
+        remaining = remaining[remaining["techs_needed"] <= 1].copy()
+
+    used = 0
+    seq = 0
+    cur_loc = home_addr
+    day_rows = []
+
+    # simple loop: always pick nearest job that fits remaining time
+    while True:
+        best_idx = None
+        best_cost = None
+        best_t = None
+
+        if remaining.empty:
+            break
+
+        sample = remaining.head(60) if len(remaining) > 60 else remaining
+
+        for idx, job in sample.iterrows():
+            tmin = travel_min(cur_loc, job["address"])
+            need = int(tmin) + int(job["job_minutes"]) + int(buffer_job)
+            if need <= 0:
+                continue
+            if used + need <= available:
+                if best_cost is None or tmin < best_cost:
+                    best_idx = idx
+                    best_cost = tmin
+                    best_t = int(tmin)
+
+        if best_idx is None:
+            break
+
+        job = remaining.loc[best_idx]
+        seq += 1
+
+        start_m = used + best_t
+        end_m = start_m + int(job["job_minutes"]) + int(buffer_job)
+
+        day_rows.append({
+            "technicien": chosen_tech,
+            "sequence": seq,
+            "job_id": job["job_id"],
+            "adresse": job["address"],
+            "travel_min": best_t,
+            "job_min": int(job["job_minutes"]),
+            "buffer_min": int(buffer_job),
+            "debut": mm_to_hhmm(start_m),
+            "fin": mm_to_hhmm(end_m),
+            "description": job["description"],
+            "techs_needed": int(job["techs_needed"]),
+        })
+
+        used = end_m
+        cur_loc = job["address"]
+        remaining = remaining[remaining["job_id"] != job["job_id"]].copy()
+
+        if seq >= int(max_jobs):
+            break
 
     st.divider()
-    st.subheader("⚙️ Paramètres")
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        day_hours = st.number_input("Heures/jour", 6.0, 12.0, 8.0, 0.5, key="p2_day_hours")
-    with c2:
-        lunch_min = st.number_input("Pause (min)", 0, 120, 30, 5, key="p2_lunch")
-    with c3:
-        buffer_job = st.number_input("Buffer/job (min)", 0, 60, 10, 5, key="p2_buffer")
-    with c4:
-        max_days = st.number_input("Max jours/tech", 1, 31, 22, 1, key="p2_max_days")
+    st.subheader("📋 Horaire de la journée")
 
-    p1, p2 = st.columns(2)
-    with p1:
-        p_ns = st.number_input("Pénalité Nord↔Sud (min)", 0, 240, 90, 15, key="p2_pns")
-    with p2:
-        p_mtl = st.number_input("Pénalité changement de zone (min)", 0, 240, 45, 15, key="p2_pmtl")
+    if not day_rows:
+        st.warning("Aucun job ne rentre dans la journée (essaie d’augmenter les heures/jour ou réduire buffer/pause).")
+        st.stop()
 
-    # Restore existing planning if present
-    if "planning_visits" in st.session_state and st.session_state.planning_visits is not None:
-        st.success("✅ Planning déjà généré (restauré depuis la session).")
-        st.dataframe(st.session_state.planning_visits, use_container_width=True)
+    day_df = pd.DataFrame(day_rows)
+    st.dataframe(day_df, use_container_width=True)
 
-    run = st.button("🚀 Générer le planning", type="primary", key="p2_run")
+    total_travel = int(day_df["travel_min"].sum())
+    total_job = int(day_df["job_min"].sum())
+    total_buffer = int(day_df["buffer_min"].sum())
+    total = total_travel + total_job + total_buffer
 
-    if run:
-        available = int(round(float(day_hours) * 60)) - int(lunch_min)
-        remaining = jobs.copy()
+    st.subheader("📊 Résumé")
+    st.write(f"**Total travel:** {total_travel} min")
+    st.write(f"**Total job:** {total_job} min")
+    st.write(f"**Total buffer:** {total_buffer} min")
+    st.write(f"**Total utilisé:** {total} / {available} min  (reste {max(0, available-total)} min)")
 
-        visits = []
-        summaries = []
-
-        with st.spinner("Calcul des journées (trajets Google Maps)…"):
-            for _, tech in tech_df.iterrows():
-                if remaining.empty:
-                    break
-                tech_name = str(tech["tech_name"])
-                home = str(tech["home_address"])
-                tech_zone = str(tech["zone"])
-
-                for day in range(1, int(max_days) + 1):
-                    if remaining.empty:
-                        break
-
-                    used = 0
-                    seq = 0
-                    cur_loc = home
-                    cur_zone = tech_zone
-                    day_rows = []
-
-                    pool = remaining[remaining["zone"] == tech_zone].copy()
-                    if pool.empty:
-                        pool = remaining.copy()
-
-                    while True:
-                        best_idx = None
-                        best_cost = None
-                        best_t = None
-
-                        sample = pool.head(35) if len(pool) > 35 else pool
-
-                        for idx, job in sample.iterrows():
-                            tmin = travel_min(cur_loc, job["address"])
-                            cost = tmin + penalty(cur_zone, job["zone"], int(p_ns), int(p_mtl))
-
-                            need = int(tmin) + int(job["job_minutes"]) + int(buffer_job)
-                            if used + need <= available:
-                                if best_cost is None or cost < best_cost:
-                                    best_idx = idx
-                                    best_cost = cost
-                                    best_t = int(tmin)
-
-                        if best_idx is None:
-                            break
-
-                        job = pool.loc[best_idx]
-                        seq += 1
-
-                        start_m = used + int(best_t)
-                        end_m = start_m + int(job["job_minutes"]) + int(buffer_job)
-
-                        visits.append({
-                            "technicien": tech_name,
-                            "jour": day,
-                            "sequence": seq,
-                            "job_id": str(job["job_id"]),
-                            "zone": str(job["zone"]),
-                            "adresse": str(job["address"]),
-                            "debut": mm_to_hhmm(int(start_m)),
-                            "fin": mm_to_hhmm(int(end_m)),
-                            "travel_min": int(best_t),
-                            "job_min": int(job["job_minutes"]),
-                            "buffer_min": int(buffer_job),
-                            "description": str(job["description"]),
-                            "techs_needed": int(job["techs_needed"]),
-                        })
-
-                        used = int(end_m)
-                        cur_loc = str(job["address"])
-                        cur_zone = str(job["zone"])
-
-                        remaining = remaining[remaining["job_id"] != job["job_id"]].copy()
-                        pool = pool[pool["job_id"] != job["job_id"]].copy()
-
-                    # end day -> summary
-                    if seq > 0:
-                        day_rows = [r for r in visits if r["technicien"] == tech_name and r["jour"] == day]
-                        summaries.append({
-                            "technicien": tech_name,
-                            "jour": day,
-                            "stops": len(day_rows),
-                            "total_travel_min": sum(r["travel_min"] for r in day_rows),
-                            "total_job_min": sum(r["job_min"] for r in day_rows),
-                            "total_min": sum(r["travel_min"] + r["job_min"] + r["buffer_min"] for r in day_rows),
-                            "zone_focus": tech_zone,
-                        })
-
-        visits_df = pd.DataFrame(visits)
-        summary_df = pd.DataFrame(summaries)
-
-        st.divider()
-        st.subheader("📋 Planning détaillé")
-        if visits_df.empty:
-            st.warning("Aucune journée créée (essaie d’augmenter heures/jour ou diminuer pénalités).")
-            return
-
-        st.dataframe(visits_df.sort_values(["technicien","jour","sequence"]), use_container_width=True)
-
-        st.subheader("📊 Résumé par journée")
-        st.dataframe(summary_df.sort_values(["technicien","jour"]), use_container_width=True)
-
-        st.subheader("🧩 Jobs non planifiés")
-        st.caption(f"Reste: {len(remaining)} job(s)")
-        st.dataframe(remaining.head(200), use_container_width=True)
-
-        # Persist
-        st.session_state.planning_visits = visits_df
-        st.session_state.planning_summary = summary_df
-        st.session_state.planning_remaining = remaining
-
-        # Export
-        out = BytesIO()
-        fname = f"planning_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-        with pd.ExcelWriter(out, engine="openpyxl") as writer:
-            visits_df.to_excel(writer, sheet_name="Visits", index=False)
-            summary_df.to_excel(writer, sheet_name="Summary", index=False)
-            remaining.to_excel(writer, sheet_name="Unscheduled", index=False)
-            jobs.to_excel(writer, sheet_name="Jobs_Input", index=False)
-            tech_df.to_excel(writer, sheet_name="Tech_Input", index=False)
-
-        st.download_button(
-            "⬇️ Télécharger le planning (Excel)",
-            data=out.getvalue(),
-            file_name=fname,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-
-        if (visits_df["techs_needed"] > 1).any():
-            st.warning("⚠️ Certains jobs demandent >1 technicien. V1 les affiche, mais ne fait pas encore le pairing automatique.")
-
-    # reset button
-    st.divider()
-    if st.button("♻️ Reset Page 2 (jobs + planning)", key="p2_reset"):
-        for k in ["jobs_file_name", "jobs_file_bytes",
-                  "planning_visits", "planning_summary", "planning_remaining"]:
-            st.session_state.pop(k, None)
-        st.rerun()
+    st.subheader("🧩 Jobs non planifiés")
+    st.caption(f"Reste: {len(remaining)} job(s)")
+    st.dataframe(remaining.head(100), use_container_width=True)
 
 # ────────────────────────────────────────────────────────────────
 # Router
