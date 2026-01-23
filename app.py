@@ -181,6 +181,8 @@ TECH_HOME = {
     "Alain Duguay": "1110 rue Proulx, Les Cèdres, QC J7T 1E6",
     "Alexandre Pelletier Guay": "163 21e ave, Sabrevois, J0J 2G0",
     "Ali Reza-Sabour": "226 rue Felx, Saint-Clet, QC J0P 1S0",
+    "David Robitaille": "1271 route des lac, saint-marcelline de kildare, QC J0K 2Y0",
+    "Patrick Robitaille": "3365 ave laurier est, Montréal, QC H1X 1V3",
     "Benoit Charrette": "34 rue de la Digue, Saint-Jérome, QC, Canada",
     "Benoit Larame": "12 rue de Beaudry, Mercier, J6R 2N7",
     "Christian Dubrueil": "31 rue des Roitelets, Delson, J5B 1T6",
