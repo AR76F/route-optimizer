@@ -845,6 +845,7 @@ import pandas as pd
 
 # ────────────────────────────────────────────────────────────────
 # PAGE 2 (Planning) — persist upload + results + 3 modes + DUO + seq + return home + progress
+# + LUNCH MIDDLE (visual) so what you see matches 8h wall-time
 # ────────────────────────────────────────────────────────────────
 def render_page_2():
     import calendar
@@ -1009,6 +1010,106 @@ def render_page_2():
         mm = m % 60
         return f"{h:02d}:{mm:02d}"
 
+    def hhmm_to_mm(s: str) -> int:
+        try:
+            h, m = str(s).split(":")
+            return int(h) * 60 + int(m)
+        except Exception:
+            return 0
+
+    # ✅ Insert lunch in the middle of the day (visual), shift subsequent rows by lunch_min
+    # Keeps planning logic EXACT (available = day_hours - lunch), but makes what you SEE coherent with 8h wall-time.
+    def apply_midday_lunch(rows: List[dict], lunch_min: int) -> List[dict]:
+        if not rows or int(lunch_min) <= 0:
+            return rows
+
+        # Work only on a copy
+        rows = [dict(r) for r in rows]
+
+        # Identify RETURN_HOME position (we want lunch before return if present)
+        return_idx = None
+        for i, r in enumerate(rows):
+            if str(r.get("job_id", "")).upper() == "RETURN_HOME":
+                return_idx = i
+                break
+
+        # Consider "active jobs block" up to RETURN_HOME (excluded)
+        end_limit = return_idx if return_idx is not None else len(rows)
+
+        # Compute active end time (excluding RETURN_HOME and excluding any LUNCH if exists)
+        active_fins = []
+        for r in rows[:end_limit]:
+            jid = str(r.get("job_id", "")).upper()
+            if jid in ("LUNCH", "RETURN_HOME"):
+                continue
+            active_fins.append(hhmm_to_mm(r.get("fin", "00:00")))
+
+        if not active_fins:
+            return rows
+
+        active_end = max(active_fins)
+        midpoint = active_end // 2
+
+        # Find insertion point: after first row whose fin >= midpoint (within active area)
+        insert_at = None
+        for i, r in enumerate(rows[:end_limit]):
+            jid = str(r.get("job_id", "")).upper()
+            if jid in ("LUNCH", "RETURN_HOME"):
+                continue
+            if hhmm_to_mm(r.get("fin", "00:00")) >= midpoint:
+                insert_at = i + 1
+                break
+
+        if insert_at is None:
+            insert_at = end_limit  # end of active block
+
+        # Lunch start = fin of previous row (or 00:00)
+        if insert_at > 0:
+            lunch_start = hhmm_to_mm(rows[insert_at - 1].get("fin", "00:00"))
+        else:
+            lunch_start = 0
+
+        lunch_end = lunch_start + int(lunch_min)
+
+        # Build lunch row: keep required columns if present in other rows
+        base = rows[0].copy()
+        # reset base values
+        base.update({
+            "job_id": "LUNCH",
+            "duo": "",
+            "adresse": "",
+            "travel_min": 0,
+            "job_min": 0,
+            "buffer_min": 0,
+            "techs_needed": 1,
+            "description": "⏸ Pause",
+            "debut": mm_to_hhmm(lunch_start),
+            "fin": mm_to_hhmm(lunch_end),
+        })
+
+        # Keep technicien/date if those keys exist in the dataset
+        if "technicien" in rows[0]:
+            base["technicien"] = rows[0].get("technicien", "")
+        if "date" in rows[0]:
+            base["date"] = rows[0].get("date", "")
+
+        # Keep a sequence that won't break sorting (we rely on debut anyway)
+        if "sequence" in rows[0]:
+            prev_seq = rows[insert_at - 1].get("sequence", 0) if insert_at > 0 else 0
+            base["sequence"] = prev_seq  # same as previous, ordering is done by "debut"
+
+        # Insert lunch row
+        rows = rows[:insert_at] + [base] + rows[insert_at:]
+
+        # Shift subsequent rows (including RETURN_HOME) by lunch_min
+        for i in range(insert_at + 1, len(rows)):
+            d = hhmm_to_mm(rows[i].get("debut", "00:00"))
+            f = hhmm_to_mm(rows[i].get("fin", "00:00"))
+            rows[i]["debut"] = mm_to_hhmm(d + int(lunch_min))
+            rows[i]["fin"] = mm_to_hhmm(f + int(lunch_min))
+
+        return rows
+
     # ✅ Multi-level styling (dark mode safe)
     def style_duo(df: pd.DataFrame):
         """
@@ -1071,78 +1172,8 @@ def render_page_2():
         return df
 
     # ────────────────────────────────────────────────────────────────
-    # ✅ OPTIMISATION: candidats proches (FSA + fallback distance home→job)
-    # ────────────────────────────────────────────────────────────────
-    def _extract_postal_ca(text: str) -> str:
-        if not text:
-            return ""
-        m = re.search(r"\b([A-Z]\d[A-Z])\s?(\d[A-Z]\d)\b", str(text).upper())
-        return (m.group(1) + m.group(2)) if m else ""
-
-    # Normalize tech postal/FSA
-    if "postal" not in tech_df.columns:
-        tech_df["postal"] = tech_df["home_address"].apply(_extract_postal_ca)
-    tech_df["postal"] = tech_df["postal"].fillna("").astype(str).str.upper().str.replace(" ", "", regex=False)
-    tech_df["fsa"] = tech_df["postal"].astype(str).str[:3]
-
-    # Jobs postal/FSA (try column, else regex on address)
-    jobs["postal"] = ""
-    if COL_POST:
-        jobs["postal"] = jobs_raw[COL_POST].fillna("").astype(str).str.upper().str.replace(" ", "", regex=False)
-    jobs.loc[jobs["postal"].str.len() < 6, "postal"] = jobs.loc[jobs["postal"].str.len() < 6, "address"].apply(_extract_postal_ca)
-    jobs["fsa"] = jobs["postal"].astype(str).str[:3]
-
-    tech_names_all = sorted(tech_df["tech_name"].astype(str).tolist())
-    tech_home_map_all = {t: tech_df.loc[tech_df["tech_name"] == t, "home_address"].iloc[0] for t in tech_names_all}
-
-    # Tech signature for caching
-    _tech_signature = "|".join([f"{t}::{tech_home_map_all[t]}" for t in tech_names_all])
-
-    @st.cache_data(ttl=60*60*24, show_spinner=False)
-    def _rank_techs_for_job(job_addr: str, tech_signature: str) -> List[str]:
-        # Use travel_min(home, job) for ranking (cached travel_min)
-        ranks = []
-        for t in tech_names_all:
-            h = tech_home_map_all.get(t, "")
-            ranks.append((t, travel_min(h, job_addr)))
-        ranks.sort(key=lambda x: x[1])
-        return [t for t, _ in ranks]
-
-    def _candidates_for_job(job_addr: str, job_fsa: str, k_solo: int = 3, k_duo: int = 6) -> Tuple[List[str], List[str]]:
-        job_fsa = (job_fsa or "").strip().upper()
-        same_fsa = tech_df.loc[tech_df["fsa"] == job_fsa, "tech_name"].astype(str).tolist() if job_fsa else []
-
-        # Start with same FSA
-        solo = same_fsa[:k_solo]
-        duo = same_fsa[:k_duo]
-
-        # Fill with distance-ranked techs if needed
-        if len(duo) < k_duo or len(solo) < k_solo:
-            ranked = _rank_techs_for_job(job_addr, _tech_signature)
-            for t in ranked:
-                if len(solo) < k_solo and t not in solo:
-                    solo.append(t)
-                if len(duo) < k_duo and t not in duo:
-                    duo.append(t)
-                if len(solo) >= k_solo and len(duo) >= k_duo:
-                    break
-
-        return solo, duo
-
-    # Attach candidates to jobs (fast filter for greedy)
-    # candidates: list of best techs for SOLO assignment
-    # duo_candidates: list of best techs to consider for DUO pairing
-    solo_cands = []
-    duo_cands = []
-    for _, r in jobs.iterrows():
-        s, d = _candidates_for_job(str(r["address"]), str(r.get("fsa", "")), k_solo=3, k_duo=6)
-        solo_cands.append(s)
-        duo_cands.append(d)
-    jobs["candidates"] = solo_cands
-    jobs["duo_candidates"] = duo_cands
-
-    # ────────────────────────────────────────────────────────────────
     # Month scheduler with DUO booking + sequence + return home (Mon-Fri)
+    # + MIDDAY LUNCH INSERTION per tech/day (visual coherence with 8h wall-time)
     # ────────────────────────────────────────────────────────────────
     def schedule_month_with_duo(
         jobs_in: pd.DataFrame,
@@ -1156,6 +1187,7 @@ def render_page_2():
         progress=None,
         progress_text=None
     ) -> dict:
+        # active budget = wall-time minus lunch
         available = int(round(day_hours * 60)) - int(lunch_min)
         if available <= 0:
             return {"success": False, "rows": [], "remaining": jobs_in, "reason": "Heures/jour - pause <= 0"}
@@ -1174,10 +1206,12 @@ def render_page_2():
 
         total_steps = max(1, len(month_days))
         for di, day in enumerate(month_days):
-            # per-tech state for the day
+            # per-tech state for the day (active timeline)
             used = {t: 0 for t in tech_names}
             cur_loc = {t: home_map[t] for t in tech_names}
             jobs_count = {t: 0 for t in tech_names}  # ✅ used as "sequence"
+
+            day_rows = []  # collect rows for the day, then inject lunch per tech
 
             # ---- 1) DUO first ----
             if allow_duo and (not duo_jobs.empty) and len(tech_names) >= 2:
@@ -1186,39 +1220,17 @@ def render_page_2():
                         break
 
                     best = None
-
-                    # ✅ OPTIMISATION: sample DUO plus grand + filtré sur techniciens candidats
-                    def _job_has_any_candidate(job_row) -> bool:
-                        cand = job_row.get("duo_candidates", [])
-                        if not isinstance(cand, list) or not cand:
-                            return True  # fallback
-                        return any(t in tech_names for t in cand)
-
-                    duo_pool = duo_jobs[duo_jobs.apply(_job_has_any_candidate, axis=1)]
-                    if duo_pool.empty:
-                        duo_pool = duo_jobs
-
-                    sample = duo_pool.head(120) if len(duo_pool) > 120 else duo_pool
+                    sample = duo_jobs.head(80) if len(duo_jobs) > 80 else duo_jobs
 
                     for jidx, job in sample.iterrows():
                         addr = job["address"]
                         job_min = int(job["job_minutes"])
                         need_block = job_min + int(buffer_job)
 
-                        # ✅ OPTIMISATION: limiter les paires aux candidats du job
-                        cand = job.get("duo_candidates", [])
-                        if isinstance(cand, list) and cand:
-                            cand_techs = [t for t in cand if t in tech_names]
-                        else:
-                            cand_techs = tech_names[:]  # fallback
-
-                        if len(cand_techs) < 2:
-                            continue
-
-                        for i in range(len(cand_techs)):
-                            for k in range(i + 1, len(cand_techs)):
-                                t1 = cand_techs[i]
-                                t2 = cand_techs[k]
+                        for i in range(len(tech_names)):
+                            for k in range(i + 1, len(tech_names)):
+                                t1 = tech_names[i]
+                                t2 = tech_names[k]
 
                                 if jobs_count[t1] >= int(max_jobs_per_day) or jobs_count[t2] >= int(max_jobs_per_day):
                                     continue
@@ -1229,7 +1241,7 @@ def render_page_2():
                                 start_m = max(used[t1] + int(t1_tr), used[t2] + int(t2_tr))
                                 end_m = start_m + need_block
 
-                                # ✅ return home constraint for BOTH techs
+                                # ✅ return home constraint for BOTH techs (active budget)
                                 t1_back = travel_min(addr, home_map[t1])
                                 t2_back = travel_min(addr, home_map[t2])
 
@@ -1247,7 +1259,7 @@ def render_page_2():
                     # add two rows, same job/time, with sequences
                     for tname, trv in [(t1, t1_tr), (t2, t2_tr)]:
                         jobs_count[tname] += 1  # ✅ increment sequence
-                        planned_rows.append({
+                        day_rows.append({
                             "date": day.isoformat(),
                             "technicien": tname,
                             "sequence": jobs_count[tname],  # ✅ sequence kept
@@ -1286,21 +1298,11 @@ def render_page_2():
                         best_cost = None
                         best_t = None
 
-                        # ✅ OPTIMISATION: pool SOLO filtré sur candidats de ce tech (sinon fallback)
-                        if "candidates" in solo_jobs.columns:
-                            solo_pool = solo_jobs[solo_jobs["candidates"].apply(lambda lst: isinstance(lst, list) and (t in lst))]
-                            if solo_pool.empty:
-                                solo_pool = solo_jobs
-                        else:
-                            solo_pool = solo_jobs
-
-                        # Sample plus large (meilleure qualité)
-                        sample = solo_pool.head(200) if len(solo_pool) > 200 else solo_pool
-
+                        sample = solo_jobs.head(60) if len(solo_jobs) > 60 else solo_jobs
                         for idx, job in sample.iterrows():
                             tmin = travel_min(cur_loc[t], job["address"])
 
-                            # ✅ return home constraint included
+                            # ✅ return home constraint included (active budget)
                             tback = travel_min(job["address"], home_map[t])
 
                             need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
@@ -1322,7 +1324,7 @@ def render_page_2():
                         start_m = used[t] + int(best_t)
                         end_m = start_m + int(job["job_minutes"]) + int(buffer_job)
 
-                        planned_rows.append({
+                        day_rows.append({
                             "date": day.isoformat(),
                             "technicien": t,
                             "sequence": jobs_count[t],  # ✅ sequence kept
@@ -1343,12 +1345,12 @@ def render_page_2():
                         solo_jobs = solo_jobs[solo_jobs["job_id"] != job["job_id"]].copy()
                         made_progress = True
 
-            # ✅ Ajouter une ligne "Retour domicile (estimé)" pour chaque tech qui a travaillé ce jour-là
+            # ✅ Add RETURN_HOME row (active timeline, still within available)
             for t in tech_names:
                 if jobs_count[t] > 0:
                     tback = travel_min(cur_loc[t], home_map[t])
 
-                    planned_rows.append({
+                    day_rows.append({
                         "date": day.isoformat(),
                         "technicien": t,
                         "sequence": jobs_count[t] + 1,
@@ -1366,6 +1368,19 @@ def render_page_2():
 
                     used[t] = int(used[t]) + int(tback)
                     cur_loc[t] = home_map[t]
+
+            # ✅ MIDDAY LUNCH insertion per tech (visual coherence with wall-time)
+            for t in tech_names:
+                tech_rows = [r for r in day_rows if r.get("technicien") == t]
+                if not tech_rows:
+                    continue
+
+                # sort by active debut for correct midpoint placement
+                tech_rows = sorted(tech_rows, key=lambda r: hhmm_to_mm(r.get("debut", "00:00")))
+
+                tech_rows = apply_midday_lunch(tech_rows, int(lunch_min))
+
+                planned_rows.extend(tech_rows)
 
             # progress
             if progress is not None:
@@ -1398,7 +1413,8 @@ def render_page_2():
     tech_names_all = sorted(tech_df["tech_name"].astype(str).tolist())
 
     # ────────────────────────────────────────────────────────────────
-    # MODE A — DAY / 1 TECH (keep same logic + service filter + return home)
+    # MODE A — DAY / 1 TECH (keep same logic + service filter)
+    # + MIDDAY LUNCH (visual coherence with wall-time)
     # ────────────────────────────────────────────────────────────────
     if mode == "1 journée / 1 technicien (mode actuel)":
         st.subheader("🧰 Planning 1 journée / 1 technicien")
@@ -1431,6 +1447,7 @@ def render_page_2():
         run = st.button("🚀 Générer la journée", type="primary", key="p2_run")
 
         if run:
+            # active budget = wall-time minus lunch
             available = int(round(day_hours * 60)) - int(lunch_min)
 
             remaining = jobs.copy()
@@ -1452,18 +1469,12 @@ def render_page_2():
                 if remaining.empty:
                     break
 
-                # ✅ OPTIMISATION (jour): pool candidats (si dispo), sinon fallback
-                if "candidates" in remaining.columns:
-                    pool = remaining[remaining["candidates"].apply(lambda lst: isinstance(lst, list) and (chosen_tech in lst))]
-                    if pool.empty:
-                        pool = remaining
-                else:
-                    pool = remaining
-
-                sample = pool.head(200) if len(pool) > 200 else pool
+                sample = remaining.head(60) if len(remaining) > 60 else remaining
 
                 for idx, job in sample.iterrows():
                     tmin = travel_min(cur_loc, job["address"])
+
+                    # ✅ include return-to-home in feasibility (active budget)
                     tback = travel_min(job["address"], home_addr)
 
                     need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
@@ -1506,6 +1517,30 @@ def render_page_2():
                 if seq >= int(max_jobs):
                     break
 
+            # (Optionnel selon ton design) : si tu veux aussi afficher le retour maison en mode journée,
+            # tu peux décommenter ce bloc sans changer la logique :
+            # if seq > 0:
+            #     tback = travel_min(cur_loc, home_addr)
+            #     day_rows.append({
+            #         "technicien": chosen_tech,
+            #         "sequence": seq + 1,
+            #         "job_id": "RETURN_HOME",
+            #         "duo": "",
+            #         "debut": mm_to_hhmm(int(used)),
+            #         "fin": mm_to_hhmm(int(used) + int(tback)),
+            #         "adresse": home_addr,
+            #         "travel_min": int(tback),
+            #         "job_min": 0,
+            #         "buffer_min": 0,
+            #         "techs_needed": 1,
+            #         "description": "🏠 Retour domicile (estimé)",
+            #     })
+            #     used = int(used) + int(tback)
+
+            # ✅ Insert lunch in the middle (visual), shift subsequent rows
+            day_rows = sorted(day_rows, key=lambda r: hhmm_to_mm(r.get("debut", "00:00")))
+            day_rows = apply_midday_lunch(day_rows, int(lunch_min))
+
             st.session_state["planning_day_rows"] = day_rows
             st.session_state["planning_remaining_count"] = len(remaining)
 
@@ -1518,17 +1553,18 @@ def render_page_2():
             day_df = day_df.sort_values(["technicien", "sequence", "debut"], ascending=True).reset_index(drop=True)
             st.dataframe(style_duo(day_df), use_container_width=True)
 
-            available = int(round(st.session_state.get("p2_day_hours", 8.0) * 60)) - int(st.session_state.get("p2_lunch", 30))
+            # Note: résumé "actif" (sans lunch row) reste possible, mais ton affichage est maintenant cohérent
+            available_active = int(round(st.session_state.get("p2_day_hours", 8.0) * 60)) - int(st.session_state.get("p2_lunch", 30))
             total_travel = int(day_df["travel_min"].sum())
             total_job = int(day_df["job_min"].sum())
             total_buffer = int(day_df["buffer_min"].sum())
-            total = total_travel + total_job + total_buffer
+            total_active = total_travel + total_job + total_buffer
 
             st.subheader("📊 Résumé")
             st.write(f"**Total travel:** {total_travel} min")
             st.write(f"**Total job:** {total_job} min")
             st.write(f"**Total buffer:** {total_buffer} min")
-            st.write(f"**Total utilisé (sans afficher le retour):** {total} / {available} min")
+            st.write(f"**Total actif (hors pause):** {total_active} / {available_active} min")
 
             st.subheader("🧩 Jobs non planifiés")
             st.caption(f"Reste (approx): {st.session_state.get('planning_remaining_count', '—')} job(s)")
@@ -1600,7 +1636,6 @@ def render_page_2():
                 progress.progress(100)
                 progress_text.write("Terminé ✅")
 
-        # Display persisted month results
         month_rows_saved = st.session_state.get("planning_month_rows", [])
         if month_rows_saved and st.session_state.get("planning_month_mode") == "fixed":
             st.divider()
@@ -1614,7 +1649,6 @@ def render_page_2():
 
             month_df = pd.DataFrame(month_rows_saved)
 
-            # ✅ sorting for readability: date → technicien → sequence → debut
             sort_cols = [c for c in ["date", "technicien", "sequence", "debut"] if c in month_df.columns]
             month_df = month_df.sort_values(sort_cols, ascending=True).reset_index(drop=True)
 
@@ -1629,7 +1663,7 @@ def render_page_2():
             st.subheader("👷 Vue par technicien")
             for tech in sorted(month_df["technicien"].dropna().unique()):
                 st.markdown(f"### {tech}")
-                sub = month_df[month_df["technicien"] == tech].sort_values(["date", "sequence", "debut"], ascending=True)
+                sub = month_df[month_df["technicien"] == tech].sort_values(["date", "debut"], ascending=True)
                 st.dataframe(style_duo(sub), use_container_width=True)
 
             st.subheader("🧩 Jobs non planifiés")
@@ -1676,7 +1710,7 @@ def render_page_2():
                 chosen = tech_names_all[:k]
 
                 if allow_duo and (jobs["techs_needed"] == 2).any() and len(chosen) < 2:
-                    continue  # need at least 2 techs to schedule DUO
+                    continue
 
                 outer_text.write(f"Essai avec {k} technicien(s)…")
                 inner_progress = st.progress(0)
@@ -1734,7 +1768,6 @@ def render_page_2():
 
             month_df = pd.DataFrame(month_rows_saved)
 
-            # ✅ sorting for readability: date → technicien → sequence → debut
             sort_cols = [c for c in ["date", "technicien", "sequence", "debut"] if c in month_df.columns]
             month_df = month_df.sort_values(sort_cols, ascending=True).reset_index(drop=True)
 
@@ -1749,7 +1782,7 @@ def render_page_2():
             st.subheader("👷 Vue par technicien")
             for tech in sorted(month_df["technicien"].dropna().unique()):
                 st.markdown(f"### {tech}")
-                sub = month_df[month_df["technicien"] == tech].sort_values(["date", "sequence", "debut"], ascending=True)
+                sub = month_df[month_df["technicien"] == tech].sort_values(["date", "debut"], ascending=True)
                 st.dataframe(style_duo(sub), use_container_width=True)
 
             st.subheader("🧩 Jobs non planifiés")
