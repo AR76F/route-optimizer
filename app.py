@@ -1262,7 +1262,7 @@ def render_page_2():
 
                      # Mettre à jour l'état de la journée (utile si tu ajoutes des checks plus tard)
                     used[t] = int(used[t]) + int(tback)
-                     cur_loc[t] = home_map[t]
+                    cur_loc[t] = home_map[t]
 
             # progress
             if progress is not None:
