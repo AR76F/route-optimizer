@@ -831,6 +831,7 @@ def render_page_1():
                 st.warning(f"Map rendering skipped: {e}")
 
         st.success(f"**Total distance:** {km:.1f} km • **Total time:** {mins:.0f} mins (live traffic)")
+
 import os
 import re
 import math
@@ -1070,6 +1071,77 @@ def render_page_2():
         return df
 
     # ────────────────────────────────────────────────────────────────
+    # ✅ OPTIMISATION: candidats proches (FSA + fallback distance home→job)
+    # ────────────────────────────────────────────────────────────────
+    def _extract_postal_ca(text: str) -> str:
+        if not text:
+            return ""
+        m = re.search(r"\b([A-Z]\d[A-Z])\s?(\d[A-Z]\d)\b", str(text).upper())
+        return (m.group(1) + m.group(2)) if m else ""
+
+    # Normalize tech postal/FSA
+    if "postal" not in tech_df.columns:
+        tech_df["postal"] = tech_df["home_address"].apply(_extract_postal_ca)
+    tech_df["postal"] = tech_df["postal"].fillna("").astype(str).str.upper().str.replace(" ", "", regex=False)
+    tech_df["fsa"] = tech_df["postal"].astype(str).str[:3]
+
+    # Jobs postal/FSA (try column, else regex on address)
+    jobs["postal"] = ""
+    if COL_POST:
+        jobs["postal"] = jobs_raw[COL_POST].fillna("").astype(str).str.upper().str.replace(" ", "", regex=False)
+    jobs.loc[jobs["postal"].str.len() < 6, "postal"] = jobs.loc[jobs["postal"].str.len() < 6, "address"].apply(_extract_postal_ca)
+    jobs["fsa"] = jobs["postal"].astype(str).str[:3]
+
+    tech_names_all = sorted(tech_df["tech_name"].astype(str).tolist())
+    tech_home_map_all = {t: tech_df.loc[tech_df["tech_name"] == t, "home_address"].iloc[0] for t in tech_names_all}
+
+    # Tech signature for caching
+    _tech_signature = "|".join([f"{t}::{tech_home_map_all[t]}" for t in tech_names_all])
+
+    @st.cache_data(ttl=60*60*24, show_spinner=False)
+    def _rank_techs_for_job(job_addr: str, tech_signature: str) -> List[str]:
+        # Use travel_min(home, job) for ranking (cached travel_min)
+        ranks = []
+        for t in tech_names_all:
+            h = tech_home_map_all.get(t, "")
+            ranks.append((t, travel_min(h, job_addr)))
+        ranks.sort(key=lambda x: x[1])
+        return [t for t, _ in ranks]
+
+    def _candidates_for_job(job_addr: str, job_fsa: str, k_solo: int = 3, k_duo: int = 6) -> Tuple[List[str], List[str]]:
+        job_fsa = (job_fsa or "").strip().upper()
+        same_fsa = tech_df.loc[tech_df["fsa"] == job_fsa, "tech_name"].astype(str).tolist() if job_fsa else []
+
+        # Start with same FSA
+        solo = same_fsa[:k_solo]
+        duo = same_fsa[:k_duo]
+
+        # Fill with distance-ranked techs if needed
+        if len(duo) < k_duo or len(solo) < k_solo:
+            ranked = _rank_techs_for_job(job_addr, _tech_signature)
+            for t in ranked:
+                if len(solo) < k_solo and t not in solo:
+                    solo.append(t)
+                if len(duo) < k_duo and t not in duo:
+                    duo.append(t)
+                if len(solo) >= k_solo and len(duo) >= k_duo:
+                    break
+
+        return solo, duo
+
+    # Attach candidates to jobs (fast filter for greedy)
+    # candidates: list of best techs for SOLO assignment
+    # duo_candidates: list of best techs to consider for DUO pairing
+    solo_cands = []
+    duo_cands = []
+    for _, r in jobs.iterrows():
+        s, d = _candidates_for_job(str(r["address"]), str(r.get("fsa", "")), k_solo=3, k_duo=6)
+        solo_cands.append(s)
+        duo_cands.append(d)
+    jobs["candidates"] = solo_cands
+    jobs["duo_candidates"] = duo_cands
+
+    # ────────────────────────────────────────────────────────────────
     # Month scheduler with DUO booking + sequence + return home (Mon-Fri)
     # ────────────────────────────────────────────────────────────────
     def schedule_month_with_duo(
@@ -1114,17 +1186,39 @@ def render_page_2():
                         break
 
                     best = None
-                    sample = duo_jobs.head(80) if len(duo_jobs) > 80 else duo_jobs
+
+                    # ✅ OPTIMISATION: sample DUO plus grand + filtré sur techniciens candidats
+                    def _job_has_any_candidate(job_row) -> bool:
+                        cand = job_row.get("duo_candidates", [])
+                        if not isinstance(cand, list) or not cand:
+                            return True  # fallback
+                        return any(t in tech_names for t in cand)
+
+                    duo_pool = duo_jobs[duo_jobs.apply(_job_has_any_candidate, axis=1)]
+                    if duo_pool.empty:
+                        duo_pool = duo_jobs
+
+                    sample = duo_pool.head(120) if len(duo_pool) > 120 else duo_pool
 
                     for jidx, job in sample.iterrows():
                         addr = job["address"]
                         job_min = int(job["job_minutes"])
                         need_block = job_min + int(buffer_job)
 
-                        for i in range(len(tech_names)):
-                            for k in range(i + 1, len(tech_names)):
-                                t1 = tech_names[i]
-                                t2 = tech_names[k]
+                        # ✅ OPTIMISATION: limiter les paires aux candidats du job
+                        cand = job.get("duo_candidates", [])
+                        if isinstance(cand, list) and cand:
+                            cand_techs = [t for t in cand if t in tech_names]
+                        else:
+                            cand_techs = tech_names[:]  # fallback
+
+                        if len(cand_techs) < 2:
+                            continue
+
+                        for i in range(len(cand_techs)):
+                            for k in range(i + 1, len(cand_techs)):
+                                t1 = cand_techs[i]
+                                t2 = cand_techs[k]
 
                                 if jobs_count[t1] >= int(max_jobs_per_day) or jobs_count[t2] >= int(max_jobs_per_day):
                                     continue
@@ -1192,7 +1286,17 @@ def render_page_2():
                         best_cost = None
                         best_t = None
 
-                        sample = solo_jobs.head(60) if len(solo_jobs) > 60 else solo_jobs
+                        # ✅ OPTIMISATION: pool SOLO filtré sur candidats de ce tech (sinon fallback)
+                        if "candidates" in solo_jobs.columns:
+                            solo_pool = solo_jobs[solo_jobs["candidates"].apply(lambda lst: isinstance(lst, list) and (t in lst))]
+                            if solo_pool.empty:
+                                solo_pool = solo_jobs
+                        else:
+                            solo_pool = solo_jobs
+
+                        # Sample plus large (meilleure qualité)
+                        sample = solo_pool.head(200) if len(solo_pool) > 200 else solo_pool
+
                         for idx, job in sample.iterrows():
                             tmin = travel_min(cur_loc[t], job["address"])
 
@@ -1238,12 +1342,12 @@ def render_page_2():
                         cur_loc[t] = job["address"]
                         solo_jobs = solo_jobs[solo_jobs["job_id"] != job["job_id"]].copy()
                         made_progress = True
-             # ✅ Ajouter une ligne "Retour domicile (estimé)" pour chaque tech qui a travaillé ce jour-là
+
+            # ✅ Ajouter une ligne "Retour domicile (estimé)" pour chaque tech qui a travaillé ce jour-là
             for t in tech_names:
                 if jobs_count[t] > 0:
                     tback = travel_min(cur_loc[t], home_map[t])
 
-                    # Séquence: dernier job + 1
                     planned_rows.append({
                         "date": day.isoformat(),
                         "technicien": t,
@@ -1260,7 +1364,6 @@ def render_page_2():
                         "description": "🏠 Retour domicile (estimé)",
                     })
 
-                     # Mettre à jour l'état de la journée (utile si tu ajoutes des checks plus tard)
                     used[t] = int(used[t]) + int(tback)
                     cur_loc[t] = home_map[t]
 
@@ -1349,12 +1452,18 @@ def render_page_2():
                 if remaining.empty:
                     break
 
-                sample = remaining.head(60) if len(remaining) > 60 else remaining
+                # ✅ OPTIMISATION (jour): pool candidats (si dispo), sinon fallback
+                if "candidates" in remaining.columns:
+                    pool = remaining[remaining["candidates"].apply(lambda lst: isinstance(lst, list) and (chosen_tech in lst))]
+                    if pool.empty:
+                        pool = remaining
+                else:
+                    pool = remaining
+
+                sample = pool.head(200) if len(pool) > 200 else pool
 
                 for idx, job in sample.iterrows():
                     tmin = travel_min(cur_loc, job["address"])
-
-                    # ✅ include return-to-home in feasibility
                     tback = travel_min(job["address"], home_addr)
 
                     need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
@@ -1653,6 +1762,7 @@ def render_page_2():
                     duo_left = int((unplanned_df["techs_needed"].astype(int) == 2).sum())
                     if duo_left > 0:
                         st.warning(f"⚠️ Jobs DUO restants (techs_needed=2): {duo_left}")
+
 # ────────────────────────────────────────────────────────────────
 # Router
 # ────────────────────────────────────────────────────────────────
