@@ -831,9 +831,19 @@ def render_page_1():
                 st.warning(f"Map rendering skipped: {e}")
 
         st.success(f"**Total distance:** {km:.1f} km • **Total time:** {mins:.0f} mins (live traffic)")
+import os
+import re
+import math
+import calendar
+from io import BytesIO
+from datetime import datetime, date, timedelta
+from typing import List, Optional, Tuple
+
+import streamlit as st
+import pandas as pd
 
 # ────────────────────────────────────────────────────────────────
-# PAGE 2 (Planning) — persist upload + results + 3 modes
+# PAGE 2 (Planning) — persist upload + results + 3 modes + DUO + progress
 # ────────────────────────────────────────────────────────────────
 def render_page_2():
     st.title("📅 Planning (Page 2)")
@@ -841,7 +851,6 @@ def render_page_2():
     # Load tech_home from page 1 (or build fallback)
     tech_df = st.session_state.get("tech_home")
     if tech_df is None or len(tech_df) == 0:
-        # fallback build (so page 2 works even if user didn't open the tab on page 1)
         def _extract_postal(addr: str) -> str:
             if not addr:
                 return ""
@@ -859,7 +868,9 @@ def render_page_2():
         st.error("`tech_home` doit contenir `tech_name` et `home_address`.")
         st.stop()
 
+    # ────────────────────────────────────────────────────────────────
     # Upload Jobs Excel (persistant)
+    # ────────────────────────────────────────────────────────────────
     st.subheader("📤 Jobs – Upload Excel")
     uploaded = st.file_uploader("Upload ton fichier Excel jobs", type=["xlsx"], key="jobs_uploader")
 
@@ -942,23 +953,36 @@ def render_page_2():
     jobs = jobs.drop_duplicates(subset=["job_id"]).reset_index(drop=True)
 
     # ────────────────────────────────────────────────────────────────
-    # MODE SELECTOR (NEW)
+    # Shared helpers
     # ────────────────────────────────────────────────────────────────
-    st.divider()
-    st.subheader("🧭 Mode de planification")
+    MONTHS_FR = [
+        "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+        "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
+    ]
 
-    mode = st.radio(
-        "Choisir un mode",
-        [
-            "1 journée / 1 technicien (mode actuel)",
-            "Mois complet — techniciens choisis par l'utilisateur",
-            "Mois complet — techniciens choisis automatiquement",
-        ],
-        horizontal=True,
-        key="p2_mode"
-    )
+    def month_selector(prefix: str) -> Tuple[date, date]:
+        today = date.today()
+        c1, c2 = st.columns(2)
+        with c1:
+            year = st.selectbox("Année", list(range(today.year - 1, today.year + 3)), index=1, key=f"{prefix}_year")
+        with c2:
+            month_name = st.selectbox("Mois", MONTHS_FR, index=today.month - 1, key=f"{prefix}_month")
+        month_num = MONTHS_FR.index(month_name) + 1
+        month_start = date(year, month_num, 1)
+        last_day = calendar.monthrange(year, month_num)[1]
+        month_end = date(year, month_num, last_day)
+        st.caption(f"📅 Période planifiée : {month_start} → {month_end} (lundi→vendredi)")
+        return month_start, month_end
 
-    # Distance function (cached) — unchanged (moved up so month mode can use it too)
+    def business_days(start: date, end: date) -> List[date]:
+        out = []
+        d = start
+        while d <= end:
+            if d.weekday() < 5:  # 0=Mon ... 4=Fri
+                out.append(d)
+            d += timedelta(days=1)
+        return out
+
     @st.cache_data(ttl=60*60*12, show_spinner=False)
     def travel_min(origin: str, dest: str) -> int:
         if not origin or not dest:
@@ -978,92 +1002,242 @@ def render_page_2():
         mm = m % 60
         return f"{h:02d}:{mm:02d}"
 
-    # Helper: month planner using the SAME greedy logic as your day planner,
-    # repeated for each tech and each day. (No multi-tech jobs unless filtered.)
-    def plan_one_day_greedy(remaining_jobs: pd.DataFrame, tech_name: str, home_addr: str,
-                           day_hours: float, lunch_min: int, buffer_job: int, max_jobs: int,
-                           only_one: bool):
-        available = int(round(day_hours * 60)) - int(lunch_min)
-        remaining = remaining_jobs.copy()
+    def style_duo(df: pd.DataFrame):
+        if df is None or df.empty or "techs_needed" not in df.columns:
+            return df
+        def _row_style(row):
+            if int(row.get("techs_needed", 1)) >= 2:
+                return ["background-color: #fff3cd"] * len(row)  # jaune pâle
+            return [""] * len(row)
+        return df.style.apply(_row_style, axis=1)
 
-        if only_one:
-            remaining = remaining[remaining["techs_needed"] <= 1].copy()
+    # Simple keyword filter for "Generator Inspection"
+    INSPECTION_KEYWORDS = ["inspection", "generator inspection", "génératrice inspection", "inspection génératrice"]
 
-        used = 0
-        seq = 0
-        cur_loc = home_addr
-        day_rows = []
-
-        while True:
-            best_idx = None
-            best_cost = None
-            best_t = None
-
-            if remaining.empty:
-                break
-
-            sample = remaining.head(60) if len(remaining) > 60 else remaining
-
-            for idx, job in sample.iterrows():
-                tmin = travel_min(cur_loc, job["address"])
-                need = int(tmin) + int(job["job_minutes"]) + int(buffer_job)
-                if need <= 0:
-                    continue
-                if used + need <= available:
-                    if best_cost is None or tmin < best_cost:
-                        best_idx = idx
-                        best_cost = tmin
-                        best_t = int(tmin)
-
-            if best_idx is None:
-                break
-
-            job = remaining.loc[best_idx]
-            seq += 1
-
-            start_m = used + best_t
-            end_m = start_m + int(job["job_minutes"]) + int(buffer_job)
-
-            day_rows.append({
-                "technicien": tech_name,
-                "sequence": seq,
-                "job_id": job["job_id"],
-                "adresse": job["address"],
-                "travel_min": best_t,
-                "job_min": int(job["job_minutes"]),
-                "buffer_min": int(buffer_job),
-                "debut": mm_to_hhmm(start_m),
-                "fin": mm_to_hhmm(end_m),
-                "description": job["description"],
-                "techs_needed": int(job["techs_needed"]),
-            })
-
-            used = end_m
-            cur_loc = job["address"]
-            remaining = remaining[remaining["job_id"] != job["job_id"]].copy()
-
-            if seq >= int(max_jobs):
-                break
-
-        # return scheduled rows + remaining jobs (original remaining_jobs minus planned ones)
-        planned_ids = {r["job_id"] for r in day_rows}
-        remaining_out = remaining_jobs[~remaining_jobs["job_id"].isin(planned_ids)].copy()
-        return day_rows, remaining_out
-
-    def month_range_from_any_date(d: date):
-        month_start = d.replace(day=1)
-        next_month = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
-        month_end = next_month - timedelta(days=1)
-        return month_start, month_end
+    def filter_by_service_type(df: pd.DataFrame, mode_label: str) -> pd.DataFrame:
+        if mode_label == "Inclure full service (tous les jobs)":
+            return df
+        if "description" not in df.columns:
+            return df
+        s = df["description"].fillna("").astype(str).str.lower()
+        mask = False
+        for kw in INSPECTION_KEYWORDS:
+            mask = mask | s.str.contains(kw, na=False)
+        if mode_label == "Generator inspection seulement":
+            return df[mask].copy()
+        if mode_label == "Exclure generator inspection":
+            return df[~mask].copy()
+        return df
 
     # ────────────────────────────────────────────────────────────────
-    # MODE A — YOUR EXISTING DAY PLANNER (UNCHANGED, only indented)
+    # Month scheduling with DUO booking
+    # - DUO jobs (techs_needed==2) are scheduled first and reserve two techs at same time
+    # - Single jobs are then scheduled per-tech using your greedy approach (same cost logic)
+    # - Monday-Friday only
+    # ────────────────────────────────────────────────────────────────
+    def schedule_month_with_duo(jobs_in: pd.DataFrame,
+                                tech_names: List[str],
+                                month_days: List[date],
+                                day_hours: float,
+                                lunch_min: int,
+                                buffer_job: int,
+                                max_jobs_per_day: int,
+                                allow_duo: bool,
+                                progress=None,
+                                progress_text=None) -> dict:
+        available = int(round(day_hours * 60)) - int(lunch_min)
+        if available <= 0:
+            return {"success": False, "rows": [], "remaining": jobs_in, "reason": "Heures/jour - pause <= 0"}
+
+        remaining = jobs_in.copy()
+
+        # Split
+        duo_jobs = remaining[remaining["techs_needed"] == 2].copy() if allow_duo else remaining.iloc[0:0].copy()
+        solo_jobs = remaining[remaining["techs_needed"] <= 1].copy()
+
+        # We'll update remaining by removing planned ids from both
+        planned_rows = []
+
+        total_steps = max(1, len(month_days))
+        for di, day in enumerate(month_days):
+            # Per-tech state for that day
+            used = {t: 0 for t in tech_names}
+            cur_loc = {t: tech_df.loc[tech_df["tech_name"] == t, "home_address"].iloc[0] for t in tech_names}
+            jobs_count = {t: 0 for t in tech_names}
+
+            # ---- 1) DUO scheduling first ----
+            if allow_duo and not duo_jobs.empty and len(tech_names) >= 2:
+                while True:
+                    # stop if no duo jobs left
+                    if duo_jobs.empty:
+                        break
+
+                    best = None  # (score, job_idx, t1, t2, start_m, end_m, t1_travel, t2_travel)
+                    sample = duo_jobs.head(80) if len(duo_jobs) > 80 else duo_jobs
+
+                    for jidx, job in sample.iterrows():
+                        addr = job["address"]
+                        job_min = int(job["job_minutes"])
+                        need_block = job_min + int(buffer_job)
+
+                        # try all pairs (small list normally)
+                        for i in range(len(tech_names)):
+                            for k in range(i + 1, len(tech_names)):
+                                t1 = tech_names[i]
+                                t2 = tech_names[k]
+
+                                # respect per-tech max jobs/day
+                                if jobs_count[t1] >= int(max_jobs_per_day) or jobs_count[t2] >= int(max_jobs_per_day):
+                                    continue
+
+                                t1_tr = travel_min(cur_loc[t1], addr)
+                                t2_tr = travel_min(cur_loc[t2], addr)
+
+                                # Same time slot: start is when both can be on site
+                                start_m = max(used[t1] + int(t1_tr), used[t2] + int(t2_tr))
+                                end_m = start_m + need_block
+
+                                if end_m <= available:
+                                    # score: minimize latest start, then minimize max travel
+                                    score = (start_m, max(int(t1_tr), int(t2_tr)))
+                                    if best is None or score < best[0]:
+                                        best = (score, jidx, t1, t2, start_m, end_m, int(t1_tr), int(t2_tr))
+
+                    if best is None:
+                        break
+
+                    _, jidx, t1, t2, start_m, end_m, t1_tr, t2_tr = best
+                    job = duo_jobs.loc[jidx]
+
+                    # add two rows, same job/time, tag DUO
+                    for tname, trv in [(t1, t1_tr), (t2, t2_tr)]:
+                        jobs_count[tname] += 1
+                        planned_rows.append({
+                            "date": day.isoformat(),
+                            "technicien": tname,
+                            "sequence": None,
+                            "job_id": job["job_id"],
+                            "adresse": job["address"],
+                            "travel_min": trv,
+                            "job_min": int(job["job_minutes"]),
+                            "buffer_min": int(buffer_job),
+                            "debut": mm_to_hhmm(int(start_m)),
+                            "fin": mm_to_hhmm(int(end_m)),
+                            "description": job["description"],
+                            "techs_needed": int(job["techs_needed"]),
+                            "duo": "⚠️ DUO",
+                        })
+
+                        used[tname] = int(end_m)
+                        cur_loc[tname] = job["address"]
+
+                    # remove planned job from duo_jobs
+                    duo_jobs = duo_jobs[duo_jobs["job_id"] != job["job_id"]].copy()
+
+            # ---- 2) SOLO greedy per tech (your logic, per tech stateful) ----
+            if not solo_jobs.empty:
+                # iterate techs, repeatedly, until no progress
+                made_progress = True
+                while made_progress:
+                    made_progress = False
+
+                    # stop if no solo jobs
+                    if solo_jobs.empty:
+                        break
+
+                    for t in tech_names:
+                        if solo_jobs.empty:
+                            break
+                        if jobs_count[t] >= int(max_jobs_per_day):
+                            continue
+
+                        best_idx = None
+                        best_cost = None
+                        best_t = None
+
+                        sample = solo_jobs.head(60) if len(solo_jobs) > 60 else solo_jobs
+                        for idx, job in sample.iterrows():
+                            tmin = travel_min(cur_loc[t], job["address"])
+                            need = int(tmin) + int(job["job_minutes"]) + int(buffer_job)
+                            if need <= 0:
+                                continue
+                            if used[t] + need <= available:
+                                if best_cost is None or int(tmin) < best_cost:
+                                    best_idx = idx
+                                    best_cost = int(tmin)
+                                    best_t = int(tmin)
+
+                        if best_idx is None:
+                            continue
+
+                        job = solo_jobs.loc[best_idx]
+                        jobs_count[t] += 1
+
+                        # keep your timing style: travel happens before start
+                        start_m = used[t] + int(best_t)
+                        end_m = start_m + int(job["job_minutes"]) + int(buffer_job)
+
+                        planned_rows.append({
+                            "date": day.isoformat(),
+                            "technicien": t,
+                            "sequence": None,
+                            "job_id": job["job_id"],
+                            "adresse": job["address"],
+                            "travel_min": int(best_t),
+                            "job_min": int(job["job_minutes"]),
+                            "buffer_min": int(buffer_job),
+                            "debut": mm_to_hhmm(int(start_m)),
+                            "fin": mm_to_hhmm(int(end_m)),
+                            "description": job["description"],
+                            "techs_needed": int(job["techs_needed"]),
+                            "duo": "",
+                        })
+
+                        used[t] = int(end_m)
+                        cur_loc[t] = job["address"]
+                        solo_jobs = solo_jobs[solo_jobs["job_id"] != job["job_id"]].copy()
+                        made_progress = True
+
+            # update progress once per day
+            if progress is not None:
+                progress.progress(int(((di + 1) / total_steps) * 100))
+            if progress_text is not None:
+                progress_text.write(f"Planification… {di+1}/{len(month_days)} jour(s) traités")
+
+        # remaining is what's left in duo_jobs + solo_jobs + (jobs needing >2 techs)
+        # We never schedule techs_needed > 2 in this version (they'll stay as remaining)
+        hard_jobs = remaining[remaining["techs_needed"] > 2].copy()
+        remaining_out = pd.concat([duo_jobs, solo_jobs, hard_jobs], ignore_index=True)
+
+        success = remaining_out.empty
+        return {"success": bool(success), "rows": planned_rows, "remaining": remaining_out}
+
+    # ────────────────────────────────────────────────────────────────
+    # MODE SELECTOR
+    # ────────────────────────────────────────────────────────────────
+    st.divider()
+    st.subheader("🧭 Mode de planification")
+
+    mode = st.radio(
+        "Choisir un mode",
+        [
+            "1 journée / 1 technicien (mode actuel)",
+            "Mois complet — techniciens choisis par l'utilisateur",
+            "Mois complet — techniciens choisis automatiquement",
+        ],
+        horizontal=True,
+        key="p2_mode"
+    )
+
+    tech_names_all = sorted(tech_df["tech_name"].astype(str).tolist())
+
+    # ────────────────────────────────────────────────────────────────
+    # MODE A — DAY / 1 TECH (keep same logic + NEW service filter + DUO highlight)
     # ────────────────────────────────────────────────────────────────
     if mode == "1 journée / 1 technicien (mode actuel)":
         st.subheader("🧰 Planning 1 journée / 1 technicien")
 
-        tech_names = tech_df["tech_name"].astype(str).tolist()
-        chosen_tech = st.selectbox("Choisir le technicien", sorted(tech_names), index=0, key="p2_chosen_tech")
+        chosen_tech = st.selectbox("Choisir le technicien", tech_names_all, index=0, key="p2_chosen_tech")
 
         home_addr = tech_df.loc[tech_df["tech_name"] == chosen_tech, "home_address"].iloc[0]
         st.caption(f"🏠 Adresse domicile: {home_addr}")
@@ -1078,15 +1252,24 @@ def render_page_2():
         with c4:
             max_jobs = st.number_input("Max jobs/jour", 1, 25, 10, 1, key="p2_max_jobs")
 
-        _ = st.columns(2)  # kept for layout parity (date/time not used in this v1)
+        _ = st.columns(2)  # kept for layout parity
 
         only_one = st.checkbox("Filtrer: seulement jobs à 1 technicien", value=False, key="p2_only_one")
+
+        service_choice = st.selectbox(
+            "Type de jobs",
+            ["Inclure full service (tous les jobs)", "Generator inspection seulement", "Exclure generator inspection"],
+            index=0,
+            key="p2_service_choice"
+        )
 
         run = st.button("🚀 Générer la journée", type="primary", key="p2_run")
 
         if run:
             available = int(round(day_hours * 60)) - int(lunch_min)
+
             remaining = jobs.copy()
+            remaining = filter_by_service_type(remaining, service_choice)
 
             if only_one:
                 remaining = remaining[remaining["techs_needed"] <= 1].copy()
@@ -1112,9 +1295,9 @@ def render_page_2():
                     if need <= 0:
                         continue
                     if used + need <= available:
-                        if best_cost is None or tmin < best_cost:
+                        if best_cost is None or int(tmin) < best_cost:
                             best_idx = idx
-                            best_cost = tmin
+                            best_cost = int(tmin)
                             best_t = int(tmin)
 
                 if best_idx is None:
@@ -1131,23 +1314,23 @@ def render_page_2():
                     "sequence": seq,
                     "job_id": job["job_id"],
                     "adresse": job["address"],
-                    "travel_min": best_t,
+                    "travel_min": int(best_t),
                     "job_min": int(job["job_minutes"]),
                     "buffer_min": int(buffer_job),
-                    "debut": mm_to_hhmm(start_m),
-                    "fin": mm_to_hhmm(end_m),
+                    "debut": mm_to_hhmm(int(start_m)),
+                    "fin": mm_to_hhmm(int(end_m)),
                     "description": job["description"],
                     "techs_needed": int(job["techs_needed"]),
+                    "duo": "⚠️ DUO" if int(job["techs_needed"]) >= 2 else "",
                 })
 
-                used = end_m
+                used = int(end_m)
                 cur_loc = job["address"]
                 remaining = remaining[remaining["job_id"] != job["job_id"]].copy()
 
                 if seq >= int(max_jobs):
                     break
 
-            # Persist results so switching pages doesn't reset
             st.session_state["planning_day_rows"] = day_rows
             st.session_state["planning_remaining_count"] = len(remaining)
 
@@ -1158,7 +1341,7 @@ def render_page_2():
             st.subheader("📋 Horaire de la journée (persistant)")
 
             day_df = pd.DataFrame(day_rows_saved)
-            st.dataframe(day_df, use_container_width=True)
+            st.dataframe(style_duo(day_df), use_container_width=True)
 
             available = int(round(st.session_state.get("p2_day_hours", 8.0) * 60)) - int(st.session_state.get("p2_lunch", 30))
             total_travel = int(day_df["travel_min"].sum())
@@ -1176,43 +1359,31 @@ def render_page_2():
             st.caption(f"Reste (approx): {st.session_state.get('planning_remaining_count', '—')} job(s)")
 
     # ────────────────────────────────────────────────────────────────
-    # MODE B — MONTH, USER CHOOSES TECHS
+    # MODE B — MONTH, USER CHOOSES TECHS + DUO booking + progress
     # ────────────────────────────────────────────────────────────────
     elif mode == "Mois complet — techniciens choisis par l'utilisateur":
         st.subheader("🗓️ Mois complet — techniciens choisis par l'utilisateur")
 
-        tech_names = sorted(tech_df["tech_name"].astype(str).tolist())
+        month_start, month_end = month_selector("p2m_fixed")
 
-        c1, c2 = st.columns(2)
-        with c1:
-            month_pick = st.date_input("Choisir un jour dans le mois", value=date.today(), key="p2_month_fixed")
-        with c2:
-            chosen_techs = st.multiselect(
-                "Choisir les techniciens",
-                options=tech_names,
-                default=st.session_state.get("p2_month_fixed_techs", []),
-                key="p2_month_fixed_techs"
-            )
-
-        # paramètres (on réutilise les mêmes que la journée, mais clés différentes pour éviter conflit)
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            day_hours_m = st.number_input("Heures/jour", 4.0, 14.0, float(st.session_state.get("p2_day_hours", 8.0)), 0.5, key="p2m_day_hours")
-        with c2:
-            lunch_min_m = st.number_input("Pause (min)", 0, 120, int(st.session_state.get("p2_lunch", 30)), 5, key="p2m_lunch")
-        with c3:
-            buffer_job_m = st.number_input("Buffer/job (min)", 0, 60, int(st.session_state.get("p2_buffer", 10)), 5, key="p2m_buffer")
-        with c4:
-            max_jobs_m = st.number_input("Max jobs/jour/tech", 1, 25, int(st.session_state.get("p2_max_jobs", 10)), 1, key="p2m_max_jobs")
-
-        only_one_month = st.checkbox(
-            "Filtrer: seulement jobs à 1 technicien (recommandé)",
-            value=True,
-            key="p2m_only_one"
+        chosen_techs = st.multiselect(
+            "Choisir les techniciens",
+            options=tech_names_all,
+            default=st.session_state.get("p2_month_fixed_techs", []),
+            key="p2_month_fixed_techs"
         )
 
-        month_start, month_end = month_range_from_any_date(month_pick)
-        st.caption(f"Période: {month_start} → {month_end}")
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            day_hours_m = st.number_input("Heures/jour", 4.0, 14.0, 8.0, 0.5, key="p2m_day_hours")
+        with c2:
+            lunch_min_m = st.number_input("Pause (min)", 0, 120, 30, 5, key="p2m_lunch")
+        with c3:
+            buffer_job_m = st.number_input("Buffer/job (min)", 0, 60, 10, 5, key="p2m_buffer")
+        with c4:
+            max_jobs_m = st.number_input("Max jobs/jour/tech", 1, 25, 10, 1, key="p2m_max_jobs")
+
+        allow_duo = st.checkbox("Autoriser booking DUO (techs_needed = 2)", value=True, key="p2m_allow_duo")
 
         run_month = st.button("🚀 Générer le mois (techs imposés)", type="primary", key="p2_run_month_fixed")
 
@@ -1220,67 +1391,73 @@ def render_page_2():
             if len(chosen_techs) == 0:
                 st.error("Choisis au moins 1 technicien.")
             else:
-                remaining = jobs.copy()
-                all_rows = []
+                days = business_days(month_start, month_end)
 
-                d = month_start
-                while d <= month_end and not remaining.empty:
-                    for t in chosen_techs:
-                        if remaining.empty:
-                            break
-                        home_addr = tech_df.loc[tech_df["tech_name"] == t, "home_address"].iloc[0]
-                        day_rows, remaining = plan_one_day_greedy(
-                            remaining_jobs=remaining,
-                            tech_name=t,
-                            home_addr=home_addr,
-                            day_hours=day_hours_m,
-                            lunch_min=lunch_min_m,
-                            buffer_job=buffer_job_m,
-                            max_jobs=max_jobs_m,
-                            only_one=only_one_month
-                        )
-                        for r in day_rows:
-                            r["date"] = d.isoformat()
-                        all_rows.extend(day_rows)
-                    d += timedelta(days=1)
+                progress = st.progress(0)
+                progress_text = st.empty()
 
-                success = remaining.empty
+                result = schedule_month_with_duo(
+                    jobs_in=jobs,
+                    tech_names=chosen_techs,
+                    month_days=days,
+                    day_hours=day_hours_m,
+                    lunch_min=lunch_min_m,
+                    buffer_job=buffer_job_m,
+                    max_jobs_per_day=max_jobs_m,
+                    allow_duo=allow_duo,
+                    progress=progress,
+                    progress_text=progress_text
+                )
 
-                st.session_state["planning_month_rows"] = all_rows
-                st.session_state["planning_month_remaining_count"] = int(len(remaining))
-                st.session_state["planning_month_success"] = bool(success)
-                st.session_state["planning_month_techs_used"] = chosen_techs
+                st.session_state["planning_month_rows"] = result["rows"]
+                st.session_state["planning_month_success"] = result["success"]
                 st.session_state["planning_month_mode"] = "fixed"
+                st.session_state["planning_month_techs_used"] = chosen_techs
+
+                remaining_df = result["remaining"].copy()
+                cols_show = ["job_id", "address", "description", "job_minutes", "techs_needed"]
+                remaining_show = remaining_df[cols_show].copy() if all(c in remaining_df.columns for c in cols_show) else remaining_df.copy()
+                st.session_state["planning_month_remaining_rows"] = remaining_show.to_dict("records")
+
+                progress.progress(100)
+                progress_text.write("Terminé ✅")
 
         # Display persisted month results
         month_rows_saved = st.session_state.get("planning_month_rows", [])
         if month_rows_saved and st.session_state.get("planning_month_mode") == "fixed":
             st.divider()
+            techs_used = st.session_state.get("planning_month_techs_used", [])
+
             if st.session_state.get("planning_month_success"):
-                st.success("Mois complété ✅")
+                st.success(f"Mois complété ✅ | Techs utilisés: {len(techs_used)}")
             else:
                 st.error("Impossible de compléter le mois avec le nombre de techniciens choisi ❌")
-                st.warning("Ajoute des techniciens (ou relâche des paramètres), puis relance.")
+                st.warning("Ajoute des techniciens ou ajuste les paramètres (heures/jour, max jobs, buffer).")
 
             month_df = pd.DataFrame(month_rows_saved)
-            # colonnes mieux ordonnées si présentes
-            preferred = ["date", "technicien", "sequence", "job_id", "adresse", "debut", "fin", "travel_min", "job_min", "buffer_min", "techs_needed", "description"]
+            preferred = ["date", "technicien", "job_id", "duo", "debut", "fin", "adresse", "travel_min", "job_min", "buffer_min", "techs_needed", "description"]
             cols = [c for c in preferred if c in month_df.columns] + [c for c in month_df.columns if c not in preferred]
             month_df = month_df[cols]
-            st.dataframe(month_df, use_container_width=True)
+            st.dataframe(style_duo(month_df), use_container_width=True)
 
             st.subheader("🧩 Jobs non planifiés")
-            st.caption(f"Reste (approx): {st.session_state.get('planning_month_remaining_count', '—')} job(s)")
-            if not st.session_state.get("planning_month_success"):
-                st.info("👉 Recommandation: sélectionne plus de techniciens et relance le mode 'Mois complet — techniciens choisis par l'utilisateur'.")
+            remaining_rows = st.session_state.get("planning_month_remaining_rows", [])
+            if remaining_rows:
+                unplanned_df = pd.DataFrame(remaining_rows)
+                st.dataframe(style_duo(unplanned_df), use_container_width=True)
+
+                if "techs_needed" in unplanned_df.columns:
+                    duo_left = int((unplanned_df["techs_needed"].astype(int) == 2).sum())
+                    if duo_left > 0:
+                        st.warning(f"⚠️ Jobs DUO restants (techs_needed=2): {duo_left}")
 
     # ────────────────────────────────────────────────────────────────
-    # MODE C — MONTH, AUTO SELECT TECHS
+    # MODE C — MONTH, AUTO TECHS + DUO booking + progress
     # ────────────────────────────────────────────────────────────────
     else:
         st.subheader("⚙️ Mois complet — techniciens choisis automatiquement")
 
-        month_pick = st.date_input("Choisir un jour dans le mois", value=date.today(), key="p2_month_auto")
+        month_start, month_end = month_selector("p2m_auto")
 
         c1, c2, c3, c4 = st.columns(4)
         with c1:
@@ -1292,68 +1469,62 @@ def render_page_2():
         with c4:
             max_jobs_m = st.number_input("Max jobs/jour/tech", 1, 25, 10, 1, key="p2a_max_jobs")
 
-        only_one_month = st.checkbox(
-            "Filtrer: seulement jobs à 1 technicien (recommandé)",
-            value=True,
-            key="p2a_only_one"
-        )
-
-        month_start, month_end = month_range_from_any_date(month_pick)
-        st.caption(f"Période: {month_start} → {month_end}")
+        allow_duo = st.checkbox("Autoriser booking DUO (techs_needed = 2)", value=True, key="p2a_allow_duo")
 
         run_month = st.button("🚀 Générer le mois (auto)", type="primary", key="p2_run_month_auto")
 
         if run_month:
-            tech_names = sorted(tech_df["tech_name"].astype(str).tolist())
-            remaining_base = jobs.copy()
+            days = business_days(month_start, month_end)
 
-            best_result = None
+            # progress for the outer loop too
+            outer_progress = st.progress(0)
+            outer_text = st.empty()
 
-            # On ajoute des techs progressivement jusqu'à compléter le mois
-            for k in range(1, len(tech_names) + 1):
-                chosen_techs = tech_names[:k]
-                remaining = remaining_base.copy()
-                all_rows = []
+            best = None
+            for k in range(1, len(tech_names_all) + 1):
+                chosen = tech_names_all[:k]
 
-                d = month_start
-                while d <= month_end and not remaining.empty:
-                    for t in chosen_techs:
-                        if remaining.empty:
-                            break
-                        home_addr = tech_df.loc[tech_df["tech_name"] == t, "home_address"].iloc[0]
-                        day_rows, remaining = plan_one_day_greedy(
-                            remaining_jobs=remaining,
-                            tech_name=t,
-                            home_addr=home_addr,
-                            day_hours=day_hours_m,
-                            lunch_min=lunch_min_m,
-                            buffer_job=buffer_job_m,
-                            max_jobs=max_jobs_m,
-                            only_one=only_one_month
-                        )
-                        for r in day_rows:
-                            r["date"] = d.isoformat()
-                        all_rows.extend(day_rows)
-                    d += timedelta(days=1)
+                outer_text.write(f"Essai avec {k} technicien(s)…")
+                inner_progress = st.progress(0)
+                inner_text = st.empty()
 
-                success = remaining.empty
-                best_result = {
-                    "rows": all_rows,
-                    "remaining_count": int(len(remaining)),
-                    "success": bool(success),
-                    "techs_used": chosen_techs,
+                result = schedule_month_with_duo(
+                    jobs_in=jobs,
+                    tech_names=chosen,
+                    month_days=days,
+                    day_hours=day_hours_m,
+                    lunch_min=lunch_min_m,
+                    buffer_job=buffer_job_m,
+                    max_jobs_per_day=max_jobs_m,
+                    allow_duo=allow_duo,
+                    progress=inner_progress,
+                    progress_text=inner_text
+                )
+
+                best = {
+                    "rows": result["rows"],
+                    "success": result["success"],
+                    "remaining": result["remaining"],
+                    "techs_used": chosen
                 }
 
-                if success:
+                outer_progress.progress(int((k / max(1, len(tech_names_all))) * 100))
+
+                if result["success"]:
                     break
 
-            st.session_state["planning_month_rows"] = best_result["rows"] if best_result else []
-            st.session_state["planning_month_remaining_count"] = best_result["remaining_count"] if best_result else 0
-            st.session_state["planning_month_success"] = best_result["success"] if best_result else False
-            st.session_state["planning_month_techs_used"] = best_result["techs_used"] if best_result else []
+            st.session_state["planning_month_rows"] = best["rows"] if best else []
+            st.session_state["planning_month_success"] = best["success"] if best else False
             st.session_state["planning_month_mode"] = "auto"
+            st.session_state["planning_month_techs_used"] = best["techs_used"] if best else []
 
-        # Display persisted month results
+            remaining_df = best["remaining"].copy() if best else pd.DataFrame()
+            cols_show = ["job_id", "address", "description", "job_minutes", "techs_needed"]
+            remaining_show = remaining_df[cols_show].copy() if (not remaining_df.empty and all(c in remaining_df.columns for c in cols_show)) else remaining_df.copy()
+            st.session_state["planning_month_remaining_rows"] = remaining_show.to_dict("records") if not remaining_show.empty else []
+
+            outer_text.write("Terminé ✅")
+
         month_rows_saved = st.session_state.get("planning_month_rows", [])
         if month_rows_saved and st.session_state.get("planning_month_mode") == "auto":
             st.divider()
@@ -1363,19 +1534,26 @@ def render_page_2():
                 st.success(f"Mois complété ✅ | Techs utilisés: {len(techs_used)}")
             else:
                 st.error("Même en mode auto, le mois n’a pas pu être complété ❌")
-                st.caption("Ça peut arriver si les paramètres sont trop restrictifs (max jobs, heures/jour, buffer, etc.) ou s’il reste des jobs 2+ techniciens (filtre).")
+                st.caption("Souvent dû à: paramètres trop restrictifs, jobs 3+ techs, ou journées pleines.")
 
             st.write("**Techniciens utilisés:**", ", ".join(techs_used) if techs_used else "—")
 
             month_df = pd.DataFrame(month_rows_saved)
-            preferred = ["date", "technicien", "sequence", "job_id", "adresse", "debut", "fin", "travel_min", "job_min", "buffer_min", "techs_needed", "description"]
+            preferred = ["date", "technicien", "job_id", "duo", "debut", "fin", "adresse", "travel_min", "job_min", "buffer_min", "techs_needed", "description"]
             cols = [c for c in preferred if c in month_df.columns] + [c for c in month_df.columns if c not in preferred]
             month_df = month_df[cols]
-            st.dataframe(month_df, use_container_width=True)
+            st.dataframe(style_duo(month_df), use_container_width=True)
 
             st.subheader("🧩 Jobs non planifiés")
-            st.caption(f"Reste (approx): {st.session_state.get('planning_month_remaining_count', '—')} job(s)")
+            remaining_rows = st.session_state.get("planning_month_remaining_rows", [])
+            if remaining_rows:
+                unplanned_df = pd.DataFrame(remaining_rows)
+                st.dataframe(style_duo(unplanned_df), use_container_width=True)
 
+                if "techs_needed" in unplanned_df.columns:
+                    duo_left = int((unplanned_df["techs_needed"].astype(int) == 2).sum())
+                    if duo_left > 0:
+                        st.warning(f"⚠️ Jobs DUO restants (techs_needed=2): {duo_left}")
 
 # ────────────────────────────────────────────────────────────────
 # Router
