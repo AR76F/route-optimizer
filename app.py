@@ -1003,45 +1003,45 @@ def render_page_2():
         return f"{h:02d}:{mm:02d}"
 
     def style_duo(df: pd.DataFrame):
-    """
-    Multi-level highlight by techs_needed:
-      - 2 techs  : strong yellow + orange left bar
-      - 3+ techs : light red + dark red left bar
-    Forces black text for readability in Streamlit dark mode.
-    """
-    if df is None or df.empty:
-        return df
-    if "techs_needed" not in df.columns:
-        return df
+        """
+        Multi-level highlight by techs_needed:
+          - 2 techs  : strong yellow + orange left bar
+          - 3+ techs : light red + dark red left bar
+        Forces black text for readability in Streamlit dark mode.
+        """
+        if df is None or df.empty:
+            return df
+        if "techs_needed" not in df.columns:
+            return df
 
-    def _row_style(row):
-        # Safe conversion
-        try:
-            n = int(row.get("techs_needed", 1))
-        except Exception:
-            n = 1
+        def _row_style(row):
+            # Safe conversion
+            try:
+                n = int(row.get("techs_needed", 1))
+            except Exception:
+                n = 1
 
-        if n >= 3:
-            css = (
-                "background-color: #f8d7da;"        # light red
-                "color: #000000;"                   # force black text
-                "font-weight: 800;"                 # very bold
-                "border-left: 6px solid #b02a37;"   # dark red bar
-            )
-            return [css] * len(row)
+            if n >= 3:
+                css = (
+                    "background-color: #f8d7da;"
+                    "color: #000000;"
+                    "font-weight: 800;"
+                    "border-left: 6px solid #b02a37;"
+                )
+                return [css] * len(row)
 
-        if n == 2:
-            css = (
-                "background-color: #ffd966;"        # strong yellow
-                "color: #000000;"                   # force black text
-                "font-weight: 700;"                 # bold
-                "border-left: 6px solid #ff9800;"   # orange bar
-            )
-            return [css] * len(row)
+            if n == 2:
+                css = (
+                    "background-color: #ffd966;"
+                    "color: #000000;"
+                    "font-weight: 700;"
+                    "border-left: 6px solid #ff9800;"
+                )
+                return [css] * len(row)
 
-        return [""] * len(row)
+            return [""] * len(row)
 
-    return df.style.apply(_row_style, axis=1)
+        return df.style.apply(_row_style, axis=1)
 
     # Simple keyword filter for "Generator Inspection"
     INSPECTION_KEYWORDS = ["inspection", "generator inspection", "génératrice inspection", "inspection génératrice"]
