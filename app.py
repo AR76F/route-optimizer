@@ -5,12 +5,13 @@
 # - Only ONE st.set_page_config()
 # - Persistent session_state for: navigation, upload bytes, route_result, planning_result
 # - Page 1 map (Tech Home + Entrepôts) shows permanent labels (names)
+#
+# CHANGE (as requested):
+# - Add cache to geocode_ll() and reverse_geocode() so we don't re-geocode every rerun / every user
+# - No "clear cache" button added
 
 import os
 import re
-import sqlite3
-import time
-import hashlib
 from io import BytesIO
 from datetime import datetime, date, timedelta, timezone
 from typing import List, Tuple, Optional
@@ -115,132 +116,6 @@ def normalize_ca_postal(text: str) -> str:
         return f"{t[:3]} {t[3:]}, Canada"
     return text
 
-# ────────────────────────────────────────────────────────────────
-# ✅ NEW: Persistent SQLite cache for GEOCODING + REVERSE GEOCODING
-# Shared across users as long as they run on the same Streamlit instance + same filesystem.
-# ────────────────────────────────────────────────────────────────
-_GEO_DB_PATH = secret("GMAPS_CACHE_DB", "gmaps_geocode_cache.sqlite")
-_GEO_CACHE_DAYS = int(secret("GMAPS_CACHE_DAYS", "180"))  # default 180 days
-
-def _geo_db():
-    conn = sqlite3.connect(_GEO_DB_PATH)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS geocode_cache (
-            k TEXT PRIMARY KEY,
-            lat REAL,
-            lng REAL,
-            formatted TEXT,
-            ts INTEGER
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS reverse_cache (
-            k TEXT PRIMARY KEY,
-            formatted TEXT,
-            ts INTEGER
-        )
-    """)
-    return conn
-
-def _norm_q(s: str) -> str:
-    return re.sub(r"\s+", " ", str(s or "").strip().lower())
-
-def _k_geocode(q: str) -> str:
-    raw = f"geocode|{_norm_q(q)}|country=CA|region=ca"
-    return hashlib.md5(raw.encode("utf-8")).hexdigest()
-
-def _k_reverse(lat: float, lon: float) -> str:
-    # rounding = better cache hit rate without breaking usefulness
-    raw = f"reverse|{round(float(lat), 5)},{round(float(lon), 5)}"
-    return hashlib.md5(raw.encode("utf-8")).hexdigest()
-
-def geocode_ll(gmaps_client: googlemaps.Client, text: str) -> Optional[Tuple[float, float, str]]:
-    if not text:
-        return None
-
-    q = normalize_ca_postal(text)
-    k = _k_geocode(q)
-
-    now = int(time.time())
-    min_ts = now - (_GEO_CACHE_DAYS * 86400)
-
-    # 1) Try cache
-    try:
-        conn = _geo_db()
-        cur = conn.cursor()
-        cur.execute("SELECT lat, lng, formatted FROM geocode_cache WHERE k=? AND ts>=?", (k, min_ts))
-        row = cur.fetchone()
-        conn.close()
-        if row:
-            return float(row[0]), float(row[1]), str(row[2])
-    except Exception:
-        # If cache fails, we still try API (do not block UX)
-        pass
-
-    # 2) Call API and store
-    try:
-        res = gmaps_client.geocode(q, components={"country": "CA"}, region="ca")
-        if res:
-            loc = res[0]["geometry"]["location"]
-            addr = res[0].get("formatted_address") or q
-            lat, lng = float(loc["lat"]), float(loc["lng"])
-
-            try:
-                conn = _geo_db()
-                conn.execute(
-                    "INSERT OR REPLACE INTO geocode_cache(k, lat, lng, formatted, ts) VALUES(?,?,?,?,?)",
-                    (k, lat, lng, str(addr), now)
-                )
-                conn.commit()
-                conn.close()
-            except Exception:
-                pass
-
-            return lat, lng, addr
-    except Exception:
-        pass
-
-    return None
-
-def reverse_geocode(gmaps_client: googlemaps.Client, lat: float, lon: float) -> str:
-    k = _k_reverse(lat, lon)
-
-    now = int(time.time())
-    min_ts = now - (_GEO_CACHE_DAYS * 86400)
-
-    # 1) Try cache
-    try:
-        conn = _geo_db()
-        cur = conn.cursor()
-        cur.execute("SELECT formatted FROM reverse_cache WHERE k=? AND ts>=?", (k, min_ts))
-        row = cur.fetchone()
-        conn.close()
-        if row and row[0]:
-            return str(row[0])
-    except Exception:
-        pass
-
-    # 2) Call API and store
-    try:
-        res = gmaps_client.reverse_geocode((lat, lon))
-        if res:
-            formatted = res[0].get("formatted_address", f"{lat:.5f},{lon:.5f}")
-            try:
-                conn = _geo_db()
-                conn.execute(
-                    "INSERT OR REPLACE INTO reverse_cache(k, formatted, ts) VALUES(?,?,?)",
-                    (k, str(formatted), now)
-                )
-                conn.commit()
-                conn.close()
-            except Exception:
-                pass
-            return formatted
-    except Exception:
-        pass
-
-    return f"{lat:.5f},{lon:.5f}"
-
 def big_number_marker(n: str, color_hex: str = "#cc3333"):
     html = f"""
     <div style="
@@ -279,6 +154,55 @@ if not GOOGLE_KEY:
     st.error("Missing Google Maps key. Add it in **App settings → Secrets** as `GOOGLE_MAPS_API_KEY`.")
     st.stop()
 gmaps_client = googlemaps.Client(key=GOOGLE_KEY)
+
+# ────────────────────────────────────────────────────────────────
+# Geocoding helpers (CACHED)  ✅ (replacement requested)
+# ────────────────────────────────────────────────────────────────
+@st.cache_data(ttl=60*60*24*30, show_spinner=False, max_entries=20000)
+def _geocode_cached(q: str) -> Optional[Tuple[float, float, str]]:
+    """
+    Cache Google Geocoding results for 30 days.
+    Cache is shared for all users *on the same Streamlit Cloud instance*.
+    """
+    if not q:
+        return None
+    try:
+        res = gmaps_client.geocode(q, components={"country": "CA"}, region="ca")
+        if res:
+            loc = res[0]["geometry"]["location"]
+            addr = res[0].get("formatted_address") or q
+            return float(loc["lat"]), float(loc["lng"]), addr
+    except Exception:
+        pass
+    return None
+
+def geocode_ll(gmaps_client: googlemaps.Client, text: str) -> Optional[Tuple[float, float, str]]:
+    """
+    Same signature as before, but now cached.
+    """
+    if not text:
+        return None
+    q = normalize_ca_postal(text)
+    return _geocode_cached(q)
+
+@st.cache_data(ttl=60*60*24*30, show_spinner=False, max_entries=20000)
+def _reverse_geocode_cached(lat: float, lon: float) -> str:
+    """
+    Cache reverse geocode for 30 days.
+    """
+    try:
+        res = gmaps_client.reverse_geocode((lat, lon))
+        if res:
+            return res[0].get("formatted_address", f"{lat:.5f},{lon:.5f}")
+    except Exception:
+        pass
+    return f"{lat:.5f},{lon:.5f}"
+
+def reverse_geocode(gmaps_client: googlemaps.Client, lat: float, lon: float) -> str:
+    """
+    Same signature as before, but now cached.
+    """
+    return _reverse_geocode_cached(float(lat), float(lon))
 
 # ────────────────────────────────────────────────────────────────
 # Shared data: TECH_HOME / ENTREPOTS
@@ -937,6 +861,7 @@ def render_page_1():
                 st.warning(f"Map rendering skipped: {e}")
 
         st.success(f"**Total distance:** {km:.1f} km • **Total time:** {mins:.0f} mins (live traffic)")
+
 import os
 import re
 import math
