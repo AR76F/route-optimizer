@@ -875,10 +875,6 @@ import pandas as pd
 
 # ────────────────────────────────────────────────────────────────
 # PAGE 2 (Planning) — persist upload + results + 3 modes + DUO + seq + return home + progress
-# + COST REDUCTION:
-#   (1) SQLite persistent cache for travel_min
-#   (2) FSA/Postal pre-filter for job candidates (SOLO + DUO)
-#   (3) DUO: limit tech pairs to "nearby" techs per job (by FSA)
 # ────────────────────────────────────────────────────────────────
 def render_page_2():
     import calendar
@@ -1051,29 +1047,33 @@ def render_page_2():
         return f"{h:02d}:{mm:02d}"
 
     # ────────────────────────────────────────────────────────────────
+    # ✅ LONG JOBS helpers (must be consecutive business days, same tech / same pair)
+    # ────────────────────────────────────────────────────────────────
+    def _max_chunk_possible(available_today: int, travel_to: int, travel_back: int, buffer_job: int) -> int:
+        return max(0, int(available_today) - int(travel_to) - int(buffer_job) - int(travel_back))
+
+    def _segments_total_estimate(total_min: int, day_hours: float, lunch_min: int, buffer_job: int) -> int:
+        # estimate without traffic: "onsite theoretical per day"
+        base = max(60, int(round(day_hours * 60)) - int(lunch_min) - int(buffer_job))
+        return int(math.ceil(int(total_min) / base))
+
+    def _seg_job_id(parent_job_id: str, seg_idx: int, seg_total: int) -> str:
+        return f"{parent_job_id} (PART {seg_idx}/{seg_total})"
+
+    # ────────────────────────────────────────────────────────────────
     # ✅ COST REDUCTION #1: Persistent SQLite cache for travel
     # ────────────────────────────────────────────────────────────────
-    # Where to store cache (local file). Change path if you deploy on a platform with ephemeral FS.
     DB_PATH = st.session_state.get("p2_travel_cache_db", "travel_cache.sqlite")
 
-    # UI knobs for testing vs production
     st.sidebar.subheader("🧾 Coûts / Cache")
     use_traffic = st.sidebar.checkbox("Utiliser trafic (duration_in_traffic)", value=True, key="p2_use_traffic")
     cache_days = st.sidebar.number_input("Conserver cache (jours)", min_value=1, max_value=365, value=30, step=1, key="p2_cache_days")
 
-    # Candidate selection knobs (big cost impact)
     st.sidebar.subheader("🧭 Préfiltrage géographique")
     solo_pool = st.sidebar.slider("SOLO: nb de jobs candidats (pool)", 10, 200, 60, 10, key="p2_solo_pool")
     duo_pool = st.sidebar.slider("DUO: nb de jobs candidats (pool)", 10, 300, 80, 10, key="p2_duo_pool")
     techs_near_job = st.sidebar.slider("DUO: nb de techs proches à tester", 2, 6, 4, 1, key="p2_duo_near_techs")
     include_nearby_fsa = st.sidebar.checkbox("Inclure FSA voisins si peu de candidats", value=True, key="p2_include_nearby_fsa")
-
-    # Optional: approximate "neighbor" FSAs by first character (coarse fallback, keeps logic but improves coverage)
-    def nearby_fsa_keys(fsa_key: str) -> List[str]:
-        if not fsa_key or len(fsa_key) < 1:
-            return []
-        # coarse: same first letter
-        return [fsa_key]  # baseline: same FSA only
 
     def _norm(s: str) -> str:
         return re.sub(r"\s+", " ", str(s or "").strip().lower())
@@ -1093,7 +1093,6 @@ def render_page_2():
         """)
         return conn
 
-    # Simple counters to show you cost impact while testing
     if "p2_api_calls" not in st.session_state:
         st.session_state["p2_api_calls"] = 0
     if "p2_cache_hits" not in st.session_state:
@@ -1117,7 +1116,6 @@ def render_page_2():
             st.session_state["p2_cache_hits"] += 1
             return int(row[0])
 
-        # Call Google only if missing in cache
         try:
             r = gmaps_client.distance_matrix([origin], [dest], mode="driving")
             el = r["rows"][0]["elements"][0]
@@ -1144,42 +1142,29 @@ def render_page_2():
     # ────────────────────────────────────────────────────────────────
     # ✅ COST REDUCTION #2: Candidate job pool by FSA (SOLO + DUO)
     # ────────────────────────────────────────────────────────────────
-    # Pre-group jobs by FSA for very fast filtering
     jobs_by_fsa = {}
     for key, sub in jobs.groupby("fsa"):
         jobs_by_fsa[key] = sub.copy()
 
     def get_job_pool_for_tech(df_remaining: pd.DataFrame, tech_postal: str, pool_size: int) -> pd.DataFrame:
-        """
-        Returns a candidate pool biased to tech's FSA first.
-        Falls back to remaining head() if no good match.
-        """
         if df_remaining.empty:
             return df_remaining
 
         tech_fsa = fsa(tech_postal)
-        # Primary: same FSA
         candidates = df_remaining[df_remaining["fsa"] == tech_fsa] if tech_fsa else df_remaining.iloc[0:0]
 
-        # Optional: widen if too few
         if include_nearby_fsa and len(candidates) < pool_size:
-            # coarse widen: keep same first letter FSAs (optional, low-risk)
             if tech_fsa:
                 first = tech_fsa[0]
                 more = df_remaining[df_remaining["fsa"].astype(str).str.startswith(first)]
                 candidates = pd.concat([candidates, more]).drop_duplicates(subset=["job_id"])
 
         if len(candidates) == 0:
-            # fallback keep your existing behavior
             return df_remaining.head(pool_size) if len(df_remaining) > pool_size else df_remaining
 
         return candidates.head(pool_size) if len(candidates) > pool_size else candidates
 
     def rank_techs_for_job(tech_names: List[str], job_fsa_key: str, tech_postal_map: dict, top_n: int) -> List[str]:
-        """
-        Cheap ranking of techs "near" a job using FSA match.
-        Primary: same FSA, then same first letter, then rest.
-        """
         if top_n >= len(tech_names):
             return tech_names
 
@@ -1261,7 +1246,7 @@ def render_page_2():
 
     # ────────────────────────────────────────────────────────────────
     # Month scheduler with DUO booking + sequence + return home (Mon-Fri)
-    # (logic same, but candidate pools + limited DUO tech pairs + cached travel)
+    # (same logic, but now supports LONG JOBS across consecutive business days, same tech/pair)
     # ────────────────────────────────────────────────────────────────
     def schedule_month_with_duo(
         jobs_in: pd.DataFrame,
@@ -1290,13 +1275,150 @@ def render_page_2():
         home_map = {t: tech_df.loc[tech_df["tech_name"] == t, "home_address"].iloc[0] for t in tech_names}
         postal_map = {t: str(tech_df.loc[tech_df["tech_name"] == t, "postal"].iloc[0]) if "postal" in tech_df.columns else "" for t in tech_names}
 
+        # LONG JOBS carryovers (no flexibility)
+        carry_solo = {t: [] for t in tech_names}   # list of dicts per tech
+        carry_duo = []                              # list of dicts for locked pairs
+
         total_steps = max(1, len(month_days))
         for di, day in enumerate(month_days):
             used = {t: 0 for t in tech_names}
             cur_loc = {t: home_map[t] for t in tech_names}
             jobs_count = {t: 0 for t in tech_names}
 
-            # ---- 1) DUO first (same logic, but reduce tech pairs and job pool intelligently) ----
+            # ---- 0) LONG JOBS carryovers FIRST (must continue on consecutive business days) ----
+            # 0A) DUO carryovers
+            if allow_duo and carry_duo and len(tech_names) >= 2:
+                new_carry_duo = []
+                for item in carry_duo:
+                    t1, t2 = item["t1"], item["t2"]
+                    if t1 not in tech_names or t2 not in tech_names:
+                        new_carry_duo.append(item)
+                        continue
+
+                    if jobs_count[t1] >= int(max_jobs_per_day) or jobs_count[t2] >= int(max_jobs_per_day):
+                        new_carry_duo.append(item)
+                        continue
+
+                    addr = item["address"]
+                    remain = int(item["remaining_min"])
+                    parent_id = item["parent_job_id"]
+                    desc = item.get("description", "")
+                    techs_needed_item = int(item.get("techs_needed", 2))
+                    seg_total = int(item.get("segments_total", 1))
+                    seg_idx = int(item.get("segment_index", 1))
+
+                    t1_tr = travel_min_cached(home_map[t1], addr)
+                    t2_tr = travel_min_cached(home_map[t2], addr)
+                    start_m = max(used[t1] + int(t1_tr), used[t2] + int(t2_tr))
+
+                    t1_back = travel_min_cached(addr, home_map[t1])
+                    t2_back = travel_min_cached(addr, home_map[t2])
+
+                    chunk1 = _max_chunk_possible(available - used[t1], int(t1_tr), int(t1_back), int(buffer_job))
+                    chunk2 = _max_chunk_possible(available - used[t2], int(t2_tr), int(t2_back), int(buffer_job))
+                    chunk = min(remain, chunk1, chunk2)
+
+                    if chunk <= 0:
+                        new_carry_duo.append(item)
+                        continue
+
+                    end_m = start_m + int(chunk) + int(buffer_job)
+
+                    if (end_m + int(t1_back) > available) or (end_m + int(t2_back) > available):
+                        new_carry_duo.append(item)
+                        continue
+
+                    for tname, trv in [(t1, t1_tr), (t2, t2_tr)]:
+                        jobs_count[tname] += 1
+                        planned_rows.append({
+                            "date": day.isoformat(),
+                            "technicien": tname,
+                            "sequence": jobs_count[tname],
+                            "job_id": _seg_job_id(parent_id, seg_idx, seg_total),
+                            "duo": "⚠️ DUO",
+                            "debut": mm_to_hhmm(int(start_m)),
+                            "fin": mm_to_hhmm(int(end_m)),
+                            "adresse": addr,
+                            "travel_min": int(trv),
+                            "job_min": int(chunk),
+                            "buffer_min": int(buffer_job),
+                            "techs_needed": techs_needed_item,
+                            "description": desc,
+                        })
+                        used[tname] = int(end_m)
+                        cur_loc[tname] = addr
+
+                    remain2 = remain - int(chunk)
+                    if remain2 > 0:
+                        item["remaining_min"] = int(remain2)
+                        item["segment_index"] = int(seg_idx) + 1
+                        new_carry_duo.append(item)
+
+                carry_duo = new_carry_duo
+
+            # 0B) SOLO carryovers (per tech)
+            for t in tech_names:
+                if not carry_solo.get(t):
+                    continue
+
+                new_list = []
+                for item in carry_solo[t]:
+                    if jobs_count[t] >= int(max_jobs_per_day):
+                        new_list.append(item)
+                        continue
+
+                    addr = item["address"]
+                    remain = int(item["remaining_min"])
+                    parent_id = item["parent_job_id"]
+                    desc = item.get("description", "")
+                    techs_needed_item = int(item.get("techs_needed", 1))
+                    seg_total = int(item.get("segments_total", 1))
+                    seg_idx = int(item.get("segment_index", 1))
+
+                    tr = travel_min_cached(home_map[t], addr)
+                    back = travel_min_cached(addr, home_map[t])
+
+                    chunk = min(remain, _max_chunk_possible(available - used[t], int(tr), int(back), int(buffer_job)))
+                    if chunk <= 0:
+                        new_list.append(item)
+                        continue
+
+                    start_m = used[t] + int(tr)
+                    end_m = start_m + int(chunk) + int(buffer_job)
+
+                    if end_m + int(back) > available:
+                        new_list.append(item)
+                        continue
+
+                    jobs_count[t] += 1
+                    planned_rows.append({
+                        "date": day.isoformat(),
+                        "technicien": t,
+                        "sequence": jobs_count[t],
+                        "job_id": _seg_job_id(parent_id, seg_idx, seg_total),
+                        "duo": "",
+                        "debut": mm_to_hhmm(int(start_m)),
+                        "fin": mm_to_hhmm(int(end_m)),
+                        "adresse": addr,
+                        "travel_min": int(tr),
+                        "job_min": int(chunk),
+                        "buffer_min": int(buffer_job),
+                        "techs_needed": techs_needed_item,
+                        "description": desc,
+                    })
+
+                    used[t] = int(end_m)
+                    cur_loc[t] = addr
+
+                    remain2 = remain - int(chunk)
+                    if remain2 > 0:
+                        item["remaining_min"] = int(remain2)
+                        item["segment_index"] = int(seg_idx) + 1
+                        new_list.append(item)
+
+                carry_solo[t] = new_list
+
+            # ---- 1) DUO first (same logic, but now chunk + lock pair if long) ----
             if allow_duo and (not duo_jobs.empty) and len(tech_names) >= 2:
                 while True:
                     if duo_jobs.empty:
@@ -1304,7 +1426,6 @@ def render_page_2():
 
                     best = None
 
-                    # ✅ Candidate DUO pool: prioritize DUO jobs where FSA is known; still fallback to head()
                     pool = duo_jobs
                     if "fsa" in duo_jobs.columns:
                         known = duo_jobs[duo_jobs["fsa"].astype(str).str.len() > 0]
@@ -1313,11 +1434,10 @@ def render_page_2():
 
                     for jidx, job in sample.iterrows():
                         addr = job["address"]
-                        job_min = int(job["job_minutes"])
-                        need_block = job_min + int(buffer_job)
+                        job_min_total = int(job["job_minutes"])
+                        need_block = job_min_total + int(buffer_job)
                         job_fsa_key = str(job.get("fsa", ""))
 
-                        # ✅ Reduce pairs: only test top N "nearby" techs for this job
                         near_techs = rank_techs_for_job(tech_names, job_fsa_key, postal_map, int(techs_near_job))
 
                         for i in range(len(near_techs)):
@@ -1332,21 +1452,35 @@ def render_page_2():
                                 t2_tr = travel_min_cached(cur_loc[t2], addr)
 
                                 start_m = max(used[t1] + int(t1_tr), used[t2] + int(t2_tr))
-                                end_m = start_m + need_block
 
                                 t1_back = travel_min_cached(addr, home_map[t1])
                                 t2_back = travel_min_cached(addr, home_map[t2])
 
+                                # allow chunk
+                                chunk1 = _max_chunk_possible(available - used[t1], int(t1_tr), int(t1_back), int(buffer_job))
+                                chunk2 = _max_chunk_possible(available - used[t2], int(t2_tr), int(t2_back), int(buffer_job))
+                                chunk = min(job_min_total, chunk1, chunk2)
+
+                                if chunk <= 0:
+                                    continue
+
+                                end_m = start_m + int(chunk) + int(buffer_job)
+
                                 if (end_m + int(t1_back) <= available) and (end_m + int(t2_back) <= available):
                                     score = (start_m, max(int(t1_tr), int(t2_tr)))
                                     if best is None or score < best[0]:
-                                        best = (score, jidx, t1, t2, start_m, end_m, int(t1_tr), int(t2_tr))
+                                        best = (score, jidx, t1, t2, start_m, end_m, int(t1_tr), int(t2_tr), int(chunk))
 
                     if best is None:
                         break
 
-                    _, jidx, t1, t2, start_m, end_m, t1_tr, t2_tr = best
+                    _, jidx, t1, t2, start_m, end_m, t1_tr, t2_tr, chunk = best
                     job = duo_jobs.loc[jidx]
+
+                    # segments meta
+                    job_min_total = int(job["job_minutes"])
+                    seg_total = _segments_total_estimate(job_min_total, day_hours, lunch_min, buffer_job)
+                    seg_idx = 1
 
                     for tname, trv in [(t1, t1_tr), (t2, t2_tr)]:
                         jobs_count[tname] += 1
@@ -1354,13 +1488,13 @@ def render_page_2():
                             "date": day.isoformat(),
                             "technicien": tname,
                             "sequence": jobs_count[tname],
-                            "job_id": job["job_id"],
+                            "job_id": _seg_job_id(job["job_id"], seg_idx, seg_total),
                             "duo": "⚠️ DUO",
                             "debut": mm_to_hhmm(int(start_m)),
                             "fin": mm_to_hhmm(int(end_m)),
                             "adresse": job["address"],
                             "travel_min": int(trv),
-                            "job_min": int(job["job_minutes"]),
+                            "job_min": int(chunk),
                             "buffer_min": int(buffer_job),
                             "techs_needed": int(job["techs_needed"]),
                             "description": job["description"],
@@ -1369,9 +1503,25 @@ def render_page_2():
                         used[tname] = int(end_m)
                         cur_loc[tname] = job["address"]
 
+                    # lock pair for remaining (consecutive days)
+                    remain = job_min_total - int(chunk)
+                    if remain > 0:
+                        carry_duo.append({
+                            "parent_job_id": job["job_id"],
+                            "remaining_min": int(remain),
+                            "segment_index": 2,
+                            "segments_total": int(seg_total),
+                            "t1": t1,
+                            "t2": t2,
+                            "address": job["address"],
+                            "description": job["description"],
+                            "techs_needed": int(job["techs_needed"]),
+                        })
+
+                    # remove from pool so nobody else can take it
                     duo_jobs = duo_jobs[duo_jobs["job_id"] != job["job_id"]].copy()
 
-            # ---- 2) SOLO greedy per tech (same logic, but candidate pool is FSA-biased) ----
+            # ---- 2) SOLO greedy per tech (same logic, but now chunk + lock tech if long) ----
             if not solo_jobs.empty:
                 made_progress = True
                 while made_progress:
@@ -1388,8 +1538,8 @@ def render_page_2():
                         best_idx = None
                         best_cost = None
                         best_t = None
+                        best_chunk = None
 
-                        # ✅ Candidate SOLO pool for this tech, instead of head(60) global
                         tech_post = postal_map.get(t, "")
                         sample = get_job_pool_for_tech(solo_jobs, tech_post, int(solo_pool))
 
@@ -1397,15 +1547,26 @@ def render_page_2():
                             tmin = travel_min_cached(cur_loc[t], job["address"])
                             tback = travel_min_cached(job["address"], home_map[t])
 
-                            need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
-                            if need <= 0:
+                            # allow chunk
+                            chunk = min(
+                                int(job["job_minutes"]),
+                                _max_chunk_possible(available - used[t], int(tmin), int(tback), int(buffer_job))
+                            )
+                            if chunk <= 0:
                                 continue
 
-                            if used[t] + need <= available:
-                                if best_cost is None or int(tmin) < best_cost:
-                                    best_idx = idx
-                                    best_cost = int(tmin)
-                                    best_t = int(tmin)
+                            # end time must still allow return home
+                            start_m = used[t] + int(tmin)
+                            end_m = start_m + int(chunk) + int(buffer_job)
+                            if end_m + int(tback) > available:
+                                continue
+
+                            # keep your selection preference: minimal travel
+                            if best_cost is None or int(tmin) < best_cost:
+                                best_idx = idx
+                                best_cost = int(tmin)
+                                best_t = int(tmin)
+                                best_chunk = int(chunk)
 
                         if best_idx is None:
                             continue
@@ -1413,20 +1574,24 @@ def render_page_2():
                         job = solo_jobs.loc[best_idx]
                         jobs_count[t] += 1
 
+                        job_min_total = int(job["job_minutes"])
+                        seg_total = _segments_total_estimate(job_min_total, day_hours, lunch_min, buffer_job)
+                        seg_idx = 1
+
                         start_m = used[t] + int(best_t)
-                        end_m = start_m + int(job["job_minutes"]) + int(buffer_job)
+                        end_m = start_m + int(best_chunk) + int(buffer_job)
 
                         planned_rows.append({
                             "date": day.isoformat(),
                             "technicien": t,
                             "sequence": jobs_count[t],
-                            "job_id": job["job_id"],
+                            "job_id": _seg_job_id(job["job_id"], seg_idx, seg_total),
                             "duo": "",
                             "debut": mm_to_hhmm(int(start_m)),
                             "fin": mm_to_hhmm(int(end_m)),
                             "adresse": job["address"],
                             "travel_min": int(best_t),
-                            "job_min": int(job["job_minutes"]),
+                            "job_min": int(best_chunk),
                             "buffer_min": int(buffer_job),
                             "techs_needed": int(job["techs_needed"]),
                             "description": job["description"],
@@ -1434,6 +1599,21 @@ def render_page_2():
 
                         used[t] = int(end_m)
                         cur_loc[t] = job["address"]
+
+                        # lock tech for remaining (consecutive days)
+                        remain = job_min_total - int(best_chunk)
+                        if remain > 0:
+                            carry_solo[t].append({
+                                "parent_job_id": job["job_id"],
+                                "remaining_min": int(remain),
+                                "segment_index": 2,
+                                "segments_total": int(seg_total),
+                                "address": job["address"],
+                                "description": job["description"],
+                                "techs_needed": int(job["techs_needed"]),
+                            })
+
+                        # remove from pool so nobody else can take it
                         solo_jobs = solo_jobs[solo_jobs["job_id"] != job["job_id"]].copy()
                         made_progress = True
 
@@ -1466,7 +1646,36 @@ def render_page_2():
             if progress_text is not None:
                 progress_text.write(f"Planification… {di+1}/{len(month_days)} jour(s) traités")
 
-        remaining_out = pd.concat([duo_jobs, solo_jobs, hard_jobs], ignore_index=True)
+        # Build remaining_out (include carryovers so success=false is visible)
+        carry_rows = []
+        for t, items in carry_solo.items():
+            for it in items:
+                carry_rows.append({
+                    "job_id": str(it.get("parent_job_id", "")),
+                    "address": it.get("address", ""),
+                    "description": it.get("description", ""),
+                    "job_minutes": int(it.get("remaining_min", 0)),
+                    "techs_needed": int(it.get("techs_needed", 1)),
+                    "postal": "",
+                    "fsa": "",
+                })
+
+        for it in carry_duo:
+            carry_rows.append({
+                "job_id": str(it.get("parent_job_id", "")),
+                "address": it.get("address", ""),
+                "description": it.get("description", ""),
+                "job_minutes": int(it.get("remaining_min", 0)),
+                "techs_needed": int(it.get("techs_needed", 2)),
+                "postal": "",
+                "fsa": "",
+            })
+
+        carry_df = pd.DataFrame(carry_rows) if carry_rows else pd.DataFrame(columns=list(remaining_all.columns))
+
+        remaining_out = pd.concat([duo_jobs, solo_jobs, hard_jobs, carry_df], ignore_index=True)
+        remaining_out = remaining_out.drop_duplicates(subset=["job_id", "address", "job_minutes", "techs_needed"], keep="first")
+
         success = remaining_out.empty
         return {"success": bool(success), "rows": planned_rows, "remaining": remaining_out}
 
@@ -1490,7 +1699,7 @@ def render_page_2():
     tech_names_all = sorted(tech_df["tech_name"].astype(str).tolist())
 
     # ────────────────────────────────────────────────────────────────
-    # MODE A — DAY / 1 TECH (same logic, but cached travel + FSA pool)
+    # MODE A — DAY / 1 TECH (UNCHANGED)
     # ────────────────────────────────────────────────────────────────
     if mode == "1 journée / 1 technicien (mode actuel)":
         st.subheader("🧰 Planning 1 journée / 1 technicien")
@@ -1524,7 +1733,6 @@ def render_page_2():
         run = st.button("🚀 Générer la journée", type="primary", key="p2_run")
 
         if run:
-            # reset counters for this run
             st.session_state["p2_api_calls"] = 0
             st.session_state["p2_cache_hits"] = 0
 
@@ -1549,7 +1757,6 @@ def render_page_2():
                 if remaining.empty:
                     break
 
-                # ✅ FSA-biased pool instead of head(60)
                 sample = get_job_pool_for_tech(remaining, chosen_post, int(solo_pool))
 
                 for idx, job in sample.iterrows():
