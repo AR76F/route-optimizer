@@ -886,6 +886,7 @@ import pandas as pd
 #   - Show labels: (PART 1/2), (PART 2/2), etc. consistently
 #   - Add customer number column (CUST. #) next to ORDER # in results tables
 #   - ✅ Clean IDs: remove trailing .0 from JOB ID and CUST. # (e.g., 347762.0 → 347762)
+#   - ✅ FIX: Never show 4/3, 2/1, etc. → denominator auto-updates and relabels prior parts
 # ────────────────────────────────────────────────────────────────
 def render_page_2():
     import calendar
@@ -1000,9 +1001,7 @@ def render_page_2():
 
     jobs = pd.DataFrame()
 
-    # ✅ Use clean_id (instead of astype(str)) to avoid ".0"
     jobs["job_id"] = jobs_raw[COL_ORDER].apply(clean_id)
-
     if COL_CUST:
         jobs["cust"] = jobs_raw[COL_CUST].apply(clean_id)
     else:
@@ -1258,11 +1257,8 @@ def render_page_2():
         return df
 
     # ────────────────────────────────────────────────────────────────
-    # ✅ Split helpers (labeling + state)
+    # Split helpers
     # ────────────────────────────────────────────────────────────────
-    def make_part_job_id(base_job_id: str, part_idx: int, total_parts: int) -> str:
-        return f"{base_job_id} (PART {int(part_idx)}/{int(total_parts)})"
-
     def compute_total_parts(job_minutes_total: int, daily_onsite_cap: int) -> int:
         if daily_onsite_cap <= 0:
             return 1
@@ -1271,6 +1267,7 @@ def render_page_2():
     # ────────────────────────────────────────────────────────────────
     # Month scheduler with DUO booking + sequence + return home (Mon-Fri)
     # (logic same, but adds split for > 8h jobs with same tech consecutive days)
+    # + FIX: Dynamic denominator so you never see 4/3, 2/1, etc.
     # ────────────────────────────────────────────────────────────────
     def schedule_month_with_duo(
         jobs_in: pd.DataFrame,
@@ -1303,6 +1300,28 @@ def render_page_2():
 
         carryover_by_tech: Dict[str, Dict[str, Any]] = {}
 
+        # ✅ Split label state: tracks all rows for a base job, and forces denominator >= max part
+        split_label_state: Dict[str, Dict[str, Any]] = {}
+        # split_label_state[base_job_id] = {"total": int, "row_idxs": [int, ...]}
+
+        def _register_and_relabel_split_row(base_job_id: str, new_row_idx: int, part_num: int):
+            if base_job_id not in split_label_state:
+                split_label_state[base_job_id] = {"total": int(part_num), "row_idxs": []}
+            stt = split_label_state[base_job_id]
+
+            # ensure denominator never smaller than numerator
+            if int(part_num) > int(stt["total"]):
+                stt["total"] = int(part_num)
+
+            stt["row_idxs"].append(int(new_row_idx))
+
+            # relabel ALL split rows for this job to be consistent
+            total = int(stt["total"])
+            for i, ridx in enumerate(stt["row_idxs"], start=1):
+                # remove any existing "(PART x/y)" and rewrite
+                base = re.sub(r"\s*\(PART\s+\d+/\d+\)\s*$", "", str(planned_rows[ridx]["job_id"])).strip()
+                planned_rows[ridx]["job_id"] = f"{base} (PART {i}/{total})"
+
         def _book_split_part_for_tech(
             day: date,
             t: str,
@@ -1319,7 +1338,6 @@ def render_page_2():
             techs_needed_val = int(split_state.get("techs_needed", 1))
 
             remaining_min = int(split_state["remaining_job_min"])
-            total_parts = int(split_state["total_parts"])
             part_idx = int(split_state["part_idx_next"])
 
             tmin = travel_min_cached(cur_loc[t], addr)
@@ -1339,7 +1357,7 @@ def render_page_2():
                 "date": day.isoformat(),
                 "technicien": t,
                 "sequence": jobs_count[t],
-                "job_id": make_part_job_id(base_job_id, part_idx, total_parts),
+                "job_id": f"{base_job_id} (PART {part_idx}/{max(1, int(split_state.get('total_parts', part_idx)) )})",
                 "cust": cust,
                 "duo": "",
                 "debut": mm_to_hhmm(int(start_m)),
@@ -1351,6 +1369,10 @@ def render_page_2():
                 "techs_needed": techs_needed_val,
                 "description": desc,
             })
+
+            # ✅ FIX: register + relabel to prevent 4/3, etc.
+            row_idx = len(planned_rows) - 1
+            _register_and_relabel_split_row(base_job_id, row_idx, part_idx)
 
             used[t] = int(end_m)
             cur_loc[t] = addr
@@ -1371,7 +1393,7 @@ def render_page_2():
             jobs_count = {t: 0 for t in tech_names}
             lock_tech = {t: False for t in tech_names}
 
-            # Continue split jobs first
+            # Continue split jobs first (forces consecutive business days)
             for t in tech_names:
                 if t in carryover_by_tech:
                     _book_split_part_for_tech(
@@ -1564,7 +1586,7 @@ def render_page_2():
 
                         job = best_long_job
                         base_job_id = str(job["job_id"])
-                        total_parts = compute_total_parts(int(job["job_minutes"]), int(daily_onsite_cap))
+                        total_parts_guess = compute_total_parts(int(job["job_minutes"]), int(daily_onsite_cap))
 
                         carryover_by_tech[t] = {
                             "base_job_id": base_job_id,
@@ -1572,7 +1594,7 @@ def render_page_2():
                             "address": job["address"],
                             "description": job["description"],
                             "techs_needed": int(job.get("techs_needed", 1)),
-                            "total_parts": int(total_parts),
+                            "total_parts": int(total_parts_guess),
                             "part_idx_next": 1,
                             "remaining_job_min": int(job["job_minutes"]),
                         }
@@ -1800,7 +1822,7 @@ def render_page_2():
                 day_rows.append({
                     "technicien": chosen_tech,
                     "sequence": seq,
-                    "job_id": make_part_job_id(base_job_id, 1, total_parts),
+                    "job_id": f"{base_job_id} (PART 1/{total_parts})",
                     "cust": carryover.get("cust", ""),
                     "duo": "",
                     "debut": mm_to_hhmm(int(start_m)),
