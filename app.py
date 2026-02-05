@@ -873,8 +873,27 @@ from typing import List, Optional, Tuple
 import streamlit as st
 import pandas as pd
 
+import os
+import re
+import math
+import calendar
+from io import BytesIO
+from datetime import datetime, date, timedelta
+from typing import List, Optional, Tuple
+
+import streamlit as st
+import pandas as pd
+
 # ────────────────────────────────────────────────────────────────
 # PAGE 2 (Planning) — persist upload + results + 3 modes + DUO + seq + return home + progress
+# + COST REDUCTION:
+#   (1) SQLite persistent cache for travel_min
+#   (2) FSA/Postal pre-filter for job candidates (SOLO + DUO)
+#   (3) DUO: limit tech pairs to "nearby" techs per job (by FSA)
+#
+# NEW:
+#   (4) LONG JOBS: split across consecutive business days with same tech/pair (no flexibility)
+#   (5) Add CUST. # (customer number) in results tables next to ORDER #
 # ────────────────────────────────────────────────────────────────
 def render_page_2():
     import calendar
@@ -940,6 +959,7 @@ def render_page_2():
         return None
 
     COL_ORDER = pick_col(jobs_raw, ["ORDER #", "ORDER#", "Order", "Job ID", "WO", "Work Order"])
+    COL_CUST  = pick_col(jobs_raw, ["CUST. #", "CUST #", "CUSTOMER #", "CUSTOMER#", "CUST#", "CUST NO", "CUSTOMER NO", "Sold-to", "Sold to", "Account #"])
     COL_ADDR1 = pick_col(jobs_raw, ["ADDRESS 1", "ADDRESS1", "Address 1"])
     COL_ADDR2 = pick_col(jobs_raw, ["ADDRESS 2", "ADDRESS2", "Address 2"])
     COL_ADDR3 = pick_col(jobs_raw, ["ADDRESS 3", "ADDRESS3", "Address 3"])
@@ -976,6 +996,7 @@ def render_page_2():
 
     jobs = pd.DataFrame()
     jobs["job_id"] = jobs_raw[COL_ORDER].astype(str)
+    jobs["cust"] = jobs_raw[COL_CUST].fillna("").astype(str) if COL_CUST else ""
     jobs["address"] = jobs_raw.apply(build_address, axis=1)
 
     desc = jobs_raw[COL_DESC].fillna("").astype(str) if COL_DESC else ""
@@ -1053,7 +1074,6 @@ def render_page_2():
         return max(0, int(available_today) - int(travel_to) - int(buffer_job) - int(travel_back))
 
     def _segments_total_estimate(total_min: int, day_hours: float, lunch_min: int, buffer_job: int) -> int:
-        # estimate without traffic: "onsite theoretical per day"
         base = max(60, int(round(day_hours * 60)) - int(lunch_min) - int(buffer_job))
         return int(math.ceil(int(total_min) / base))
 
@@ -1246,7 +1266,6 @@ def render_page_2():
 
     # ────────────────────────────────────────────────────────────────
     # Month scheduler with DUO booking + sequence + return home (Mon-Fri)
-    # (same logic, but now supports LONG JOBS across consecutive business days, same tech/pair)
     # ────────────────────────────────────────────────────────────────
     def schedule_month_with_duo(
         jobs_in: pd.DataFrame,
@@ -1276,8 +1295,8 @@ def render_page_2():
         postal_map = {t: str(tech_df.loc[tech_df["tech_name"] == t, "postal"].iloc[0]) if "postal" in tech_df.columns else "" for t in tech_names}
 
         # LONG JOBS carryovers (no flexibility)
-        carry_solo = {t: [] for t in tech_names}   # list of dicts per tech
-        carry_duo = []                              # list of dicts for locked pairs
+        carry_solo = {t: [] for t in tech_names}
+        carry_duo = []
 
         total_steps = max(1, len(month_days))
         for di, day in enumerate(month_days):
@@ -1302,6 +1321,7 @@ def render_page_2():
                     addr = item["address"]
                     remain = int(item["remaining_min"])
                     parent_id = item["parent_job_id"]
+                    cust = item.get("cust", "")
                     desc = item.get("description", "")
                     techs_needed_item = int(item.get("techs_needed", 2))
                     seg_total = int(item.get("segments_total", 1))
@@ -1335,6 +1355,7 @@ def render_page_2():
                             "technicien": tname,
                             "sequence": jobs_count[tname],
                             "job_id": _seg_job_id(parent_id, seg_idx, seg_total),
+                            "cust": cust,
                             "duo": "⚠️ DUO",
                             "debut": mm_to_hhmm(int(start_m)),
                             "fin": mm_to_hhmm(int(end_m)),
@@ -1370,6 +1391,7 @@ def render_page_2():
                     addr = item["address"]
                     remain = int(item["remaining_min"])
                     parent_id = item["parent_job_id"]
+                    cust = item.get("cust", "")
                     desc = item.get("description", "")
                     techs_needed_item = int(item.get("techs_needed", 1))
                     seg_total = int(item.get("segments_total", 1))
@@ -1396,6 +1418,7 @@ def render_page_2():
                         "technicien": t,
                         "sequence": jobs_count[t],
                         "job_id": _seg_job_id(parent_id, seg_idx, seg_total),
+                        "cust": cust,
                         "duo": "",
                         "debut": mm_to_hhmm(int(start_m)),
                         "fin": mm_to_hhmm(int(end_m)),
@@ -1435,7 +1458,6 @@ def render_page_2():
                     for jidx, job in sample.iterrows():
                         addr = job["address"]
                         job_min_total = int(job["job_minutes"])
-                        need_block = job_min_total + int(buffer_job)
                         job_fsa_key = str(job.get("fsa", ""))
 
                         near_techs = rank_techs_for_job(tech_names, job_fsa_key, postal_map, int(techs_near_job))
@@ -1456,7 +1478,6 @@ def render_page_2():
                                 t1_back = travel_min_cached(addr, home_map[t1])
                                 t2_back = travel_min_cached(addr, home_map[t2])
 
-                                # allow chunk
                                 chunk1 = _max_chunk_possible(available - used[t1], int(t1_tr), int(t1_back), int(buffer_job))
                                 chunk2 = _max_chunk_possible(available - used[t2], int(t2_tr), int(t2_back), int(buffer_job))
                                 chunk = min(job_min_total, chunk1, chunk2)
@@ -1477,7 +1498,6 @@ def render_page_2():
                     _, jidx, t1, t2, start_m, end_m, t1_tr, t2_tr, chunk = best
                     job = duo_jobs.loc[jidx]
 
-                    # segments meta
                     job_min_total = int(job["job_minutes"])
                     seg_total = _segments_total_estimate(job_min_total, day_hours, lunch_min, buffer_job)
                     seg_idx = 1
@@ -1489,6 +1509,7 @@ def render_page_2():
                             "technicien": tname,
                             "sequence": jobs_count[tname],
                             "job_id": _seg_job_id(job["job_id"], seg_idx, seg_total),
+                            "cust": job.get("cust", ""),
                             "duo": "⚠️ DUO",
                             "debut": mm_to_hhmm(int(start_m)),
                             "fin": mm_to_hhmm(int(end_m)),
@@ -1503,11 +1524,11 @@ def render_page_2():
                         used[tname] = int(end_m)
                         cur_loc[tname] = job["address"]
 
-                    # lock pair for remaining (consecutive days)
                     remain = job_min_total - int(chunk)
                     if remain > 0:
                         carry_duo.append({
                             "parent_job_id": job["job_id"],
+                            "cust": job.get("cust", ""),
                             "remaining_min": int(remain),
                             "segment_index": 2,
                             "segments_total": int(seg_total),
@@ -1518,7 +1539,6 @@ def render_page_2():
                             "techs_needed": int(job["techs_needed"]),
                         })
 
-                    # remove from pool so nobody else can take it
                     duo_jobs = duo_jobs[duo_jobs["job_id"] != job["job_id"]].copy()
 
             # ---- 2) SOLO greedy per tech (same logic, but now chunk + lock tech if long) ----
@@ -1547,7 +1567,6 @@ def render_page_2():
                             tmin = travel_min_cached(cur_loc[t], job["address"])
                             tback = travel_min_cached(job["address"], home_map[t])
 
-                            # allow chunk
                             chunk = min(
                                 int(job["job_minutes"]),
                                 _max_chunk_possible(available - used[t], int(tmin), int(tback), int(buffer_job))
@@ -1555,13 +1574,11 @@ def render_page_2():
                             if chunk <= 0:
                                 continue
 
-                            # end time must still allow return home
                             start_m = used[t] + int(tmin)
                             end_m = start_m + int(chunk) + int(buffer_job)
                             if end_m + int(tback) > available:
                                 continue
 
-                            # keep your selection preference: minimal travel
                             if best_cost is None or int(tmin) < best_cost:
                                 best_idx = idx
                                 best_cost = int(tmin)
@@ -1586,6 +1603,7 @@ def render_page_2():
                             "technicien": t,
                             "sequence": jobs_count[t],
                             "job_id": _seg_job_id(job["job_id"], seg_idx, seg_total),
+                            "cust": job.get("cust", ""),
                             "duo": "",
                             "debut": mm_to_hhmm(int(start_m)),
                             "fin": mm_to_hhmm(int(end_m)),
@@ -1600,11 +1618,11 @@ def render_page_2():
                         used[t] = int(end_m)
                         cur_loc[t] = job["address"]
 
-                        # lock tech for remaining (consecutive days)
                         remain = job_min_total - int(best_chunk)
                         if remain > 0:
                             carry_solo[t].append({
                                 "parent_job_id": job["job_id"],
+                                "cust": job.get("cust", ""),
                                 "remaining_min": int(remain),
                                 "segment_index": 2,
                                 "segments_total": int(seg_total),
@@ -1613,7 +1631,6 @@ def render_page_2():
                                 "techs_needed": int(job["techs_needed"]),
                             })
 
-                        # remove from pool so nobody else can take it
                         solo_jobs = solo_jobs[solo_jobs["job_id"] != job["job_id"]].copy()
                         made_progress = True
 
@@ -1627,6 +1644,7 @@ def render_page_2():
                         "technicien": t,
                         "sequence": jobs_count[t] + 1,
                         "job_id": "RETURN_HOME",
+                        "cust": "",
                         "duo": "",
                         "debut": mm_to_hhmm(int(used[t])),
                         "fin": mm_to_hhmm(int(used[t]) + int(tback)),
@@ -1652,6 +1670,7 @@ def render_page_2():
             for it in items:
                 carry_rows.append({
                     "job_id": str(it.get("parent_job_id", "")),
+                    "cust": str(it.get("cust", "")),
                     "address": it.get("address", ""),
                     "description": it.get("description", ""),
                     "job_minutes": int(it.get("remaining_min", 0)),
@@ -1663,6 +1682,7 @@ def render_page_2():
         for it in carry_duo:
             carry_rows.append({
                 "job_id": str(it.get("parent_job_id", "")),
+                "cust": str(it.get("cust", "")),
                 "address": it.get("address", ""),
                 "description": it.get("description", ""),
                 "job_minutes": int(it.get("remaining_min", 0)),
@@ -1674,7 +1694,7 @@ def render_page_2():
         carry_df = pd.DataFrame(carry_rows) if carry_rows else pd.DataFrame(columns=list(remaining_all.columns))
 
         remaining_out = pd.concat([duo_jobs, solo_jobs, hard_jobs, carry_df], ignore_index=True)
-        remaining_out = remaining_out.drop_duplicates(subset=["job_id", "address", "job_minutes", "techs_needed"], keep="first")
+        remaining_out = remaining_out.drop_duplicates(subset=["job_id", "cust", "address", "job_minutes", "techs_needed"], keep="first")
 
         success = remaining_out.empty
         return {"success": bool(success), "rows": planned_rows, "remaining": remaining_out}
@@ -1699,7 +1719,7 @@ def render_page_2():
     tech_names_all = sorted(tech_df["tech_name"].astype(str).tolist())
 
     # ────────────────────────────────────────────────────────────────
-    # MODE A — DAY / 1 TECH (UNCHANGED)
+    # MODE A — DAY / 1 TECH (unchanged logic; add cust in rows + optional ordering)
     # ────────────────────────────────────────────────────────────────
     if mode == "1 journée / 1 technicien (mode actuel)":
         st.subheader("🧰 Planning 1 journée / 1 technicien")
@@ -1785,6 +1805,7 @@ def render_page_2():
                     "technicien": chosen_tech,
                     "sequence": seq,
                     "job_id": job["job_id"],
+                    "cust": job.get("cust", ""),
                     "duo": "⚠️ DUO" if int(job["techs_needed"]) >= 2 else "",
                     "debut": mm_to_hhmm(int(start_m)),
                     "fin": mm_to_hhmm(int(end_m)),
@@ -1813,6 +1834,11 @@ def render_page_2():
 
             day_df = pd.DataFrame(day_rows_saved)
             day_df = day_df.sort_values(["technicien", "sequence", "debut"], ascending=True).reset_index(drop=True)
+
+            pref_day = ["technicien", "sequence", "job_id", "cust", "duo", "debut", "fin", "adresse",
+                        "travel_min", "job_min", "buffer_min", "techs_needed", "description"]
+            day_df = day_df[[c for c in pref_day if c in day_df.columns] + [c for c in day_df.columns if c not in pref_day]]
+
             st.dataframe(style_duo(day_df), use_container_width=True)
 
             available_active = int(round(st.session_state.get("p2_day_hours", 8.0) * 60)) - int(st.session_state.get("p2_lunch", 30))
@@ -1897,7 +1923,7 @@ def render_page_2():
                 st.session_state["planning_month_techs_used"] = chosen_techs
 
                 remaining_df = result["remaining"].copy()
-                cols_show = ["job_id", "address", "description", "job_minutes", "techs_needed", "postal", "fsa"]
+                cols_show = ["job_id", "cust", "address", "description", "job_minutes", "techs_needed", "postal", "fsa"]
                 remaining_show = remaining_df[cols_show].copy() if all(c in remaining_df.columns for c in cols_show) else remaining_df.copy()
                 st.session_state["planning_month_remaining_rows"] = remaining_show.to_dict("records")
 
@@ -1920,7 +1946,7 @@ def render_page_2():
             sort_cols = [c for c in ["date", "technicien", "sequence", "debut"] if c in month_df.columns]
             month_df = month_df.sort_values(sort_cols, ascending=True).reset_index(drop=True)
 
-            preferred = ["date", "technicien", "sequence", "job_id", "duo", "debut", "fin", "adresse",
+            preferred = ["date", "technicien", "sequence", "job_id", "cust", "duo", "debut", "fin", "adresse",
                          "travel_min", "job_min", "buffer_min", "techs_needed", "description"]
             cols = [c for c in preferred if c in month_df.columns] + [c for c in month_df.columns if c not in preferred]
             month_df = month_df[cols]
@@ -2022,7 +2048,7 @@ def render_page_2():
             st.session_state["planning_month_techs_used"] = best["techs_used"] if best else []
 
             remaining_df = best["remaining"].copy() if best else pd.DataFrame()
-            cols_show = ["job_id", "address", "description", "job_minutes", "techs_needed", "postal", "fsa"]
+            cols_show = ["job_id", "cust", "address", "description", "job_minutes", "techs_needed", "postal", "fsa"]
             remaining_show = remaining_df[cols_show].copy() if (not remaining_df.empty and all(c in remaining_df.columns for c in cols_show)) else remaining_df.copy()
             st.session_state["planning_month_remaining_rows"] = remaining_show.to_dict("records") if not remaining_show.empty else []
 
@@ -2046,7 +2072,7 @@ def render_page_2():
             sort_cols = [c for c in ["date", "technicien", "sequence", "debut"] if c in month_df.columns]
             month_df = month_df.sort_values(sort_cols, ascending=True).reset_index(drop=True)
 
-            preferred = ["date", "technicien", "sequence", "job_id", "duo", "debut", "fin", "adresse",
+            preferred = ["date", "technicien", "sequence", "job_id", "cust", "duo", "debut", "fin", "adresse",
                          "travel_min", "job_min", "buffer_min", "techs_needed", "description"]
             cols = [c for c in preferred if c in month_df.columns] + [c for c in month_df.columns if c not in preferred]
             month_df = month_df[cols]
@@ -2082,3 +2108,4 @@ if page == "🏠 Route Optimizer":
     render_page_1()
 else:
     render_page_2()
+
