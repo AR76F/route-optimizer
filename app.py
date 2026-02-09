@@ -1189,15 +1189,27 @@ def render_page_2():
         return ordered[:max(2, int(top_n))]
 
     # ────────────────────────────────────────────────────────────────
-    # Styling (unchanged)
+    # Styling (unchanged except OT row support)
     # ────────────────────────────────────────────────────────────────
     def style_duo(df: pd.DataFrame):
         if df is None or df.empty:
             return df
-        if "techs_needed" not in df.columns:
-            return df
 
         def _row_style(row):
+            # OT (rouge) prioritaire
+            ot_val = str(row.get("ot", "")).strip().lower()
+            if ot_val:
+                css = (
+                    "background-color: #f8d7da;"
+                    "color: #000000;"
+                    "font-weight: 900;"
+                    "border-left: 6px solid #b02a37;"
+                )
+                return [css] * len(row)
+
+            if "techs_needed" not in row:
+                return [""] * len(row)
+
             try:
                 n = int(row.get("techs_needed", 1))
             except Exception:
@@ -1273,8 +1285,59 @@ def render_page_2():
 
         daily_onsite_cap = int(available)
 
-        # ✅ FIX (crumbs): minimum onsite chunk when a job continues to another day
+        # ✅ Anti-miettes: minimum onsite chunk when a job continues to another day
         MIN_ONSITE_CHUNK_MIN = 180  # 3h
+
+        # ✅ OT rule: allow single-job day up to 14h active (incl lunch)
+        OT_ACTIVE_CAP = int(round(14 * 60)) - int(lunch_min)
+        if OT_ACTIVE_CAP < available:
+            OT_ACTIVE_CAP = available
+
+        def _choose_onsite_no_crumbs(remaining_min: int, max_onsite_today: int, min_chunk: int) -> int:
+            """
+            Choisit onsite_today en évitant:
+            - de créer une portion < min_chunk si on ne finit pas aujourd'hui
+            - de laisser un reste < min_chunk pour un autre jour
+            """
+            remaining_min = int(remaining_min)
+            max_onsite_today = int(max_onsite_today)
+            min_chunk = int(min_chunk)
+
+            if max_onsite_today <= 0:
+                return 0
+
+            onsite_today = min(remaining_min, max_onsite_today)
+
+            # Si on finit aujourd'hui, OK même si <3h (pas de jour suivant)
+            if onsite_today >= remaining_min:
+                return onsite_today
+
+            rem_after = remaining_min - onsite_today
+
+            # Interdit: portion <3h si on ne finit pas
+            if onsite_today < min_chunk:
+                return 0
+
+            # Interdit: laisser un reste <3h
+            if rem_after < min_chunk:
+                # option A: finir aujourd'hui si possible
+                if remaining_min <= max_onsite_today:
+                    return remaining_min
+
+                # option B: laisser min_chunk pour demain
+                onsite_today = remaining_min - min_chunk
+                onsite_today = min(onsite_today, max_onsite_today)
+
+                if onsite_today < min_chunk:
+                    return 0
+
+                rem_after = remaining_min - onsite_today
+                if rem_after > 0 and rem_after < min_chunk:
+                    return 0
+
+                return onsite_today
+
+            return onsite_today
 
         remaining_all = jobs_in.copy()
 
@@ -1331,10 +1394,9 @@ def render_page_2():
             if max_onsite_today <= 0:
                 return
 
-            onsite_today = min(remaining_min, max_onsite_today)
-
-            # ✅ FIX (crumbs): if we are NOT finishing today and we can't do at least 3h onsite, skip today
-            if int(onsite_today) < int(MIN_ONSITE_CHUNK_MIN) and int(remaining_min) > int(onsite_today):
+            # ✅ Anti-miettes: refuse small part (<3h) and refuse leaving remainder (<3h)
+            onsite_today = _choose_onsite_no_crumbs(remaining_min, max_onsite_today, MIN_ONSITE_CHUNK_MIN)
+            if onsite_today <= 0:
                 return
 
             jobs_count[t] += 1
@@ -1348,6 +1410,7 @@ def render_page_2():
                 "job_id": f"{base_job_id} (PART {part_idx}/{max(1, int(split_state.get('total_parts', part_idx)) )})",
                 "cust": cust,
                 "duo": "",
+                "ot": "",
                 "debut": mm_to_hhmm(int(start_m)),
                 "fin": mm_to_hhmm(int(end_m)),
                 "adresse": addr,
@@ -1474,6 +1537,7 @@ def render_page_2():
                             "job_id": job["job_id"],
                             "cust": job.get("cust", ""),
                             "duo": "⚠️ DUO",
+                            "ot": "",
                             "debut": mm_to_hhmm(int(start_m)),
                             "fin": mm_to_hhmm(int(end_m)),
                             "adresse": job["address"],
@@ -1547,6 +1611,7 @@ def render_page_2():
                                 "job_id": job["job_id"],
                                 "cust": job.get("cust", ""),
                                 "duo": "",
+                                "ot": "",
                                 "debut": mm_to_hhmm(int(start_m)),
                                 "fin": mm_to_hhmm(int(end_m)),
                                 "adresse": job["address"],
@@ -1562,6 +1627,58 @@ def render_page_2():
                             solo_jobs = solo_jobs[solo_jobs["job_id"] != job["job_id"]].copy()
                             made_progress = True
                             continue
+
+                        # ✅ OT single-job day (ONLY if first job of the day):
+                        # If total (travel + job + buffer + return) <= 14h active, book it in one day and flag OT.
+                        if jobs_count[t] == 0:
+                            best_ot_idx = None
+                            best_ot_cost = None
+                            best_ot_tmin = None
+                            best_ot_job = None
+
+                            for idx, job in sample.iterrows():
+                                tmin = travel_min_cached(cur_loc[t], job["address"])
+                                tback = travel_min_cached(job["address"], home_map[t])
+                                need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
+                                if need <= OT_ACTIVE_CAP:
+                                    if best_ot_cost is None or int(tmin) < best_ot_cost:
+                                        best_ot_idx = idx
+                                        best_ot_cost = int(tmin)
+                                        best_ot_tmin = int(tmin)
+                                        best_ot_job = job
+
+                            if best_ot_idx is not None:
+                                job = best_ot_job
+                                jobs_count[t] += 1
+
+                                start_m = used[t] + int(best_ot_tmin)
+                                end_m = start_m + int(job["job_minutes"]) + int(buffer_job)
+
+                                planned_rows.append({
+                                    "date": day.isoformat(),
+                                    "technicien": t,
+                                    "sequence": jobs_count[t],
+                                    "job_id": job["job_id"],
+                                    "cust": job.get("cust", ""),
+                                    "duo": "",
+                                    "ot": "🟥 OT",
+                                    "debut": mm_to_hhmm(int(start_m)),
+                                    "fin": mm_to_hhmm(int(end_m)),
+                                    "adresse": job["address"],
+                                    "travel_min": int(best_ot_tmin),
+                                    "job_min": int(job["job_minutes"]),
+                                    "buffer_min": int(buffer_job),
+                                    "techs_needed": int(job["techs_needed"]),
+                                    "description": job["description"],
+                                })
+
+                                used[t] = int(end_m)
+                                cur_loc[t] = job["address"]
+                                solo_jobs = solo_jobs[solo_jobs["job_id"] != job["job_id"]].copy()
+
+                                lock_tech[t] = True
+                                made_progress = True
+                                continue
 
                         # If nothing fits, attempt split ONLY for jobs with onsite > daily_onsite_cap
                         # overtime exception (<180) if FIRST job of day -> lock tech and do it same day
@@ -1590,9 +1707,13 @@ def render_page_2():
                             if max_onsite_today <= 0:
                                 continue
 
-                            # ✅ FIX (crumbs): don’t start a split if today’s chunk would be < 3h
-                            # unless we would finish today.
-                            if (not is_overtime_candidate) and (int(max_onsite_today) < int(MIN_ONSITE_CHUNK_MIN)) and (jm > int(max_onsite_today)):
+                            # ✅ Interdit de DÉMARRER un split dans un "petit trou" si ce n'est pas le 1er job du jour
+                            if jobs_count[t] > 0 and int(max_onsite_today) < int(MIN_ONSITE_CHUNK_MIN):
+                                continue
+
+                            # ✅ Anti-miettes: determine today's chunk (refuse <3h if not finishing, refuse leaving <3h)
+                            onsite_today_candidate = _choose_onsite_no_crumbs(jm, max_onsite_today, MIN_ONSITE_CHUNK_MIN)
+                            if onsite_today_candidate <= 0:
                                 continue
 
                             # For overtime candidate, we require we can actually do the FULL job today
@@ -1626,6 +1747,7 @@ def render_page_2():
                                 "job_id": job["job_id"],
                                 "cust": job.get("cust", ""),
                                 "duo": "",
+                                "ot": "",
                                 "debut": mm_to_hhmm(int(start_m)),
                                 "fin": mm_to_hhmm(int(end_m)),
                                 "adresse": job["address"],
@@ -1687,6 +1809,7 @@ def render_page_2():
                         "job_id": "RETURN_HOME",
                         "cust": "",
                         "duo": "",
+                        "ot": "",
                         "debut": mm_to_hhmm(int(used[t])),
                         "fin": mm_to_hhmm(int(used[t]) + int(tback)),
                         "adresse": home_map[t],
@@ -1729,7 +1852,7 @@ def render_page_2():
     tech_names_all = sorted(tech_df["tech_name"].astype(str).tolist())
 
     # ────────────────────────────────────────────────────────────────
-    # MODE A — DAY / 1 TECH (unchanged)
+    # MODE A — DAY / 1 TECH (unchanged, with OT + anti-miettes)
     # ────────────────────────────────────────────────────────────────
     if mode == "1 journée / 1 technicien (mode actuel)":
         st.subheader("🧰 Planning 1 journée / 1 technicien")
@@ -1766,6 +1889,41 @@ def render_page_2():
 
             available = int(round(day_hours * 60)) - int(lunch_min)
             daily_onsite_cap = int(available)
+
+            # OT cap (single-job day)
+            OT_ACTIVE_CAP = int(round(14 * 60)) - int(lunch_min)
+            if OT_ACTIVE_CAP < available:
+                OT_ACTIVE_CAP = available
+
+            MIN_ONSITE_CHUNK_MIN = 180  # 3h
+
+            def _choose_onsite_no_crumbs(remaining_min: int, max_onsite_today: int, min_chunk: int) -> int:
+                remaining_min = int(remaining_min)
+                max_onsite_today = int(max_onsite_today)
+                min_chunk = int(min_chunk)
+
+                if max_onsite_today <= 0:
+                    return 0
+
+                onsite_today = min(remaining_min, max_onsite_today)
+                if onsite_today >= remaining_min:
+                    return onsite_today
+
+                rem_after = remaining_min - onsite_today
+                if onsite_today < min_chunk:
+                    return 0
+                if rem_after < min_chunk:
+                    if remaining_min <= max_onsite_today:
+                        return remaining_min
+                    onsite_today = remaining_min - min_chunk
+                    onsite_today = min(onsite_today, max_onsite_today)
+                    if onsite_today < min_chunk:
+                        return 0
+                    rem_after = remaining_min - onsite_today
+                    if rem_after > 0 and rem_after < min_chunk:
+                        return 0
+                    return onsite_today
+                return onsite_today
 
             remaining = jobs.copy()
             remaining = filter_by_service_type(remaining, service_choice)
@@ -1819,6 +1977,7 @@ def render_page_2():
                         "job_id": job["job_id"],
                         "cust": job.get("cust", ""),
                         "duo": "⚠️ DUO" if int(job["techs_needed"]) >= 2 else "",
+                        "ot": "",
                         "debut": mm_to_hhmm(int(start_m)),
                         "fin": mm_to_hhmm(int(end_m)),
                         "adresse": job["address"],
@@ -1834,6 +1993,52 @@ def render_page_2():
                     remaining = remaining[remaining["job_id"] != job["job_id"]].copy()
                     continue
 
+                # ✅ OT single-job day (only if first/unique job)
+                if seq == 0:
+                    best_ot_idx = None
+                    best_ot_cost = None
+                    best_ot_tmin = None
+                    best_ot_job = None
+
+                    for idx, job in sample.iterrows():
+                        tmin = travel_min_cached(cur_loc, job["address"])
+                        tback = travel_min_cached(job["address"], home_addr)
+                        need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
+                        if need <= OT_ACTIVE_CAP:
+                            if best_ot_cost is None or int(tmin) < best_ot_cost:
+                                best_ot_idx = idx
+                                best_ot_cost = int(tmin)
+                                best_ot_tmin = int(tmin)
+                                best_ot_job = job
+
+                    if best_ot_idx is not None:
+                        job = best_ot_job
+                        seq += 1
+                        start_m = used + int(best_ot_tmin)
+                        end_m = start_m + int(job["job_minutes"]) + int(buffer_job)
+
+                        day_rows.append({
+                            "technicien": chosen_tech,
+                            "sequence": seq,
+                            "job_id": job["job_id"],
+                            "cust": job.get("cust", ""),
+                            "duo": "",
+                            "ot": "🟥 OT",
+                            "debut": mm_to_hhmm(int(start_m)),
+                            "fin": mm_to_hhmm(int(end_m)),
+                            "adresse": job["address"],
+                            "travel_min": int(best_ot_tmin),
+                            "job_min": int(job["job_minutes"]),
+                            "buffer_min": int(buffer_job),
+                            "techs_needed": int(job["techs_needed"]),
+                            "description": job["description"],
+                        })
+
+                        used = int(end_m)
+                        cur_loc = job["address"]
+                        remaining = remaining[remaining["job_id"] != job["job_id"]].copy()
+                        break  # single-job day
+
                 best_long = None
                 for idx, job in sample.iterrows():
                     jm = int(job["job_minutes"])
@@ -1844,6 +2049,10 @@ def render_page_2():
                     tback = travel_min_cached(job["address"], home_addr)
                     max_onsite_today = int(available) - int(used) - int(tmin) - int(buffer_job) - int(tback)
                     if max_onsite_today <= 0:
+                        continue
+
+                    onsite_today_candidate = _choose_onsite_no_crumbs(jm, max_onsite_today, MIN_ONSITE_CHUNK_MIN)
+                    if onsite_today_candidate <= 0:
                         continue
 
                     if best_long is None or int(tmin) < int(best_long["tmin"]):
@@ -1872,7 +2081,10 @@ def render_page_2():
                 tmin = best_long["tmin"]
                 tback = best_long["tback"]
                 max_onsite_today = int(available) - int(used) - int(tmin) - int(buffer_job) - int(tback)
-                onsite_today = min(int(carryover["remaining_job_min"]), int(max_onsite_today))
+
+                onsite_today = _choose_onsite_no_crumbs(int(carryover["remaining_job_min"]), int(max_onsite_today), MIN_ONSITE_CHUNK_MIN)
+                if onsite_today <= 0:
+                    break
 
                 seq += 1
                 start_m = int(used) + int(tmin)
@@ -1884,6 +2096,7 @@ def render_page_2():
                     "job_id": f"{base_job_id} (PART 1/{total_parts})",
                     "cust": carryover.get("cust", ""),
                     "duo": "",
+                    "ot": "",
                     "debut": mm_to_hhmm(int(start_m)),
                     "fin": mm_to_hhmm(int(end_m)),
                     "adresse": job["address"],
@@ -1912,7 +2125,7 @@ def render_page_2():
             day_df = pd.DataFrame(day_rows_saved)
             day_df = day_df.sort_values(["technicien", "sequence", "debut"], ascending=True).reset_index(drop=True)
 
-            preferred = ["technicien", "sequence", "job_id", "cust", "duo", "debut", "fin", "adresse",
+            preferred = ["technicien", "sequence", "job_id", "cust", "duo", "ot", "debut", "fin", "adresse",
                          "travel_min", "job_min", "buffer_min", "techs_needed", "description"]
             cols = [c for c in preferred if c in day_df.columns] + [c for c in day_df.columns if c not in preferred]
             day_df = day_df[cols]
@@ -2024,7 +2237,7 @@ def render_page_2():
             sort_cols = [c for c in ["date", "technicien", "sequence", "debut"] if c in month_df.columns]
             month_df = month_df.sort_values(sort_cols, ascending=True).reset_index(drop=True)
 
-            preferred = ["date", "technicien", "sequence", "job_id", "cust", "duo", "debut", "fin", "adresse",
+            preferred = ["date", "technicien", "sequence", "job_id", "cust", "duo", "ot", "debut", "fin", "adresse",
                          "travel_min", "job_min", "buffer_min", "techs_needed", "description"]
             cols = [c for c in preferred if c in month_df.columns] + [c for c in month_df.columns if c not in preferred]
             month_df = month_df[cols]
@@ -2150,7 +2363,7 @@ def render_page_2():
             sort_cols = [c for c in ["date", "technicien", "sequence", "debut"] if c in month_df.columns]
             month_df = month_df.sort_values(sort_cols, ascending=True).reset_index(drop=True)
 
-            preferred = ["date", "technicien", "sequence", "job_id", "cust", "duo", "debut", "fin", "adresse",
+            preferred = ["date", "technicien", "sequence", "job_id", "cust", "duo", "ot", "debut", "fin", "adresse",
                          "travel_min", "job_min", "buffer_min", "techs_needed", "description"]
             cols = [c for c in preferred if c in month_df.columns] + [c for c in month_df.columns if c not in preferred]
             month_df = month_df[cols]
