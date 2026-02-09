@@ -1254,8 +1254,6 @@ def render_page_2():
 
     # ────────────────────────────────────────────────────────────────
     # Month scheduler with DUO booking + sequence + return home (Mon-Fri)
-    # (logic same, but adds split for > 8h jobs with same tech consecutive days)
-    # + FIX: Dynamic denominator so you never see 4/3, etc.
     # ────────────────────────────────────────────────────────────────
     def schedule_month_with_duo(
         jobs_in: pd.DataFrame,
@@ -1273,7 +1271,10 @@ def render_page_2():
         if available <= 0:
             return {"success": False, "rows": [], "remaining": jobs_in, "reason": "Heures/jour - pause <= 0"}
 
-        daily_onsite_cap = int(available)  # onsite capacity for rule "split only if job_minutes > daily_onsite_cap"
+        daily_onsite_cap = int(available)
+
+        # ✅ FIX (crumbs): minimum onsite chunk when a job continues to another day
+        MIN_ONSITE_CHUNK_MIN = 180  # 3h
 
         remaining_all = jobs_in.copy()
 
@@ -1288,25 +1289,20 @@ def render_page_2():
 
         carryover_by_tech: Dict[str, Dict[str, Any]] = {}
 
-        # ✅ Split label state: tracks all rows for a base job, and forces denominator >= max part
         split_label_state: Dict[str, Dict[str, Any]] = {}
-        # split_label_state[base_job_id] = {"total": int, "row_idxs": [int, ...]}
 
         def _register_and_relabel_split_row(base_job_id: str, new_row_idx: int, part_num: int):
             if base_job_id not in split_label_state:
                 split_label_state[base_job_id] = {"total": int(part_num), "row_idxs": []}
             stt = split_label_state[base_job_id]
 
-            # ensure denominator never smaller than numerator
             if int(part_num) > int(stt["total"]):
                 stt["total"] = int(part_num)
 
             stt["row_idxs"].append(int(new_row_idx))
 
-            # relabel ALL split rows for this job to be consistent
             total = int(stt["total"])
             for i, ridx in enumerate(stt["row_idxs"], start=1):
-                # remove any existing "(PART x/y)" and rewrite
                 base = re.sub(r"\s*\(PART\s+\d+/\d+\)\s*$", "", str(planned_rows[ridx]["job_id"])).strip()
                 planned_rows[ridx]["job_id"] = f"{base} (PART {i}/{total})"
 
@@ -1337,6 +1333,10 @@ def render_page_2():
 
             onsite_today = min(remaining_min, max_onsite_today)
 
+            # ✅ FIX (crumbs): if we are NOT finishing today and we can't do at least 3h onsite, skip today
+            if int(onsite_today) < int(MIN_ONSITE_CHUNK_MIN) and int(remaining_min) > int(onsite_today):
+                return
+
             jobs_count[t] += 1
             start_m = int(used[t]) + int(tmin)
             end_m = start_m + int(onsite_today) + int(buffer_job)
@@ -1358,7 +1358,6 @@ def render_page_2():
                 "description": desc,
             })
 
-            # ✅ FIX: register + relabel to prevent 4/3, etc.
             row_idx = len(planned_rows) - 1
             _register_and_relabel_split_row(base_job_id, row_idx, part_idx)
 
@@ -1413,7 +1412,7 @@ def render_page_2():
                     for jidx, job in sample.iterrows():
                         addr = job["address"]
 
-                        # ✅ NEW: DUO job minutes are TOTAL, so per-tech minutes = ceil(total/2)
+                        # ✅ DUO job minutes are TOTAL, so per-tech minutes = ceil(total/2)
                         job_min_total = int(job["job_minutes"])
                         job_min_each = int(math.ceil(job_min_total / 2.0))
                         need_block = int(job_min_each) + int(buffer_job)
@@ -1433,7 +1432,6 @@ def render_page_2():
                                 if jobs_count[t1] >= int(max_jobs_per_day) or jobs_count[t2] >= int(max_jobs_per_day):
                                     continue
 
-                                # ✅ NEW overtime rule for DUO (only if first job of day for both techs)
                                 duo_is_overtime = False
                                 if int(job_min_each) > int(daily_onsite_cap):
                                     if (int(job_min_each) - int(daily_onsite_cap)) < 180:
@@ -1441,7 +1439,6 @@ def render_page_2():
                                             continue
                                         duo_is_overtime = True
                                     else:
-                                        # too long over cap -> would require split (not supported for DUO here)
                                         continue
 
                                 t1_tr = travel_min_cached(cur_loc[t1], addr)
@@ -1453,7 +1450,6 @@ def render_page_2():
                                 t1_back = travel_min_cached(addr, home_map[t1])
                                 t2_back = travel_min_cached(addr, home_map[t2])
 
-                                # ✅ If overtime is allowed, we still must fit within 'available'
                                 if (end_m + int(t1_back) <= available) and (end_m + int(t2_back) <= available):
                                     score = (start_m, max(int(t1_tr), int(t2_tr)))
                                     if best is None or score < best[0]:
@@ -1482,7 +1478,7 @@ def render_page_2():
                             "fin": mm_to_hhmm(int(end_m)),
                             "adresse": job["address"],
                             "travel_min": int(trv),
-                            "job_min": int(job_min_each),  # ✅ NEW: per-tech minutes, not total
+                            "job_min": int(job_min_each),
                             "buffer_min": int(buffer_job),
                             "techs_needed": int(job["techs_needed"]),
                             "description": job["description"],
@@ -1491,14 +1487,13 @@ def render_page_2():
                         used[tname] = int(end_m)
                         cur_loc[tname] = job["address"]
 
-                    # ✅ NEW: if DUO overtime booking, lock both techs for the rest of the day
                     if bool(duo_is_overtime):
                         lock_tech[t1] = True
                         lock_tech[t2] = True
 
                     duo_jobs = duo_jobs[duo_jobs["job_id"] != job["job_id"]].copy()
 
-            # ---- 2) SOLO greedy per tech (same logic, PLUS split if job_minutes > daily_onsite_cap) ----
+            # ---- 2) SOLO greedy per tech ----
             if not solo_jobs.empty:
                 made_progress = True
                 while made_progress:
@@ -1569,7 +1564,7 @@ def render_page_2():
                             continue
 
                         # If nothing fits, attempt split ONLY for jobs with onsite > daily_onsite_cap
-                        # ✅ NEW: overtime exception (<180) if FIRST job of day -> lock tech and do it same day
+                        # overtime exception (<180) if FIRST job of day -> lock tech and do it same day
                         best_long_idx = None
                         best_long_cost = None
                         best_long_job = None
@@ -1583,7 +1578,6 @@ def render_page_2():
                             if t in carryover_by_tech:
                                 continue
 
-                            # ✅ NEW overtime exception: only if first job of day AND < +3h above cap
                             is_overtime_candidate = False
                             if (jobs_count[t] == 0) and ((jm - int(daily_onsite_cap)) < 180):
                                 is_overtime_candidate = True
@@ -1596,11 +1590,15 @@ def render_page_2():
                             if max_onsite_today <= 0:
                                 continue
 
+                            # ✅ FIX (crumbs): don’t start a split if today’s chunk would be < 3h
+                            # unless we would finish today.
+                            if (not is_overtime_candidate) and (int(max_onsite_today) < int(MIN_ONSITE_CHUNK_MIN)) and (jm > int(max_onsite_today)):
+                                continue
+
                             # For overtime candidate, we require we can actually do the FULL job today
                             if is_overtime_candidate and jm > int(max_onsite_today):
                                 continue
 
-                            # For split, we just need some onsite room
                             if best_long_cost is None or int(tmin) < best_long_cost:
                                 best_long_idx = idx
                                 best_long_cost = int(tmin)
@@ -1614,7 +1612,7 @@ def render_page_2():
                         base_job_id = str(job["job_id"])
                         jm_total = int(job["job_minutes"])
 
-                        # ✅ NEW: if overtime exception, do FULL job today and lock tech (no split)
+                        # overtime exception: do FULL job today and lock tech (no split)
                         if bool(best_long_is_overtime):
                             tmin = travel_min_cached(cur_loc[t], job["address"])
                             start_m = int(used[t]) + int(tmin)
@@ -1642,7 +1640,7 @@ def render_page_2():
                             cur_loc[t] = job["address"]
                             solo_jobs = solo_jobs[solo_jobs["job_id"] != job["job_id"]].copy()
 
-                            lock_tech[t] = True  # ✅ NEW: last booking of the day
+                            lock_tech[t] = True
                             made_progress = True
                             continue
 
@@ -1731,7 +1729,7 @@ def render_page_2():
     tech_names_all = sorted(tech_df["tech_name"].astype(str).tolist())
 
     # ────────────────────────────────────────────────────────────────
-    # MODE A — DAY / 1 TECH (keeps same behavior; split only if job_minutes > daily onsite cap)
+    # MODE A — DAY / 1 TECH (unchanged)
     # ────────────────────────────────────────────────────────────────
     if mode == "1 journée / 1 technicien (mode actuel)":
         st.subheader("🧰 Planning 1 journée / 1 technicien")
