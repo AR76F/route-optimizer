@@ -1096,6 +1096,15 @@ def render_page_2():
                 ts INTEGER
             )
         """)
+        # ✅ FSA centroid cache (same DB, no extra file)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS fsa_centroid (
+                fsa TEXT PRIMARY KEY,
+                lat REAL,
+                lon REAL,
+                ts INTEGER
+            )
+        """)
         return conn
 
     if "p2_api_calls" not in st.session_state:
@@ -1145,48 +1154,125 @@ def render_page_2():
         return minutes
 
     # ────────────────────────────────────────────────────────────────
+    # ✅ NEW: FSA centroids (approx distance, used to prefilter without Distance Matrix)
+    # ────────────────────────────────────────────────────────────────
+    CENTROID_CACHE_DAYS = 365  # keep long; centroid rarely changes
+
+    def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+        R = 6371.0
+        p1 = math.radians(lat1)
+        p2 = math.radians(lat2)
+        dlat = math.radians(lat2 - lat1)
+        dlon = math.radians(lon2 - lon1)
+        a = math.sin(dlat/2)**2 + math.cos(p1)*math.cos(p2)*math.sin(dlon/2)**2
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+        return R * c
+
+    def fsa_centroid_cached(fsa_code: str) -> Optional[Tuple[float, float]]:
+        fsa_code = (fsa_code or "").strip().upper()[:3]
+        if len(fsa_code) != 3:
+            return None
+
+        now = int(time.time())
+        min_ts = now - int(CENTROID_CACHE_DAYS) * 86400
+
+        conn = _db()
+        cur = conn.cursor()
+        cur.execute("SELECT lat, lon, ts FROM fsa_centroid WHERE fsa=? AND ts>=?", (fsa_code, min_ts))
+        row = cur.fetchone()
+        if row:
+            conn.close()
+            return float(row[0]), float(row[1])
+
+        # One-time geocode per FSA (NOT Distance Matrix). Usually a few dozen FSAs/month.
+        # Uses your existing geocode_ll() cache too, so it often becomes "free" after first time.
+        try:
+            g = geocode_ll(gmaps_client, f"{fsa_code}, Canada")
+            if g:
+                lat, lon, _ = g
+                conn.execute("INSERT OR REPLACE INTO fsa_centroid(fsa, lat, lon, ts) VALUES(?,?,?,?)",
+                             (fsa_code, float(lat), float(lon), now))
+                conn.commit()
+                conn.close()
+                # Note: this increments geocode calls, not p2_api_calls (Distance Matrix). Keeping rest unchanged.
+                return float(lat), float(lon)
+        except Exception:
+            pass
+
+        conn.close()
+        return None
+
+    # ────────────────────────────────────────────────────────────────
     # ✅ COST REDUCTION #2: Candidate job pool by FSA (SOLO + DUO)
+    # (kept, but improved using centroid distance when "include nearby" is needed)
     # ────────────────────────────────────────────────────────────────
     def get_job_pool_for_tech(df_remaining: pd.DataFrame, tech_postal: str, pool_size: int) -> pd.DataFrame:
         if df_remaining.empty:
             return df_remaining
 
         tech_fsa = fsa(tech_postal)
+
+        # 1) Strict same FSA first (fast + stable)
         candidates = df_remaining[df_remaining["fsa"] == tech_fsa] if tech_fsa else df_remaining.iloc[0:0]
 
+        # 2) If not enough, use centroid distance to pick closest FSAs (more precise than "same first letter")
         if include_nearby_fsa and len(candidates) < pool_size:
-            if tech_fsa:
-                first = tech_fsa[0]
-                more = df_remaining[df_remaining["fsa"].astype(str).str.startswith(first)]
-                candidates = pd.concat([candidates, more]).drop_duplicates(subset=["job_id"])
+            tech_c = fsa_centroid_cached(tech_fsa)
+            if tech_c:
+                tlat, tlon = tech_c
+                tmp = df_remaining.copy()
+                tmp["__dist_km"] = 999999.0
+                for i in tmp.index:
+                    jf = str(tmp.at[i, "fsa"] or "")
+                    jc = fsa_centroid_cached(jf)
+                    if jc:
+                        tmp.at[i, "__dist_km"] = float(haversine_km(tlat, tlon, jc[0], jc[1]))
+                tmp = tmp.sort_values("__dist_km", ascending=True)
+                tmp = tmp.drop(columns=["__dist_km"], errors="ignore")
+                candidates = tmp.head(pool_size) if len(tmp) > pool_size else tmp
 
         if len(candidates) == 0:
             return df_remaining.head(pool_size) if len(df_remaining) > pool_size else df_remaining
 
         return candidates.head(pool_size) if len(candidates) > pool_size else candidates
 
+    # ✅ Rank techs for a job using FSA centroids (0 Distance Matrix)
     def rank_techs_for_job(tech_names: List[str], job_fsa_key: str, tech_postal_map: dict, top_n: int) -> List[str]:
         if top_n >= len(tech_names):
             return tech_names
 
-        same = []
-        same_letter = []
-        rest = []
+        jf = (job_fsa_key or "").strip().upper()[:3]
+        job_c = fsa_centroid_cached(jf)
 
-        jf = job_fsa_key or ""
-        jfirst = jf[0] if jf else ""
+        # Fallback to old logic if centroid missing
+        if not job_c:
+            same, same_letter, rest = [], [], []
+            jfirst = jf[0] if jf else ""
+            for t in tech_names:
+                tf = fsa(tech_postal_map.get(t, ""))
+                if jf and tf == jf:
+                    same.append(t)
+                elif jfirst and tf.startswith(jfirst):
+                    same_letter.append(t)
+                else:
+                    rest.append(t)
+            ordered = same + same_letter + rest
+            return ordered[:max(2, int(top_n))]
 
+        jlat, jlon = job_c
+        scored = []
         for t in tech_names:
             tf = fsa(tech_postal_map.get(t, ""))
-            if jf and tf == jf:
-                same.append(t)
-            elif jfirst and tf.startswith(jfirst):
-                same_letter.append(t)
+            tc = fsa_centroid_cached(tf)
+            if tc:
+                dist = haversine_km(jlat, jlon, tc[0], tc[1])
             else:
-                rest.append(t)
+                dist = 9e9
+            scored.append((dist, t))
 
-        ordered = same + same_letter + rest
-        return ordered[:max(2, int(top_n))]
+        scored.sort(key=lambda x: x[0])
+        out = [t for _, t in scored]
+        return out[:max(2, int(top_n))]
 
     # ────────────────────────────────────────────────────────────────
     # Styling (unchanged except OT row support)
@@ -1294,11 +1380,6 @@ def render_page_2():
             OT_ACTIVE_CAP = available
 
         def _choose_onsite_no_crumbs(remaining_min: int, max_onsite_today: int, min_chunk: int) -> int:
-            """
-            Choisit onsite_today en évitant:
-            - de créer une portion < min_chunk si on ne finit pas aujourd'hui
-            - de laisser un reste < min_chunk pour un autre jour
-            """
             remaining_min = int(remaining_min)
             max_onsite_today = int(max_onsite_today)
             min_chunk = int(min_chunk)
@@ -1308,23 +1389,23 @@ def render_page_2():
 
             onsite_today = min(remaining_min, max_onsite_today)
 
-            # Si on finit aujourd'hui, OK même si <3h (pas de jour suivant)
+            # If finishes today, OK
             if onsite_today >= remaining_min:
                 return onsite_today
 
             rem_after = remaining_min - onsite_today
 
-            # Interdit: portion <3h si on ne finit pas
+            # Do not create a part < min_chunk if not finishing
             if onsite_today < min_chunk:
                 return 0
 
-            # Interdit: laisser un reste <3h
+            # Do not leave remainder < min_chunk
             if rem_after < min_chunk:
-                # option A: finir aujourd'hui si possible
+                # option A: finish today if possible
                 if remaining_min <= max_onsite_today:
                     return remaining_min
 
-                # option B: laisser min_chunk pour demain
+                # option B: leave exactly min_chunk for tomorrow
                 onsite_today = remaining_min - min_chunk
                 onsite_today = min(onsite_today, max_onsite_today)
 
@@ -1351,7 +1432,6 @@ def render_page_2():
         postal_map = {t: str(tech_df.loc[tech_df["tech_name"] == t, "postal"].iloc[0]) if "postal" in tech_df.columns else "" for t in tech_names}
 
         carryover_by_tech: Dict[str, Dict[str, Any]] = {}
-
         split_label_state: Dict[str, Dict[str, Any]] = {}
 
         def _register_and_relabel_split_row(base_job_id: str, new_row_idx: int, part_num: int):
@@ -1394,7 +1474,6 @@ def render_page_2():
             if max_onsite_today <= 0:
                 return
 
-            # ✅ Anti-miettes: refuse small part (<3h) and refuse leaving remainder (<3h)
             onsite_today = _choose_onsite_no_crumbs(remaining_min, max_onsite_today, MIN_ONSITE_CHUNK_MIN)
             if onsite_today <= 0:
                 return
@@ -1475,7 +1554,6 @@ def render_page_2():
                     for jidx, job in sample.iterrows():
                         addr = job["address"]
 
-                        # ✅ DUO job minutes are TOTAL, so per-tech minutes = ceil(total/2)
                         job_min_total = int(job["job_minutes"])
                         job_min_each = int(math.ceil(job_min_total / 2.0))
                         need_block = int(job_min_each) + int(buffer_job)
@@ -1557,7 +1635,7 @@ def render_page_2():
 
                     duo_jobs = duo_jobs[duo_jobs["job_id"] != job["job_id"]].copy()
 
-            # ---- 2) SOLO greedy per tech ----
+            # ---- 2) SOLO greedy (kept), but with centroid-based prefilter for "near techs"
             if not solo_jobs.empty:
                 made_progress = True
                 while made_progress:
@@ -1581,6 +1659,21 @@ def render_page_2():
 
                         tech_post = postal_map.get(t, "")
                         sample = get_job_pool_for_tech(solo_jobs, tech_post, int(solo_pool))
+
+                        # ✅ Extra precision: sort sample by centroid distance (0 Distance Matrix)
+                        tf = fsa(tech_post)
+                        tc = fsa_centroid_cached(tf)
+                        if tc is not None and "fsa" in sample.columns:
+                            tlat, tlon = tc
+                            tmp = sample.copy()
+                            tmp["__dist_km"] = 999999.0
+                            for i in tmp.index:
+                                jf = str(tmp.at[i, "fsa"] or "")
+                                jc = fsa_centroid_cached(jf)
+                                if jc:
+                                    tmp.at[i, "__dist_km"] = float(haversine_km(tlat, tlon, jc[0], jc[1]))
+                            tmp = tmp.sort_values("__dist_km", ascending=True).drop(columns=["__dist_km"], errors="ignore")
+                            sample = tmp
 
                         # Try normal jobs that fit
                         for idx, job in sample.iterrows():
@@ -1629,7 +1722,6 @@ def render_page_2():
                             continue
 
                         # ✅ OT single-job day (ONLY if first job of the day):
-                        # If total (travel + job + buffer + return) <= 14h active, book it in one day and flag OT.
                         if jobs_count[t] == 0:
                             best_ot_idx = None
                             best_ot_cost = None
@@ -1681,7 +1773,6 @@ def render_page_2():
                                 continue
 
                         # If nothing fits, attempt split ONLY for jobs with onsite > daily_onsite_cap
-                        # overtime exception (<180) if FIRST job of day -> lock tech and do it same day
                         best_long_idx = None
                         best_long_cost = None
                         best_long_job = None
@@ -1707,16 +1798,13 @@ def render_page_2():
                             if max_onsite_today <= 0:
                                 continue
 
-                            # ✅ Interdit de DÉMARRER un split dans un "petit trou" si ce n'est pas le 1er job du jour
                             if jobs_count[t] > 0 and int(max_onsite_today) < int(MIN_ONSITE_CHUNK_MIN):
                                 continue
 
-                            # ✅ Anti-miettes: determine today's chunk (refuse <3h if not finishing, refuse leaving <3h)
                             onsite_today_candidate = _choose_onsite_no_crumbs(jm, max_onsite_today, MIN_ONSITE_CHUNK_MIN)
                             if onsite_today_candidate <= 0:
                                 continue
 
-                            # For overtime candidate, we require we can actually do the FULL job today
                             if is_overtime_candidate and jm > int(max_onsite_today):
                                 continue
 
@@ -1852,7 +1940,7 @@ def render_page_2():
     tech_names_all = sorted(tech_df["tech_name"].astype(str).tolist())
 
     # ────────────────────────────────────────────────────────────────
-    # MODE A — DAY / 1 TECH (unchanged, with OT + anti-miettes)
+    # MODE A — DAY / 1 TECH (unchanged logic; centroid used via get_job_pool_for_tech only)
     # ────────────────────────────────────────────────────────────────
     if mode == "1 journée / 1 technicien (mode actuel)":
         st.subheader("🧰 Planning 1 journée / 1 technicien")
@@ -1951,6 +2039,21 @@ def render_page_2():
                 best_tmin = None
 
                 sample = get_job_pool_for_tech(remaining, chosen_post, int(solo_pool))
+
+                # ✅ centroid sort for extra precision (0 Distance Matrix)
+                tf = fsa(chosen_post)
+                tc = fsa_centroid_cached(tf)
+                if tc is not None and "fsa" in sample.columns:
+                    tlat, tlon = tc
+                    tmp = sample.copy()
+                    tmp["__dist_km"] = 999999.0
+                    for i in tmp.index:
+                        jf = str(tmp.at[i, "fsa"] or "")
+                        jc = fsa_centroid_cached(jf)
+                        if jc:
+                            tmp.at[i, "__dist_km"] = float(haversine_km(tlat, tlon, jc[0], jc[1]))
+                    tmp = tmp.sort_values("__dist_km", ascending=True).drop(columns=["__dist_km"], errors="ignore")
+                    sample = tmp
 
                 for idx, job in sample.iterrows():
                     tmin = travel_min_cached(cur_loc, job["address"])
@@ -2391,7 +2494,6 @@ def render_page_2():
                     duo_left = int((unplanned_df["techs_needed"].astype(int) == 2).sum())
                     if duo_left > 0:
                         st.warning(f"⚠️ Jobs DUO restants (techs_needed=2): {duo_left}")
-
 # ────────────────────────────────────────────────────────────────
 # Router
 # ────────────────────────────────────────────────────────────────
