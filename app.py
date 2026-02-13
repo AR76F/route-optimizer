@@ -873,7 +873,14 @@ from typing import List, Optional, Tuple
 import streamlit as st
 import pandas as pd
 # ────────────────────────────────────────────────────────────────
-# PAGE 2 (Planning) 
+# PAGE 2 (Planning) — persist upload + results + 3 modes + DUO + seq + return home + progress
+# + NEW (Run 5):
+#   - travel_penalty() ajouté (aucun coût API additionnel)
+#   - pénalité progressive après 60 min appliquée à:
+#       • DUO scoring
+#       • SOLO scoring
+#       • choix des jobs SPLIT (long jobs)
+#       • (aussi dans le mode 1 journée pour cohérence)
 # ────────────────────────────────────────────────────────────────
 def render_page_2():
     import calendar
@@ -884,6 +891,9 @@ def render_page_2():
     from datetime import date, timedelta
     from io import BytesIO
     from typing import List, Optional, Tuple, Dict, Any
+
+    import streamlit as st
+    import pandas as pd
 
     st.title("📅 Planning (Page 2)")
 
@@ -987,6 +997,7 @@ def render_page_2():
         return p[:3] if len(p) >= 3 else ""
 
     jobs = pd.DataFrame()
+
     jobs["job_id"] = jobs_raw[COL_ORDER].apply(clean_id)
     if COL_CUST:
         jobs["cust"] = jobs_raw[COL_CUST].apply(clean_id)
@@ -1062,6 +1073,13 @@ def render_page_2():
         h = m // 60
         mm = m % 60
         return f"{h:02d}:{mm:02d}"
+
+    # ✅ NEW: penalty to reduce long trips (no extra API)
+    def travel_penalty(mins: int, threshold: int = 60, mult: float = 1.5) -> float:
+        mins = int(mins or 0)
+        if mins <= int(threshold):
+            return 0.0
+        return float(mins - int(threshold)) * float(mult)
 
     # ────────────────────────────────────────────────────────────────
     # ✅ COST REDUCTION #1: Persistent SQLite cache for travel
@@ -1301,21 +1319,23 @@ def render_page_2():
 
             onsite_today = min(remaining_min, max_onsite_today)
 
-            # If finish today, OK even if <min_chunk
+            # Si on finit aujourd'hui, OK même si <3h (pas de jour suivant)
             if onsite_today >= remaining_min:
                 return onsite_today
 
             rem_after = remaining_min - onsite_today
 
-            # forbid small part if not finishing
+            # Interdit: portion <3h si on ne finit pas
             if onsite_today < min_chunk:
                 return 0
 
-            # forbid leaving small remainder
+            # Interdit: laisser un reste <3h
             if rem_after < min_chunk:
+                # option A: finir aujourd'hui si possible
                 if remaining_min <= max_onsite_today:
                     return remaining_min
 
+                # option B: laisser min_chunk pour demain
                 onsite_today = remaining_min - min_chunk
                 onsite_today = min(onsite_today, max_onsite_today)
 
@@ -1342,6 +1362,7 @@ def render_page_2():
         postal_map = {t: str(tech_df.loc[tech_df["tech_name"] == t, "postal"].iloc[0]) if "postal" in tech_df.columns else "" for t in tech_names}
 
         carryover_by_tech: Dict[str, Dict[str, Any]] = {}
+
         split_label_state: Dict[str, Dict[str, Any]] = {}
 
         def _register_and_relabel_split_row(base_job_id: str, new_row_idx: int, part_num: int):
@@ -1425,151 +1446,6 @@ def render_page_2():
             else:
                 lock_tech[t] = False
 
-        # ────────────────────────────────────────────────────────────────
-        # GLOBAL SOLO+SPLIT chooser (ONLY change vs previous "for tech in tech_names" booking)
-        # ────────────────────────────────────────────────────────────────
-        def _best_solo_or_split_move_global(
-            solo_jobs_df: pd.DataFrame,
-            tech_names: List[str],
-            used: Dict[str, int],
-            cur_loc: Dict[str, str],
-            jobs_count: Dict[str, int],
-            lock_tech: Dict[str, bool],
-            carryover_by_tech: Dict[str, Dict[str, Any]],
-        ) -> Optional[Dict[str, Any]]:
-            """
-            Returns one best move across ALL techs:
-            - type: "solo" or "ot_solo" or "start_split" or "ot_full_long"
-            - plus all data needed to book it.
-            Scoring preserves original intent:
-            0) normal solo that fits <= available
-            1) OT single-job day (first job only)
-            2) start split / long job handling
-            """
-            if solo_jobs_df is None or solo_jobs_df.empty:
-                return None
-
-            best_move = None
-            best_score = None
-
-            for t in tech_names:
-                if lock_tech.get(t, False):
-                    continue
-                if jobs_count[t] >= int(max_jobs_per_day):
-                    continue
-                if t in carryover_by_tech:
-                    # can't start another split for this tech (same as before)
-                    pass
-
-                tech_post = postal_map.get(t, "")
-                sample = get_job_pool_for_tech(solo_jobs_df, tech_post, int(solo_pool))
-
-                # ---- A) normal jobs that fit ----
-                local_best = None
-                local_best_score = None  # (tmin, start_m)
-                for idx, job in sample.iterrows():
-                    addr = job["address"]
-                    tmin = travel_min_cached(cur_loc[t], addr)
-                    tback = travel_min_cached(addr, home_map[t])
-
-                    need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
-                    if need <= 0:
-                        continue
-                    if int(used[t]) + int(need) <= int(available):
-                        start_m = int(used[t]) + int(tmin)
-                        # prefer smallest travel; tie-break earliest start
-                        sc = (int(tmin), int(start_m))
-                        if local_best_score is None or sc < local_best_score:
-                            local_best_score = sc
-                            local_best = {"type": "solo", "t": t, "idx": idx, "job": job, "tmin": int(tmin)}
-
-                if local_best is not None:
-                    # global score: category 0 first, then travel, then earliest start
-                    gsc = (0, local_best_score[0], local_best_score[1])
-                    if best_score is None or gsc < best_score:
-                        best_score = gsc
-                        best_move = local_best
-                    continue  # same as previous: if we found a normal fit, don't consider OT/split for this tech in this pass
-
-                # ---- B) OT single-job day (only if first job) ----
-                if jobs_count[t] == 0:
-                    local_ot = None
-                    local_ot_score = None  # (tmin, start_m)
-                    for idx, job in sample.iterrows():
-                        addr = job["address"]
-                        tmin = travel_min_cached(cur_loc[t], addr)
-                        tback = travel_min_cached(addr, home_map[t])
-                        need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
-                        if need <= int(OT_ACTIVE_CAP):
-                            start_m = int(used[t]) + int(tmin)
-                            sc = (int(tmin), int(start_m))
-                            if local_ot_score is None or sc < local_ot_score:
-                                local_ot_score = sc
-                                local_ot = {"type": "ot_solo", "t": t, "idx": idx, "job": job, "tmin": int(tmin)}
-
-                    if local_ot is not None:
-                        gsc = (1, local_ot_score[0], local_ot_score[1])
-                        if best_score is None or gsc < best_score:
-                            best_score = gsc
-                            best_move = local_ot
-                        # do not continue; we still allow split candidates (category 2) but OT has priority by gsc
-
-                # ---- C) Start split / long job handling (global) ----
-                local_long = None
-                local_long_score = None  # (tmin, start_m)
-                for idx, job in sample.iterrows():
-                    jm = int(job["job_minutes"])
-                    if jm <= int(daily_onsite_cap):
-                        continue
-
-                    if t in carryover_by_tech:
-                        continue
-
-                    is_overtime_candidate = False
-                    if (jobs_count[t] == 0) and ((jm - int(daily_onsite_cap)) < 180):
-                        is_overtime_candidate = True
-
-                    addr = job["address"]
-                    tmin = travel_min_cached(cur_loc[t], addr)
-                    tback = travel_min_cached(addr, home_map[t])
-
-                    max_onsite_today = int(available) - int(used[t]) - int(tmin) - int(buffer_job) - int(tback)
-                    if max_onsite_today <= 0:
-                        continue
-
-                    # forbid starting split in tiny hole if not first job
-                    if jobs_count[t] > 0 and int(max_onsite_today) < int(MIN_ONSITE_CHUNK_MIN):
-                        continue
-
-                    onsite_today_candidate = _choose_onsite_no_crumbs(jm, max_onsite_today, MIN_ONSITE_CHUNK_MIN)
-                    if onsite_today_candidate <= 0:
-                        continue
-
-                    # For OT-full-long candidate, require we can do full job today
-                    if is_overtime_candidate and jm > int(max_onsite_today):
-                        continue
-
-                    start_m = int(used[t]) + int(tmin)
-                    sc = (int(tmin), int(start_m))
-                    if local_long_score is None or sc < local_long_score:
-                        local_long_score = sc
-                        local_long = {
-                            "type": "ot_full_long" if is_overtime_candidate else "start_split",
-                            "t": t,
-                            "idx": idx,
-                            "job": job,
-                            "tmin": int(tmin),
-                            "tback": int(tback),
-                        }
-
-                if local_long is not None:
-                    gsc = (2, local_long_score[0], local_long_score[1])
-                    if best_score is None or gsc < best_score:
-                        best_score = gsc
-                        best_move = local_long
-
-            return best_move
-
         total_steps = max(1, len(month_days))
         for di, day in enumerate(month_days):
             used = {t: 0 for t in tech_names}
@@ -1592,7 +1468,7 @@ def render_page_2():
                     if t in carryover_by_tech and int(carryover_by_tech[t]["remaining_job_min"]) <= 0:
                         del carryover_by_tech[t]
 
-            # ---- 1) DUO first ---- (unchanged)
+            # ---- 1) DUO first ----
             if allow_duo and (not duo_jobs.empty) and len(tech_names) >= 2:
                 while True:
                     if duo_jobs.empty:
@@ -1609,7 +1485,6 @@ def render_page_2():
                     for jidx, job in sample.iterrows():
                         addr = job["address"]
 
-                        # ✅ DUO job minutes are TOTAL, so per-tech minutes = ceil(total/2)
                         job_min_total = int(job["job_minutes"])
                         job_min_each = int(math.ceil(job_min_total / 2.0))
                         need_block = int(job_min_each) + int(buffer_job)
@@ -1648,18 +1523,26 @@ def render_page_2():
                                 t2_back = travel_min_cached(addr, home_map[t2])
 
                                 if (end_m + int(t1_back) <= available) and (end_m + int(t2_back) <= available):
-                                    score = (start_m, max(int(t1_tr), int(t2_tr)))
+                                    # ✅ NEW: penalty after 60 min (no extra API)
+                                    worst_tr = max(int(t1_tr), int(t2_tr))
+                                    worst_back = max(int(t1_back), int(t2_back))
+                                    pen = travel_penalty(worst_tr, 60, 1.5) + 0.5 * travel_penalty(worst_back, 60, 1.0)
+
+                                    # keep tuple structure (primary: adjusted start, secondary: raw worst travel)
+                                    score = (start_m + pen, worst_tr)
+
                                     if best is None or score < best[0]:
                                         best = (
                                             score, jidx, t1, t2,
                                             start_m, end_m, int(t1_tr), int(t2_tr),
-                                            duo_is_overtime, int(job_min_each)
+                                            duo_is_overtime, int(job_min_each),
+                                            int(t1_back), int(t2_back)
                                         )
 
                     if best is None:
                         break
 
-                    _, jidx, t1, t2, start_m, end_m, t1_tr, t2_tr, duo_is_overtime, job_min_each = best
+                    _, jidx, t1, t2, start_m, end_m, t1_tr, t2_tr, duo_is_overtime, job_min_each, t1_back, t2_back = best
                     job = duo_jobs.loc[jidx]
 
                     for tname, trv in [(t1, t1_tr), (t2, t2_tr)]:
@@ -1691,7 +1574,7 @@ def render_page_2():
 
                     duo_jobs = duo_jobs[duo_jobs["job_id"] != job["job_id"]].copy()
 
-            # ---- 2) SOLO + SPLIT (GLOBAL) ----
+            # ---- 2) SOLO greedy per tech ----
             if not solo_jobs.empty:
                 made_progress = True
                 while made_progress:
@@ -1699,122 +1582,210 @@ def render_page_2():
                     if solo_jobs.empty:
                         break
 
-                    move = _best_solo_or_split_move_global(
-                        solo_jobs_df=solo_jobs,
-                        tech_names=tech_names,
-                        used=used,
-                        cur_loc=cur_loc,
-                        jobs_count=jobs_count,
-                        lock_tech=lock_tech,
-                        carryover_by_tech=carryover_by_tech,
-                    )
+                    for t in tech_names:
+                        if solo_jobs.empty:
+                            break
 
-                    if move is None:
-                        break
+                        if lock_tech.get(t, False):
+                            continue
 
-                    mtype = move["type"]
-                    t = move["t"]
-                    job = move["job"]
-                    idx = move["idx"]
+                        if jobs_count[t] >= int(max_jobs_per_day):
+                            continue
 
-                    # Book SOLO normal
-                    if mtype == "solo":
-                        jobs_count[t] += 1
-                        start_m = int(used[t]) + int(move["tmin"])
-                        end_m = start_m + int(job["job_minutes"]) + int(buffer_job)
+                        best_idx = None
+                        best_score = None
+                        best_tmin = None
 
-                        planned_rows.append({
-                            "date": day.isoformat(),
-                            "technicien": t,
-                            "sequence": jobs_count[t],
-                            "job_id": job["job_id"],
-                            "cust": job.get("cust", ""),
-                            "duo": "",
-                            "ot": "",
-                            "debut": mm_to_hhmm(int(start_m)),
-                            "fin": mm_to_hhmm(int(end_m)),
-                            "adresse": job["address"],
-                            "travel_min": int(move["tmin"]),
-                            "job_min": int(job["job_minutes"]),
-                            "buffer_min": int(buffer_job),
-                            "techs_needed": int(job["techs_needed"]),
-                            "description": job["description"],
-                        })
+                        tech_post = postal_map.get(t, "")
+                        sample = get_job_pool_for_tech(solo_jobs, tech_post, int(solo_pool))
 
-                        used[t] = int(end_m)
-                        cur_loc[t] = job["address"]
-                        solo_jobs = solo_jobs[solo_jobs["job_id"] != job["job_id"]].copy()
-                        made_progress = True
-                        continue
+                        # Try normal jobs that fit
+                        for idx, job in sample.iterrows():
+                            tmin = travel_min_cached(cur_loc[t], job["address"])
+                            tback = travel_min_cached(job["address"], home_map[t])
 
-                    # Book OT single-job day (same behavior as before: lock tech and stop additional jobs by lock_tech)
-                    if mtype == "ot_solo":
-                        jobs_count[t] += 1
-                        start_m = int(used[t]) + int(move["tmin"])
-                        end_m = start_m + int(job["job_minutes"]) + int(buffer_job)
+                            need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
+                            if need <= 0:
+                                continue
 
-                        planned_rows.append({
-                            "date": day.isoformat(),
-                            "technicien": t,
-                            "sequence": jobs_count[t],
-                            "job_id": job["job_id"],
-                            "cust": job.get("cust", ""),
-                            "duo": "",
-                            "ot": "🟥 OT",
-                            "debut": mm_to_hhmm(int(start_m)),
-                            "fin": mm_to_hhmm(int(end_m)),
-                            "adresse": job["address"],
-                            "travel_min": int(move["tmin"]),
-                            "job_min": int(job["job_minutes"]),
-                            "buffer_min": int(buffer_job),
-                            "techs_needed": int(job["techs_needed"]),
-                            "description": job["description"],
-                        })
+                            if used[t] + need <= available:
+                                # ✅ NEW: penalty after 60 to avoid long moves
+                                sc = int(tmin) + travel_penalty(int(tmin), 60, 1.5) + 0.2 * travel_penalty(int(tback), 60, 1.0)
+                                if best_score is None or sc < best_score:
+                                    best_idx = idx
+                                    best_score = sc
+                                    best_tmin = int(tmin)
 
-                        used[t] = int(end_m)
-                        cur_loc[t] = job["address"]
-                        solo_jobs = solo_jobs[solo_jobs["job_id"] != job["job_id"]].copy()
-                        lock_tech[t] = True
-                        made_progress = True
-                        continue
+                        if best_idx is not None:
+                            job = solo_jobs.loc[best_idx]
+                            jobs_count[t] += 1
 
-                    # Book OT-full-long (full job today, then lock)
-                    if mtype == "ot_full_long":
-                        jm_total = int(job["job_minutes"])
-                        jobs_count[t] += 1
-                        start_m = int(used[t]) + int(move["tmin"])
-                        end_m = start_m + int(jm_total) + int(buffer_job)
+                            start_m = used[t] + int(best_tmin)
+                            end_m = start_m + int(job["job_minutes"]) + int(buffer_job)
 
-                        planned_rows.append({
-                            "date": day.isoformat(),
-                            "technicien": t,
-                            "sequence": jobs_count[t],
-                            "job_id": job["job_id"],
-                            "cust": job.get("cust", ""),
-                            "duo": "",
-                            "ot": "",
-                            "debut": mm_to_hhmm(int(start_m)),
-                            "fin": mm_to_hhmm(int(end_m)),
-                            "adresse": job["address"],
-                            "travel_min": int(move["tmin"]),
-                            "job_min": int(jm_total),
-                            "buffer_min": int(buffer_job),
-                            "techs_needed": int(job.get("techs_needed", 1)),
-                            "description": job["description"],
-                        })
+                            planned_rows.append({
+                                "date": day.isoformat(),
+                                "technicien": t,
+                                "sequence": jobs_count[t],
+                                "job_id": job["job_id"],
+                                "cust": job.get("cust", ""),
+                                "duo": "",
+                                "ot": "",
+                                "debut": mm_to_hhmm(int(start_m)),
+                                "fin": mm_to_hhmm(int(end_m)),
+                                "adresse": job["address"],
+                                "travel_min": int(best_tmin),
+                                "job_min": int(job["job_minutes"]),
+                                "buffer_min": int(buffer_job),
+                                "techs_needed": int(job["techs_needed"]),
+                                "description": job["description"],
+                            })
 
-                        used[t] = int(end_m)
-                        cur_loc[t] = job["address"]
-                        solo_jobs = solo_jobs[solo_jobs["job_id"] != job["job_id"]].copy()
-                        lock_tech[t] = True
-                        made_progress = True
-                        continue
+                            used[t] = int(end_m)
+                            cur_loc[t] = job["address"]
+                            solo_jobs = solo_jobs[solo_jobs["job_id"] != job["job_id"]].copy()
+                            made_progress = True
+                            continue
 
-                    # Start split (GLOBAL choice)
-                    if mtype == "start_split":
+                        # ✅ OT single-job day (ONLY if first job of the day):
+                        if jobs_count[t] == 0:
+                            best_ot_idx = None
+                            best_ot_score = None
+                            best_ot_tmin = None
+                            best_ot_job = None
+
+                            for idx, job in sample.iterrows():
+                                tmin = travel_min_cached(cur_loc[t], job["address"])
+                                tback = travel_min_cached(job["address"], home_map[t])
+                                need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
+                                if need <= OT_ACTIVE_CAP:
+                                    # keep a small preference against very long travel even in OT
+                                    sc = int(tmin) + travel_penalty(int(tmin), 60, 1.5)
+                                    if best_ot_score is None or sc < best_ot_score:
+                                        best_ot_idx = idx
+                                        best_ot_score = sc
+                                        best_ot_tmin = int(tmin)
+                                        best_ot_job = job
+
+                            if best_ot_idx is not None:
+                                job = best_ot_job
+                                jobs_count[t] += 1
+
+                                start_m = used[t] + int(best_ot_tmin)
+                                end_m = start_m + int(job["job_minutes"]) + int(buffer_job)
+
+                                planned_rows.append({
+                                    "date": day.isoformat(),
+                                    "technicien": t,
+                                    "sequence": jobs_count[t],
+                                    "job_id": job["job_id"],
+                                    "cust": job.get("cust", ""),
+                                    "duo": "",
+                                    "ot": "🟥 OT",
+                                    "debut": mm_to_hhmm(int(start_m)),
+                                    "fin": mm_to_hhmm(int(end_m)),
+                                    "adresse": job["address"],
+                                    "travel_min": int(best_ot_tmin),
+                                    "job_min": int(job["job_minutes"]),
+                                    "buffer_min": int(buffer_job),
+                                    "techs_needed": int(job["techs_needed"]),
+                                    "description": job["description"],
+                                })
+
+                                used[t] = int(end_m)
+                                cur_loc[t] = job["address"]
+                                solo_jobs = solo_jobs[solo_jobs["job_id"] != job["job_id"]].copy()
+
+                                lock_tech[t] = True
+                                made_progress = True
+                                continue
+
+                        # If nothing fits, attempt split ONLY for jobs with onsite > daily_onsite_cap
+                        best_long_idx = None
+                        best_long_score = None
+                        best_long_job = None
+                        best_long_is_overtime = False
+
+                        for idx, job in sample.iterrows():
+                            jm = int(job["job_minutes"])
+                            if jm <= int(daily_onsite_cap):
+                                continue
+
+                            if t in carryover_by_tech:
+                                continue
+
+                            is_overtime_candidate = False
+                            if (jobs_count[t] == 0) and ((jm - int(daily_onsite_cap)) < 180):
+                                is_overtime_candidate = True
+
+                            addr = job["address"]
+                            tmin = travel_min_cached(cur_loc[t], addr)
+                            tback = travel_min_cached(addr, home_map[t])
+
+                            max_onsite_today = int(available) - int(used[t]) - int(tmin) - int(buffer_job) - int(tback)
+                            if max_onsite_today <= 0:
+                                continue
+
+                            if jobs_count[t] > 0 and int(max_onsite_today) < int(MIN_ONSITE_CHUNK_MIN):
+                                continue
+
+                            onsite_today_candidate = _choose_onsite_no_crumbs(jm, max_onsite_today, MIN_ONSITE_CHUNK_MIN)
+                            if onsite_today_candidate <= 0:
+                                continue
+
+                            if is_overtime_candidate and jm > int(max_onsite_today):
+                                continue
+
+                            # ✅ NEW: penalize long travel for choosing which job to split
+                            sc_long = int(tmin) + travel_penalty(int(tmin), 60, 1.5) + 0.2 * travel_penalty(int(tback), 60, 1.0)
+
+                            if best_long_score is None or sc_long < best_long_score:
+                                best_long_idx = idx
+                                best_long_score = sc_long
+                                best_long_job = job
+                                best_long_is_overtime = bool(is_overtime_candidate)
+
+                        if best_long_idx is None:
+                            continue
+
+                        job = best_long_job
                         base_job_id = str(job["job_id"])
                         jm_total = int(job["job_minutes"])
 
+                        # overtime exception: do FULL job today and lock tech (no split)
+                        if bool(best_long_is_overtime):
+                            tmin = travel_min_cached(cur_loc[t], job["address"])
+                            start_m = int(used[t]) + int(tmin)
+                            end_m = start_m + int(jm_total) + int(buffer_job)
+
+                            jobs_count[t] += 1
+                            planned_rows.append({
+                                "date": day.isoformat(),
+                                "technicien": t,
+                                "sequence": jobs_count[t],
+                                "job_id": job["job_id"],
+                                "cust": job.get("cust", ""),
+                                "duo": "",
+                                "ot": "",
+                                "debut": mm_to_hhmm(int(start_m)),
+                                "fin": mm_to_hhmm(int(end_m)),
+                                "adresse": job["address"],
+                                "travel_min": int(tmin),
+                                "job_min": int(jm_total),
+                                "buffer_min": int(buffer_job),
+                                "techs_needed": int(job.get("techs_needed", 1)),
+                                "description": job["description"],
+                            })
+
+                            used[t] = int(end_m)
+                            cur_loc[t] = job["address"]
+                            solo_jobs = solo_jobs[solo_jobs["job_id"] != job["job_id"]].copy()
+
+                            lock_tech[t] = True
+                            made_progress = True
+                            continue
+
+                        # Otherwise: normal split behavior
                         total_parts_guess = compute_total_parts(int(job["job_minutes"]), int(daily_onsite_cap))
 
                         carryover_by_tech[t] = {
@@ -1844,9 +1815,8 @@ def render_page_2():
                             del carryover_by_tech[t]
 
                         made_progress = True
-                        continue
 
-            # RETURN_HOME (unchanged)
+            # RETURN_HOME
             for t in tech_names:
                 if jobs_count[t] > 0:
                     tback = travel_min_cached(cur_loc[t], home_map[t])
@@ -1901,7 +1871,7 @@ def render_page_2():
     tech_names_all = sorted(tech_df["tech_name"].astype(str).tolist())
 
     # ────────────────────────────────────────────────────────────────
-    # MODE A — DAY / 1 TECH (unchanged)
+    # MODE A — DAY / 1 TECH (same logic, with penalty after 60)
     # ────────────────────────────────────────────────────────────────
     if mode == "1 journée / 1 technicien (mode actuel)":
         st.subheader("🧰 Planning 1 journée / 1 technicien")
@@ -1995,7 +1965,7 @@ def render_page_2():
                     break
 
                 best_idx = None
-                best_cost = None
+                best_score = None
                 best_tmin = None
 
                 sample = get_job_pool_for_tech(remaining, chosen_post, int(solo_pool))
@@ -2008,9 +1978,10 @@ def render_page_2():
                     if need <= 0:
                         continue
                     if used + need <= available:
-                        if best_cost is None or int(tmin) < best_cost:
+                        sc = int(tmin) + travel_penalty(int(tmin), 60, 1.5) + 0.2 * travel_penalty(int(tback), 60, 1.0)
+                        if best_score is None or sc < best_score:
                             best_idx = idx
-                            best_cost = int(tmin)
+                            best_score = sc
                             best_tmin = int(tmin)
 
                 if best_idx is not None:
@@ -2043,7 +2014,7 @@ def render_page_2():
 
                 if seq == 0:
                     best_ot_idx = None
-                    best_ot_cost = None
+                    best_ot_score = None
                     best_ot_tmin = None
                     best_ot_job = None
 
@@ -2052,9 +2023,10 @@ def render_page_2():
                         tback = travel_min_cached(job["address"], home_addr)
                         need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
                         if need <= OT_ACTIVE_CAP:
-                            if best_ot_cost is None or int(tmin) < best_ot_cost:
+                            sc = int(tmin) + travel_penalty(int(tmin), 60, 1.5)
+                            if best_ot_score is None or sc < best_ot_score:
                                 best_ot_idx = idx
-                                best_ot_cost = int(tmin)
+                                best_ot_score = sc
                                 best_ot_tmin = int(tmin)
                                 best_ot_job = job
 
@@ -2087,6 +2059,7 @@ def render_page_2():
                         break
 
                 best_long = None
+                best_long_score = None
                 for idx, job in sample.iterrows():
                     jm = int(job["job_minutes"])
                     if jm <= int(daily_onsite_cap):
@@ -2102,8 +2075,11 @@ def render_page_2():
                     if onsite_today_candidate <= 0:
                         continue
 
-                    if best_long is None or int(tmin) < int(best_long["tmin"]):
+                    sc_long = int(tmin) + travel_penalty(int(tmin), 60, 1.5) + 0.2 * travel_penalty(int(tback), 60, 1.0)
+
+                    if best_long is None or sc_long < best_long_score:
                         best_long = {"idx": idx, "job": job, "tmin": int(tmin), "tback": int(tback)}
+                        best_long_score = sc_long
 
                 if best_long is None:
                     break
