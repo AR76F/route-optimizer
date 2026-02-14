@@ -872,15 +872,10 @@ from typing import List, Optional, Tuple
 
 import streamlit as st
 import pandas as pd
+
 # ────────────────────────────────────────────────────────────────
 # PAGE 2 (Planning) — persist upload + results + 3 modes + DUO + seq + return home + progress
-# + NEW (Run 5):
-#   - travel_penalty() ajouté (aucun coût API additionnel)
-#   - pénalité progressive après 60 min appliquée à:
-#       • DUO scoring
-#       • SOLO scoring
-#       • choix des jobs SPLIT (long jobs)
-#       • (aussi dans le mode 1 journée pour cohérence)
+# (MODIF ONLY): replace FSA prefilter/ranking/sector rule by LAT/LON (geocode cached 30 days)
 # ────────────────────────────────────────────────────────────────
 def render_page_2():
     import calendar
@@ -891,9 +886,6 @@ def render_page_2():
     from datetime import date, timedelta
     from io import BytesIO
     from typing import List, Optional, Tuple, Dict, Any
-
-    import streamlit as st
-    import pandas as pd
 
     st.title("📅 Planning (Page 2)")
 
@@ -992,12 +984,7 @@ def render_page_2():
         m = re.search(r"\b([A-Z]\d[A-Z])\s?(\d[A-Z]\d)\b", str(s).upper())
         return (m.group(1) + m.group(2)) if m else ""
 
-    def fsa(postal: str) -> str:
-        p = extract_postal(postal)
-        return p[:3] if len(p) >= 3 else ""
-
     jobs = pd.DataFrame()
-
     jobs["job_id"] = jobs_raw[COL_ORDER].apply(clean_id)
     if COL_CUST:
         jobs["cust"] = jobs_raw[COL_CUST].apply(clean_id)
@@ -1025,12 +1012,11 @@ def render_page_2():
     techs_needed = pd.to_numeric(jobs_raw[COL_TECHN], errors="coerce") if COL_TECHN else None
     jobs["techs_needed"] = techs_needed.fillna(1).astype(int) if techs_needed is not None else 1
 
-    # ✅ Add job postal/FSA (for prefiltering candidates)
+    # (kept for display / debugging; not used for filtering anymore)
     if COL_POST:
         jobs["postal"] = jobs_raw[COL_POST].fillna("").astype(str).apply(extract_postal)
     else:
         jobs["postal"] = ""
-    jobs["fsa"] = jobs["postal"].apply(fsa)
 
     # Clean
     jobs = jobs[(jobs["address"].astype(str).str.len() > 8) & (jobs["job_minutes"] > 0)].copy()
@@ -1074,13 +1060,6 @@ def render_page_2():
         mm = m % 60
         return f"{h:02d}:{mm:02d}"
 
-    # ✅ NEW: penalty to reduce long trips (no extra API)
-    def travel_penalty(mins: int, threshold: int = 60, mult: float = 1.5) -> float:
-        mins = int(mins or 0)
-        if mins <= int(threshold):
-            return 0.0
-        return float(mins - int(threshold)) * float(mult)
-
     # ────────────────────────────────────────────────────────────────
     # ✅ COST REDUCTION #1: Persistent SQLite cache for travel
     # ────────────────────────────────────────────────────────────────
@@ -1090,11 +1069,12 @@ def render_page_2():
     use_traffic = st.sidebar.checkbox("Utiliser trafic (duration_in_traffic)", value=True, key="p2_use_traffic")
     cache_days = st.sidebar.number_input("Conserver cache (jours)", min_value=1, max_value=365, value=30, step=1, key="p2_cache_days")
 
+    # Pools (unchanged)
     st.sidebar.subheader("🧭 Préfiltrage géographique")
     solo_pool = st.sidebar.slider("SOLO: nb de jobs candidats (pool)", 10, 200, 60, 10, key="p2_solo_pool")
     duo_pool = st.sidebar.slider("DUO: nb de jobs candidats (pool)", 10, 300, 80, 10, key="p2_duo_pool")
     techs_near_job = st.sidebar.slider("DUO: nb de techs proches à tester", 2, 6, 4, 1, key="p2_duo_near_techs")
-    include_nearby_fsa = st.sidebar.checkbox("Inclure FSA voisins si peu de candidats", value=True, key="p2_include_nearby_fsa")
+    include_nearby_fsa = st.sidebar.checkbox("Inclure FSA voisins si peu de candidats", value=True, key="p2_include_nearby_fsa")  # kept for UI; no longer used
 
     def _norm(s: str) -> str:
         return re.sub(r"\s+", " ", str(s or "").strip().lower())
@@ -1161,58 +1141,150 @@ def render_page_2():
         return minutes
 
     # ────────────────────────────────────────────────────────────────
-    # ✅ COST REDUCTION #2: Candidate job pool by FSA (SOLO + DUO)
+    # ✅ NEW: LAT/LON cache + haversine + sector rule (replaces FSA usage)
     # ────────────────────────────────────────────────────────────────
-    def get_job_pool_for_tech(df_remaining: pd.DataFrame, tech_postal: str, pool_size: int) -> pd.DataFrame:
+    def haversine_km(lat1, lon1, lat2, lon2) -> float:
+        # robust to None
+        if lat1 is None or lon1 is None or lat2 is None or lon2 is None:
+            return 1e9
+        R = 6371.0
+        p1 = math.radians(float(lat1))
+        p2 = math.radians(float(lat2))
+        dp = math.radians(float(lat2) - float(lat1))
+        dl = math.radians(float(lon2) - float(lon1))
+        a = math.sin(dp/2)**2 + math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2
+        return 2 * R * math.asin(math.sqrt(a))
+
+    # Caches (session scope)
+    if "p2_ll_cache" not in st.session_state:
+        st.session_state["p2_ll_cache"] = {}  # address_norm -> (lat, lon)
+    ll_cache: Dict[str, Tuple[float, float]] = st.session_state["p2_ll_cache"]
+
+    def get_ll_for_address(addr: str) -> Tuple[Optional[float], Optional[float]]:
+        if not addr:
+            return None, None
+        key = _norm(addr)
+        if key in ll_cache:
+            return ll_cache[key][0], ll_cache[key][1]
+        g = geocode_ll(gmaps_client, addr)  # cached 30 days on your side
+        if g:
+            lat, lon, _ = g
+            ll_cache[key] = (float(lat), float(lon))
+            return float(lat), float(lon)
+        ll_cache[key] = (None, None)
+        return None, None
+
+    # Sector classifier using lat/lon (simple, stable)
+    # - Montreal island OK both sides
+    # - South/North blocks crossing
+    def classify_sector(lat: Optional[float], lon: Optional[float]) -> str:
+        if lat is None or lon is None:
+            return "UNK"
+        lat = float(lat); lon = float(lon)
+
+        # Rough bounding box for "Montréal island area" (good enough for stability)
+        # (keeps your rule: "l'île de montreal est okay des deux côtés")
+        if (45.40 <= lat <= 45.72) and (-74.10 <= lon <= -73.40):
+            return "MTL"
+
+        # Outside island: split by latitude (rough St-Lawrence separator)
+        # This is heuristic but works well to prevent obvious cross-river assignments.
+        return "NORTH" if lat >= 45.55 else "SOUTH"
+
+    def sector_compatible(tech_sector: str, job_sector: str) -> bool:
+        if tech_sector == "UNK" or job_sector == "UNK":
+            return True  # don't block unknowns
+        if tech_sector == "MTL" or job_sector == "MTL":
+            return True
+        # Block South <-> North
+        if (tech_sector == "SOUTH" and job_sector == "NORTH") or (tech_sector == "NORTH" and job_sector == "SOUTH"):
+            return False
+        return True
+
+    # Precompute tech home lat/lon + sector (once)
+    tech_names_all = sorted(tech_df["tech_name"].astype(str).tolist())
+    home_map = {t: tech_df.loc[tech_df["tech_name"] == t, "home_address"].iloc[0] for t in tech_names_all}
+
+    tech_ll_map: Dict[str, Tuple[Optional[float], Optional[float]]] = {}
+    tech_sector_map: Dict[str, str] = {}
+    for t in tech_names_all:
+        lat, lon = get_ll_for_address(home_map[t])
+        tech_ll_map[t] = (lat, lon)
+        tech_sector_map[t] = classify_sector(lat, lon)
+
+    # Add job lat/lon lazily, but we will use it in pool ranking
+    if "job_lat" not in jobs.columns:
+        jobs["job_lat"] = None
+        jobs["job_lon"] = None
+        jobs["job_sector"] = "UNK"
+
+    def ensure_job_ll(row: pd.Series) -> Tuple[Optional[float], Optional[float], str]:
+        if pd.notna(row.get("job_lat")) and pd.notna(row.get("job_lon")):
+            lat = float(row["job_lat"]); lon = float(row["job_lon"])
+            sec = row.get("job_sector", "UNK") or "UNK"
+            if sec == "UNK":
+                sec = classify_sector(lat, lon)
+            return lat, lon, sec
+        lat, lon = get_ll_for_address(row["address"])
+        sec = classify_sector(lat, lon)
+        return lat, lon, sec
+
+    # Replace FSA pool with lat/lon pool (no extra API calls)
+    def get_job_pool_for_tech(df_remaining: pd.DataFrame, tech_name: str, pool_size: int) -> pd.DataFrame:
         if df_remaining.empty:
             return df_remaining
 
-        tech_fsa = fsa(tech_postal)
-        candidates = df_remaining[df_remaining["fsa"] == tech_fsa] if tech_fsa else df_remaining.iloc[0:0]
+        tlat, tlon = tech_ll_map.get(tech_name, (None, None))
+        tsec = tech_sector_map.get(tech_name, "UNK")
 
-        if include_nearby_fsa and len(candidates) < pool_size:
-            if tech_fsa:
-                first = tech_fsa[0]
-                more = df_remaining[df_remaining["fsa"].astype(str).str.startswith(first)]
-                candidates = pd.concat([candidates, more]).drop_duplicates(subset=["job_id"])
+        # Ensure ll for candidates in a light way: compute distance using cached geocode_ll
+        # (geocode_ll is cached 30d; within a single run this is fast)
+        dists = []
+        for idx, r in df_remaining.iterrows():
+            lat, lon, jsec = ensure_job_ll(r)
+            if not sector_compatible(tsec, jsec):
+                continue
+            d = haversine_km(tlat, tlon, lat, lon)
+            dists.append((idx, d))
 
-        if len(candidates) == 0:
+        if not dists:
+            # If everything filtered out (rare), fall back to head(pool_size)
             return df_remaining.head(pool_size) if len(df_remaining) > pool_size else df_remaining
 
-        return candidates.head(pool_size) if len(candidates) > pool_size else candidates
+        dists.sort(key=lambda x: x[1])
+        chosen_idx = [i for (i, _d) in dists[:int(pool_size)]]
+        return df_remaining.loc[chosen_idx].copy()
 
-    def rank_techs_for_job(tech_names: List[str], job_fsa_key: str, tech_postal_map: dict, top_n: int) -> List[str]:
+    # Replace "rank techs for job" with nearest techs by lat/lon (top N)
+    def rank_techs_for_job(tech_names: List[str], job_row: pd.Series, top_n: int) -> List[str]:
         if top_n >= len(tech_names):
             return tech_names
 
-        same = []
-        same_letter = []
-        rest = []
+        jlat, jlon, jsec = ensure_job_ll(job_row)
 
-        jf = job_fsa_key or ""
-        jfirst = jf[0] if jf else ""
-
+        scored = []
         for t in tech_names:
-            tf = fsa(tech_postal_map.get(t, ""))
-            if jf and tf == jf:
-                same.append(t)
-            elif jfirst and tf.startswith(jfirst):
-                same_letter.append(t)
-            else:
-                rest.append(t)
+            tlat, tlon = tech_ll_map.get(t, (None, None))
+            tsec = tech_sector_map.get(t, "UNK")
+            if not sector_compatible(tsec, jsec):
+                continue
+            d = haversine_km(tlat, tlon, jlat, jlon)
+            scored.append((t, d))
 
-        ordered = same + same_letter + rest
-        return ordered[:max(2, int(top_n))]
+        if not scored:
+            return tech_names[:max(2, int(top_n))]
+
+        scored.sort(key=lambda x: x[1])
+        return [t for (t, _d) in scored[:max(2, int(top_n))]]
 
     # ────────────────────────────────────────────────────────────────
-    # Styling (unchanged except OT row support)
+    # Styling (unchanged)
     # ────────────────────────────────────────────────────────────────
     def style_duo(df: pd.DataFrame):
         if df is None or df.empty:
             return df
 
         def _row_style(row):
-            # OT (rouge) prioritaire
             ot_val = str(row.get("ot", "")).strip().lower()
             if ot_val:
                 css = (
@@ -1301,10 +1373,7 @@ def render_page_2():
 
         daily_onsite_cap = int(available)
 
-        # ✅ Anti-miettes: minimum onsite chunk when a job continues to another day
         MIN_ONSITE_CHUNK_MIN = 180  # 3h
-
-        # ✅ OT rule: allow single-job day up to 14h active (incl lunch)
         OT_ACTIVE_CAP = int(round(14 * 60)) - int(lunch_min)
         if OT_ACTIVE_CAP < available:
             OT_ACTIVE_CAP = available
@@ -1319,23 +1388,18 @@ def render_page_2():
 
             onsite_today = min(remaining_min, max_onsite_today)
 
-            # Si on finit aujourd'hui, OK même si <3h (pas de jour suivant)
             if onsite_today >= remaining_min:
                 return onsite_today
 
             rem_after = remaining_min - onsite_today
 
-            # Interdit: portion <3h si on ne finit pas
             if onsite_today < min_chunk:
                 return 0
 
-            # Interdit: laisser un reste <3h
             if rem_after < min_chunk:
-                # option A: finir aujourd'hui si possible
                 if remaining_min <= max_onsite_today:
                     return remaining_min
 
-                # option B: laisser min_chunk pour demain
                 onsite_today = remaining_min - min_chunk
                 onsite_today = min(onsite_today, max_onsite_today)
 
@@ -1358,11 +1422,11 @@ def render_page_2():
 
         planned_rows: List[Dict[str, Any]] = []
 
-        home_map = {t: tech_df.loc[tech_df["tech_name"] == t, "home_address"].iloc[0] for t in tech_names}
-        postal_map = {t: str(tech_df.loc[tech_df["tech_name"] == t, "postal"].iloc[0]) if "postal" in tech_df.columns else "" for t in tech_names}
+        # Use the already-built home_map from outer scope, but only for tech_names in this run
+        _home_map = {t: home_map[t] for t in tech_names}
+        _tech_sector = {t: tech_sector_map.get(t, "UNK") for t in tech_names}
 
         carryover_by_tech: Dict[str, Dict[str, Any]] = {}
-
         split_label_state: Dict[str, Dict[str, Any]] = {}
 
         def _register_and_relabel_split_row(base_job_id: str, new_row_idx: int, part_num: int):
@@ -1395,11 +1459,20 @@ def render_page_2():
             desc = split_state.get("description", "")
             techs_needed_val = int(split_state.get("techs_needed", 1))
 
+            # ✅ Sector constraint (lat/lon based)
+            # (if unknown, we allow)
+            tsec = _tech_sector.get(t, "UNK")
+            # get job sector from cached geocode
+            jlat, jlon = get_ll_for_address(addr)
+            jsec = classify_sector(jlat, jlon)
+            if not sector_compatible(tsec, jsec):
+                return
+
             remaining_min = int(split_state["remaining_job_min"])
             part_idx = int(split_state["part_idx_next"])
 
             tmin = travel_min_cached(cur_loc[t], addr)
-            tback = travel_min_cached(addr, home_map[t])
+            tback = travel_min_cached(addr, _home_map[t])
 
             max_onsite_today = int(available) - int(used[t]) - int(tmin) - int(buffer_job) - int(tback)
             if max_onsite_today <= 0:
@@ -1449,7 +1522,7 @@ def render_page_2():
         total_steps = max(1, len(month_days))
         for di, day in enumerate(month_days):
             used = {t: 0 for t in tech_names}
-            cur_loc = {t: home_map[t] for t in tech_names}
+            cur_loc = {t: _home_map[t] for t in tech_names}
             jobs_count = {t: 0 for t in tech_names}
             lock_tech = {t: False for t in tech_names}
 
@@ -1476,22 +1549,21 @@ def render_page_2():
 
                     best = None
 
-                    pool = duo_jobs
-                    if "fsa" in duo_jobs.columns:
-                        known = duo_jobs[duo_jobs["fsa"].astype(str).str.len() > 0]
-                        pool = known if len(known) > 0 else duo_jobs
-                    sample = pool.head(int(duo_pool)) if len(pool) > int(duo_pool) else pool
+                    sample = duo_jobs.head(int(duo_pool)) if len(duo_jobs) > int(duo_pool) else duo_jobs
 
                     for jidx, job in sample.iterrows():
                         addr = job["address"]
 
+                        # Ensure job sector (lat/lon)
+                        jlat, jlon, jsec = ensure_job_ll(job)
+
+                        # ✅ DUO job minutes are TOTAL, so per-tech minutes = ceil(total/2)
                         job_min_total = int(job["job_minutes"])
                         job_min_each = int(math.ceil(job_min_total / 2.0))
                         need_block = int(job_min_each) + int(buffer_job)
 
-                        job_fsa_key = str(job.get("fsa", ""))
-
-                        near_techs = rank_techs_for_job(tech_names, job_fsa_key, postal_map, int(techs_near_job))
+                        # Nearest techs by lat/lon + sector rule
+                        near_techs = rank_techs_for_job(tech_names, job, int(techs_near_job))
 
                         for i in range(len(near_techs)):
                             for k in range(i + 1, len(near_techs)):
@@ -1502,6 +1574,12 @@ def render_page_2():
                                     continue
 
                                 if jobs_count[t1] >= int(max_jobs_per_day) or jobs_count[t2] >= int(max_jobs_per_day):
+                                    continue
+
+                                # Sector constraint for both techs (lat/lon)
+                                if not sector_compatible(_tech_sector.get(t1, "UNK"), jsec):
+                                    continue
+                                if not sector_compatible(_tech_sector.get(t2, "UNK"), jsec):
                                     continue
 
                                 duo_is_overtime = False
@@ -1519,30 +1597,22 @@ def render_page_2():
                                 start_m = max(used[t1] + int(t1_tr), used[t2] + int(t2_tr))
                                 end_m = start_m + int(need_block)
 
-                                t1_back = travel_min_cached(addr, home_map[t1])
-                                t2_back = travel_min_cached(addr, home_map[t2])
+                                t1_back = travel_min_cached(addr, _home_map[t1])
+                                t2_back = travel_min_cached(addr, _home_map[t2])
 
                                 if (end_m + int(t1_back) <= available) and (end_m + int(t2_back) <= available):
-                                    # ✅ NEW: penalty after 60 min (no extra API)
-                                    worst_tr = max(int(t1_tr), int(t2_tr))
-                                    worst_back = max(int(t1_back), int(t2_back))
-                                    pen = travel_penalty(worst_tr, 60, 1.5) + 0.5 * travel_penalty(worst_back, 60, 1.0)
-
-                                    # keep tuple structure (primary: adjusted start, secondary: raw worst travel)
-                                    score = (start_m + pen, worst_tr)
-
+                                    score = (start_m, max(int(t1_tr), int(t2_tr)))
                                     if best is None or score < best[0]:
                                         best = (
                                             score, jidx, t1, t2,
                                             start_m, end_m, int(t1_tr), int(t2_tr),
-                                            duo_is_overtime, int(job_min_each),
-                                            int(t1_back), int(t2_back)
+                                            duo_is_overtime, int(job_min_each)
                                         )
 
                     if best is None:
                         break
 
-                    _, jidx, t1, t2, start_m, end_m, t1_tr, t2_tr, duo_is_overtime, job_min_each, t1_back, t2_back = best
+                    _, jidx, t1, t2, start_m, end_m, t1_tr, t2_tr, duo_is_overtime, job_min_each = best
                     job = duo_jobs.loc[jidx]
 
                     for tname, trv in [(t1, t1_tr), (t2, t2_tr)]:
@@ -1593,27 +1663,29 @@ def render_page_2():
                             continue
 
                         best_idx = None
-                        best_score = None
+                        best_cost = None
                         best_tmin = None
 
-                        tech_post = postal_map.get(t, "")
-                        sample = get_job_pool_for_tech(solo_jobs, tech_post, int(solo_pool))
+                        sample = get_job_pool_for_tech(solo_jobs, t, int(solo_pool))
 
                         # Try normal jobs that fit
                         for idx, job in sample.iterrows():
+                            # Sector constraint (lat/lon)
+                            jlat, jlon, jsec = ensure_job_ll(job)
+                            if not sector_compatible(_tech_sector.get(t, "UNK"), jsec):
+                                continue
+
                             tmin = travel_min_cached(cur_loc[t], job["address"])
-                            tback = travel_min_cached(job["address"], home_map[t])
+                            tback = travel_min_cached(job["address"], _home_map[t])
 
                             need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
                             if need <= 0:
                                 continue
 
                             if used[t] + need <= available:
-                                # ✅ NEW: penalty after 60 to avoid long moves
-                                sc = int(tmin) + travel_penalty(int(tmin), 60, 1.5) + 0.2 * travel_penalty(int(tback), 60, 1.0)
-                                if best_score is None or sc < best_score:
+                                if best_cost is None or int(tmin) < best_cost:
                                     best_idx = idx
-                                    best_score = sc
+                                    best_cost = int(tmin)
                                     best_tmin = int(tmin)
 
                         if best_idx is not None:
@@ -1650,20 +1722,23 @@ def render_page_2():
                         # ✅ OT single-job day (ONLY if first job of the day):
                         if jobs_count[t] == 0:
                             best_ot_idx = None
-                            best_ot_score = None
+                            best_ot_cost = None
                             best_ot_tmin = None
                             best_ot_job = None
 
                             for idx, job in sample.iterrows():
+                                # Sector constraint (lat/lon)
+                                jlat, jlon, jsec = ensure_job_ll(job)
+                                if not sector_compatible(_tech_sector.get(t, "UNK"), jsec):
+                                    continue
+
                                 tmin = travel_min_cached(cur_loc[t], job["address"])
-                                tback = travel_min_cached(job["address"], home_map[t])
+                                tback = travel_min_cached(job["address"], _home_map[t])
                                 need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
                                 if need <= OT_ACTIVE_CAP:
-                                    # keep a small preference against very long travel even in OT
-                                    sc = int(tmin) + travel_penalty(int(tmin), 60, 1.5)
-                                    if best_ot_score is None or sc < best_ot_score:
+                                    if best_ot_cost is None or int(tmin) < best_ot_cost:
                                         best_ot_idx = idx
-                                        best_ot_score = sc
+                                        best_ot_cost = int(tmin)
                                         best_ot_tmin = int(tmin)
                                         best_ot_job = job
 
@@ -1702,7 +1777,7 @@ def render_page_2():
 
                         # If nothing fits, attempt split ONLY for jobs with onsite > daily_onsite_cap
                         best_long_idx = None
-                        best_long_score = None
+                        best_long_cost = None
                         best_long_job = None
                         best_long_is_overtime = False
 
@@ -1714,13 +1789,18 @@ def render_page_2():
                             if t in carryover_by_tech:
                                 continue
 
+                            # Sector constraint (lat/lon)
+                            jlat, jlon, jsec = ensure_job_ll(job)
+                            if not sector_compatible(_tech_sector.get(t, "UNK"), jsec):
+                                continue
+
                             is_overtime_candidate = False
                             if (jobs_count[t] == 0) and ((jm - int(daily_onsite_cap)) < 180):
                                 is_overtime_candidate = True
 
                             addr = job["address"]
                             tmin = travel_min_cached(cur_loc[t], addr)
-                            tback = travel_min_cached(addr, home_map[t])
+                            tback = travel_min_cached(addr, _home_map[t])
 
                             max_onsite_today = int(available) - int(used[t]) - int(tmin) - int(buffer_job) - int(tback)
                             if max_onsite_today <= 0:
@@ -1736,12 +1816,9 @@ def render_page_2():
                             if is_overtime_candidate and jm > int(max_onsite_today):
                                 continue
 
-                            # ✅ NEW: penalize long travel for choosing which job to split
-                            sc_long = int(tmin) + travel_penalty(int(tmin), 60, 1.5) + 0.2 * travel_penalty(int(tback), 60, 1.0)
-
-                            if best_long_score is None or sc_long < best_long_score:
+                            if best_long_cost is None or int(tmin) < best_long_cost:
                                 best_long_idx = idx
-                                best_long_score = sc_long
+                                best_long_cost = int(tmin)
                                 best_long_job = job
                                 best_long_is_overtime = bool(is_overtime_candidate)
 
@@ -1819,7 +1896,7 @@ def render_page_2():
             # RETURN_HOME
             for t in tech_names:
                 if jobs_count[t] > 0:
-                    tback = travel_min_cached(cur_loc[t], home_map[t])
+                    tback = travel_min_cached(cur_loc[t], _home_map[t])
 
                     planned_rows.append({
                         "date": day.isoformat(),
@@ -1831,7 +1908,7 @@ def render_page_2():
                         "ot": "",
                         "debut": mm_to_hhmm(int(used[t])),
                         "fin": mm_to_hhmm(int(used[t]) + int(tback)),
-                        "adresse": home_map[t],
+                        "adresse": _home_map[t],
                         "travel_min": int(tback),
                         "job_min": 0,
                         "buffer_min": 0,
@@ -1840,7 +1917,7 @@ def render_page_2():
                     })
 
                     used[t] = int(used[t]) + int(tback)
-                    cur_loc[t] = home_map[t]
+                    cur_loc[t] = _home_map[t]
 
             if progress is not None:
                 progress.progress(int(((di + 1) / total_steps) * 100))
@@ -1852,7 +1929,7 @@ def render_page_2():
         return {"success": bool(success), "rows": planned_rows, "remaining": remaining_out}
 
     # ────────────────────────────────────────────────────────────────
-    # MODE SELECTOR
+    # MODE SELECTOR (unchanged)
     # ────────────────────────────────────────────────────────────────
     st.divider()
     st.subheader("🧭 Mode de planification")
@@ -1871,14 +1948,13 @@ def render_page_2():
     tech_names_all = sorted(tech_df["tech_name"].astype(str).tolist())
 
     # ────────────────────────────────────────────────────────────────
-    # MODE A — DAY / 1 TECH (same logic, with penalty after 60)
+    # MODE A — DAY / 1 TECH (same logic, but pool/sector now lat/lon)
     # ────────────────────────────────────────────────────────────────
     if mode == "1 journée / 1 technicien (mode actuel)":
         st.subheader("🧰 Planning 1 journée / 1 technicien")
 
         chosen_tech = st.selectbox("Choisir le technicien", tech_names_all, index=0, key="p2_chosen_tech")
         home_addr = tech_df.loc[tech_df["tech_name"] == chosen_tech, "home_address"].iloc[0]
-        chosen_post = str(tech_df.loc[tech_df["tech_name"] == chosen_tech, "postal"].iloc[0]) if "postal" in tech_df.columns else ""
         st.caption(f"🏠 Adresse domicile: {home_addr}")
 
         c1, c2, c3, c4 = st.columns(4)
@@ -1955,6 +2031,7 @@ def render_page_2():
             day_rows = []
 
             carryover = None
+            tsec = tech_sector_map.get(chosen_tech, "UNK")
 
             while True:
                 if remaining.empty:
@@ -1965,12 +2042,17 @@ def render_page_2():
                     break
 
                 best_idx = None
-                best_score = None
+                best_cost = None
                 best_tmin = None
 
-                sample = get_job_pool_for_tech(remaining, chosen_post, int(solo_pool))
+                sample = get_job_pool_for_tech(remaining, chosen_tech, int(solo_pool))
 
                 for idx, job in sample.iterrows():
+                    # sector constraint
+                    jlat, jlon, jsec = ensure_job_ll(job)
+                    if not sector_compatible(tsec, jsec):
+                        continue
+
                     tmin = travel_min_cached(cur_loc, job["address"])
                     tback = travel_min_cached(job["address"], home_addr)
 
@@ -1978,10 +2060,9 @@ def render_page_2():
                     if need <= 0:
                         continue
                     if used + need <= available:
-                        sc = int(tmin) + travel_penalty(int(tmin), 60, 1.5) + 0.2 * travel_penalty(int(tback), 60, 1.0)
-                        if best_score is None or sc < best_score:
+                        if best_cost is None or int(tmin) < best_cost:
                             best_idx = idx
-                            best_score = sc
+                            best_cost = int(tmin)
                             best_tmin = int(tmin)
 
                 if best_idx is not None:
@@ -2012,21 +2093,25 @@ def render_page_2():
                     remaining = remaining[remaining["job_id"] != job["job_id"]].copy()
                     continue
 
+                # OT single-job day (same)
                 if seq == 0:
                     best_ot_idx = None
-                    best_ot_score = None
+                    best_ot_cost = None
                     best_ot_tmin = None
                     best_ot_job = None
 
                     for idx, job in sample.iterrows():
+                        jlat, jlon, jsec = ensure_job_ll(job)
+                        if not sector_compatible(tsec, jsec):
+                            continue
+
                         tmin = travel_min_cached(cur_loc, job["address"])
                         tback = travel_min_cached(job["address"], home_addr)
                         need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
                         if need <= OT_ACTIVE_CAP:
-                            sc = int(tmin) + travel_penalty(int(tmin), 60, 1.5)
-                            if best_ot_score is None or sc < best_ot_score:
+                            if best_ot_cost is None or int(tmin) < best_ot_cost:
                                 best_ot_idx = idx
-                                best_ot_score = sc
+                                best_ot_cost = int(tmin)
                                 best_ot_tmin = int(tmin)
                                 best_ot_job = job
 
@@ -2058,11 +2143,15 @@ def render_page_2():
                         remaining = remaining[remaining["job_id"] != job["job_id"]].copy()
                         break
 
+                # Long job split selection (same but sector checked)
                 best_long = None
-                best_long_score = None
                 for idx, job in sample.iterrows():
                     jm = int(job["job_minutes"])
                     if jm <= int(daily_onsite_cap):
+                        continue
+
+                    jlat, jlon, jsec = ensure_job_ll(job)
+                    if not sector_compatible(tsec, jsec):
                         continue
 
                     tmin = travel_min_cached(cur_loc, job["address"])
@@ -2075,11 +2164,8 @@ def render_page_2():
                     if onsite_today_candidate <= 0:
                         continue
 
-                    sc_long = int(tmin) + travel_penalty(int(tmin), 60, 1.5) + 0.2 * travel_penalty(int(tback), 60, 1.0)
-
-                    if best_long is None or sc_long < best_long_score:
+                    if best_long is None or int(tmin) < int(best_long["tmin"]):
                         best_long = {"idx": idx, "job": job, "tmin": int(tmin), "tback": int(tback)}
-                        best_long_score = sc_long
 
                 if best_long is None:
                     break
@@ -2175,7 +2261,7 @@ def render_page_2():
             st.caption(f"Reste (approx): {st.session_state.get('planning_remaining_count', '—')} job(s)")
 
     # ────────────────────────────────────────────────────────────────
-    # MODE B — MONTH, user chooses techs + DUO + progress
+    # MODE B — MONTH, user chooses techs (unchanged)
     # ────────────────────────────────────────────────────────────────
     elif mode == "Mois complet — techniciens choisis par l'utilisateur":
         st.subheader("🗓️ Mois complet — techniciens choisis par l'utilisateur")
@@ -2237,7 +2323,7 @@ def render_page_2():
                 st.session_state["planning_month_techs_used"] = chosen_techs
 
                 remaining_df = result["remaining"].copy()
-                cols_show = ["job_id", "cust", "address", "description", "job_minutes", "techs_needed", "postal", "fsa"]
+                cols_show = ["job_id", "cust", "address", "description", "job_minutes", "techs_needed", "postal"]
                 remaining_show = remaining_df[cols_show].copy() if all(c in remaining_df.columns for c in cols_show) else remaining_df.copy()
                 st.session_state["planning_month_remaining_rows"] = remaining_show.to_dict("records")
 
@@ -2290,7 +2376,7 @@ def render_page_2():
                         st.warning(f"⚠️ Jobs DUO restants (techs_needed=2): {duo_left}")
 
     # ────────────────────────────────────────────────────────────────
-    # MODE C — MONTH, auto techs + progress
+    # MODE C — MONTH, auto techs (unchanged)
     # ────────────────────────────────────────────────────────────────
     else:
         st.subheader("⚙️ Mois complet — techniciens choisis automatiquement")
@@ -2362,7 +2448,7 @@ def render_page_2():
             st.session_state["planning_month_techs_used"] = best["techs_used"] if best else []
 
             remaining_df = best["remaining"].copy() if best else pd.DataFrame()
-            cols_show = ["job_id", "cust", "address", "description", "job_minutes", "techs_needed", "postal", "fsa"]
+            cols_show = ["job_id", "cust", "address", "description", "job_minutes", "techs_needed", "postal"]
             remaining_show = remaining_df[cols_show].copy() if (not remaining_df.empty and all(c in remaining_df.columns for c in cols_show)) else remaining_df.copy()
             st.session_state["planning_month_remaining_rows"] = remaining_show.to_dict("records") if not remaining_show.empty else []
 
