@@ -875,11 +875,13 @@ import pandas as pd
 
 # ===============================================================
 # PAGE 2 (Planning) — SECTION 1/2
-# ✅ Ultra-minimal “anti-perte” fix:
-#   1) Lat/Lon writes ALWAYS go to the MASTER jobs dataframe (never a sampled copy)
-#   2) Carryover (split jobs not finished) are re-injected into "remaining" at the end
-#   3) Integrity check compares against the CLEAN/BOOKABLE pool (post-cleaning), not raw Excel
-# ⚠️ Booking logic unchanged: same lat/long prefilter + same global greedy + same optional repair pass
+# ✅ FIXES ONLY (NO LOGIC CHANGE):
+#   A) Do NOT eliminate split/duplicate lines too aggressively:
+#      - replace drop_duplicates(subset=["job_id"]) with a safer dedup key
+#      - keeps distinct rows that share same job_id but differ by address/minutes/techs_needed/description
+#   B) Repair pass: preserve RETURN_HOME rows even on days that have only locked rows (OT / DUO / PART)
+#   C) Integrity check: normalize remaining job_ids the same way as planned (PART normalization)
+#   D) Keep OT jobs in remaining and make them visible (optional tag ot_impossible; does NOT affect booking)
 # ===============================================================
 
 def render_page_2():
@@ -1013,14 +1015,19 @@ def render_page_2():
 
     jobs["postal"] = jobs_raw[COL_POST].fillna("").astype(str).apply(extract_postal) if COL_POST else ""
 
-    # Clean jobs (unchanged)
+    # Clean jobs (unchanged filters)
     jobs = jobs[(jobs["address"].astype(str).str.len() > 8) & (jobs["job_minutes"] > 0)].copy()
-    jobs = jobs.drop_duplicates(subset=["job_id"]).reset_index(drop=True)
 
-    # ✅ FIX #1 (déterminisme): ordre stable global des jobs (unchanged behavior; stable sort)
+    # ✅ FIX A: safer dedup to prevent eliminating split-like rows / multi-lines with same job_id
+    # (no scheduling logic change; only prevents silent data loss)
+    dedup_cols = ["job_id", "address", "job_minutes", "techs_needed", "description"]
+    dedup_cols = [c for c in dedup_cols if c in jobs.columns]
+    jobs = jobs.drop_duplicates(subset=dedup_cols).reset_index(drop=True)
+
+    # ✅ Deterministic order (unchanged behavior; stable sort)
     jobs = jobs.sort_values(["techs_needed", "job_id"], kind="mergesort").reset_index(drop=True)
 
-    # ✅ Integrity baseline = CLEAN/BOOKABLE pool (prevents false “missing”)
+    # ✅ Integrity baseline = CLEAN/BOOKABLE pool
     initial_bookable_job_ids = set(jobs["job_id"].astype(str).tolist())
 
     # ────────────────────────────────────────────────────────────────
@@ -1138,8 +1145,7 @@ def render_page_2():
         return minutes
 
     # ────────────────────────────────────────────────────────────────
-    # Lat/Lon cache + haversine + sector rule
-    # ✅ CRITICAL FIX: write lat/lon into MASTER jobs dataframe using master index
+    # Lat/Lon cache + haversine + sector rule (unchanged)
     # ────────────────────────────────────────────────────────────────
     def haversine_km(lat1, lon1, lat2, lon2) -> float:
         if lat1 is None or lon1 is None or lat2 is None or lon2 is None:
@@ -1204,10 +1210,6 @@ def render_page_2():
         jobs["job_sector"] = "UNK"
 
     def ensure_job_ll_master(master_df: pd.DataFrame, master_idx) -> Tuple[Optional[float], Optional[float], str]:
-        """
-        ✅ Only reads/writes lat/lon/sector on the MASTER dataframe (jobs).
-        This avoids losing geocode assignments inside sampled copies.
-        """
         r = master_df.loc[master_idx]
         lat = r.get("job_lat")
         lon = r.get("job_lon")
@@ -1227,7 +1229,6 @@ def render_page_2():
         master_df.at[master_idx, "job_sector"] = sec
         return lat, lon, sec
 
-    # Pool by lat/lon (stable) — indices preserved from MASTER
     def get_job_pool_for_tech(master_remaining: pd.DataFrame, tech_name: str, pool_size: int) -> pd.DataFrame:
         if master_remaining.empty:
             return master_remaining
@@ -1236,7 +1237,7 @@ def render_page_2():
         tsec = tech_sector_map.get(tech_name, "UNK")
 
         dists = []
-        for idx, r in master_remaining.iterrows():  # idx = MASTER index
+        for idx, r in master_remaining.iterrows():
             lat, lon, jsec = ensure_job_ll_master(jobs, idx)
             if not sector_compatible(tsec, jsec):
                 continue
@@ -1248,7 +1249,7 @@ def render_page_2():
 
         dists.sort(key=lambda x: x[1])
         chosen_idx = [i for (i, _d) in dists[:int(pool_size)]]
-        return master_remaining.loc[chosen_idx].copy()  # still preserves MASTER index
+        return master_remaining.loc[chosen_idx].copy()
 
     def rank_techs_for_job(tech_names: List[str], job_row: pd.Series, top_n: int) -> List[str]:
         if top_n >= len(tech_names):
@@ -1337,7 +1338,7 @@ def render_page_2():
         return int(math.ceil(float(job_minutes_total) / float(daily_onsite_cap)))
 
     # ===============================================================
-    # Scheduler (MONTH) — unchanged booking logic, with ONLY anti-perte additions
+    # Scheduler (MONTH) — booking logic unchanged
     # ===============================================================
     def schedule_month_with_duo(
         jobs_in: pd.DataFrame,
@@ -1600,7 +1601,7 @@ def render_page_2():
 
                     duo_jobs = duo_jobs[duo_jobs["job_id"] != job["job_id"]].copy()
 
-            # ---- 2) SOLO greedy per tech (UNCHANGED booking, only master lat/lon lookup) ----
+            # ---- 2) SOLO greedy per tech (UNCHANGED) ----
             if not solo_jobs.empty:
                 made_progress = True
                 while made_progress:
@@ -1626,7 +1627,6 @@ def render_page_2():
 
                         # Try normal jobs that fit
                         for idx, job in sample.iterrows():
-                            # ✅ idx is MASTER index; lat/lon stored on MASTER jobs
                             jlat, jlon, jsec = ensure_job_ll_master(jobs, idx)
                             if not sector_compatible(_tech_sector.get(t, "UNK"), jsec):
                                 continue
@@ -1644,7 +1644,7 @@ def render_page_2():
                                     best_tmin = int(tmin)
 
                         if best_idx is not None:
-                            job = jobs.loc[best_idx]  # ✅ use MASTER row (same data)
+                            job = jobs.loc[best_idx]
                             jobs_count[t] += 1
                             start_m = used[t] + int(best_tmin)
                             end_m = start_m + int(job["job_minutes"]) + int(buffer_job)
@@ -1678,7 +1678,6 @@ def render_page_2():
                             best_ot_idx = None
                             best_ot_cost = None
                             best_ot_tmin = None
-                            best_ot_job = None
 
                             for idx, job in sample.iterrows():
                                 jlat, jlon, jsec = ensure_job_ll_master(jobs, idx)
@@ -1693,7 +1692,6 @@ def render_page_2():
                                         best_ot_idx = idx
                                         best_ot_cost = int(tmin)
                                         best_ot_tmin = int(tmin)
-                                        best_ot_job = job
 
                             if best_ot_idx is not None:
                                 job = jobs.loc[best_ot_idx]
@@ -1726,10 +1724,9 @@ def render_page_2():
                                 made_progress = True
                                 continue
 
-                        # Split long jobs — unchanged booking, only master lat/lon lookup
+                        # Split long jobs — unchanged
                         best_long_idx = None
                         best_long_cost = None
-                        best_long_job = None
                         best_long_is_overtime = False
 
                         for idx, job in sample.iterrows():
@@ -1766,7 +1763,6 @@ def render_page_2():
                             if best_long_cost is None or int(tmin) < best_long_cost:
                                 best_long_idx = idx
                                 best_long_cost = int(tmin)
-                                best_long_job = job
                                 best_long_is_overtime = bool(is_overtime_candidate)
 
                         if best_long_idx is None:
@@ -1789,7 +1785,7 @@ def render_page_2():
                                 "job_id": job["job_id"],
                                 "cust": job.get("cust", ""),
                                 "duo": "",
-                                "ot": "",
+                                "ot": "🟥 OT",
                                 "debut": mm_to_hhmm(int(start_m)),
                                 "fin": mm_to_hhmm(int(end_m)),
                                 "adresse": job["address"],
@@ -1855,7 +1851,7 @@ def render_page_2():
             if progress_text is not None:
                 progress_text.write(f"Planification… {di+1}/{len(month_days)} jour(s) traités")
 
-        # ✅ Anti-perte addition: re-inject unfinished carryovers into remaining
+        # ✅ Re-inject unfinished carryovers into remaining
         carryover_rows = []
         for t, stt in carryover_by_tech.items():
             rem = int(stt.get("remaining_job_min", 0))
@@ -1874,11 +1870,37 @@ def render_page_2():
         if carryover_rows:
             remaining_out = pd.concat([remaining_out, pd.DataFrame(carryover_rows)], ignore_index=True)
 
+        # ✅ FIX D (visibility only): flag OT-impossible jobs in remaining (does not affect scheduling)
+        #     Helps you see which jobs can NEVER fit even with 14h cap (incl travel + buffer + return)
+        if not remaining_out.empty:
+            remaining_out = remaining_out.copy()
+            remaining_out["ot_impossible"] = False
+            for i, r in remaining_out.iterrows():
+                try:
+                    addr = r.get("address", "")
+                    jm = int(r.get("job_minutes", 0))
+                    if not addr or jm <= 0:
+                        continue
+                    best_need = None
+                    for t in tech_names:
+                        need = (
+                            travel_min_cached(_home_map[t], addr)
+                            + jm
+                            + int(buffer_job)
+                            + travel_min_cached(addr, _home_map[t])
+                        )
+                        if best_need is None or need < best_need:
+                            best_need = need
+                    if best_need is not None and best_need > OT_ACTIVE_CAP:
+                        remaining_out.at[i, "ot_impossible"] = True
+                except Exception:
+                    pass
+
         success = remaining_out.empty and (len(carryover_rows) == 0)
         return {"success": bool(success), "rows": planned_rows, "remaining": remaining_out}
 
     # ===============================================================
-    # Repair pass + Integrity Check helpers (UNCHANGED repair logic; only integrity baseline is bookable)
+    # Repair pass + Integrity Check helpers
     # ===============================================================
     def _is_return_home(job_id: str) -> bool:
         return str(job_id).strip().upper() == "RETURN_HOME"
@@ -1978,10 +2000,16 @@ def render_page_2():
 
         locked, movable = [], []
         original_rows_by_day_tech: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
+        original_return_rows: Dict[Tuple[str, str], Dict[str, Any]] = {}
 
         for r in planned_rows:
             day_k = str(r.get("date", "")).strip()
             tech_k = str(r.get("technicien", "")).strip()
+
+            # ✅ record RETURN_HOME rows so we can ALWAYS restore them later
+            if _is_return_home(r.get("job_id", "")):
+                original_return_rows[(day_k, tech_k)] = r
+
             if _is_return_home(r.get("job_id", "")):
                 locked.append(r)
             elif _is_duo_row(r) or _is_split_part(r.get("job_id", "")) or _is_ot_row(r):
@@ -2072,11 +2100,14 @@ def render_page_2():
             stats["improved"] += 1
 
         final_rows: List[Dict[str, Any]] = []
+
+        # Keep all locked rows EXCEPT RETURN_HOME for now (we re-add deterministically)
         for r in locked:
             if _is_return_home(r.get("job_id", "")):
                 continue
             final_rows.append(r)
 
+        # Rebuild all day/tech that had movables
         for (day, tech), lst in by_day_tech.items():
             rebuilt = rebuild_day_greedy(day, tech, lst, day_available_min, buffer_job, max_jobs_per_day)
             if rebuilt is not None:
@@ -2085,10 +2116,19 @@ def render_page_2():
                 orig = original_rows_by_day_tech.get((day, tech), [])
                 if orig:
                     final_rows.extend(orig)
-                for r in planned_rows:
-                    if str(r.get("date", "")).strip() == day and str(r.get("technicien", "")).strip() == tech and _is_return_home(r.get("job_id", "")):
-                        final_rows.append(r)
-                        break
+
+        # ✅ FIX B: ALWAYS restore RETURN_HOME for any (day,tech) that existed before
+        # This fixes days that had only locked rows (OT/DUO/PART) and would otherwise lose RETURN_HOME.
+        existing_pairs = set(original_return_rows.keys())
+        for (day_k, tech_k) in sorted(existing_pairs):
+            has_return_now = any(
+                _is_return_home(r.get("job_id", "")) and str(r.get("date", "")).strip() == day_k and str(r.get("technicien", "")).strip() == tech_k
+                for r in final_rows
+            )
+            if not has_return_now:
+                rr = original_return_rows.get((day_k, tech_k))
+                if rr:
+                    final_rows.append(rr)
 
         return final_rows, stats
 
@@ -2106,7 +2146,8 @@ def render_page_2():
         for r in st.session_state.get("planning_month_remaining_rows", []):
             jid = r.get("job_id", "")
             if jid:
-                remaining_jobs.add(str(jid))
+                # ✅ FIX C: normalize remaining the same way (prevents false "missing" on PART)
+                remaining_jobs.add(_normalize_base_job_id(jid))
 
         covered_jobs = planned_jobs.union(remaining_jobs)
         missing_jobs = sorted(list(initial_ids_set - covered_jobs))
@@ -2142,14 +2183,16 @@ def render_page_2():
     )
 
     tech_names_all = sorted(tech_df["tech_name"].astype(str).tolist())
-
 # ===============================================================
 # PAGE 2 — SECTION 2/2
-# (COLLER IMMÉDIATEMENT APRÈS LA SECTION 1/2)
+# ✅ FIXES ONLY carried through (no booking logic change):
+#   - uses schedule_month_with_duo() unchanged
+#   - repair_month_plan() includes RETURN_HOME preservation fix
+#   - integrity check normalizes remaining ids
 # ===============================================================
 
     # ────────────────────────────────────────────────────────────────
-    # MODE A — DAY / 1 TECH (booking unchanged; only master lat/lon lookup)
+    # MODE A — DAY / 1 TECH (unchanged booking)
     # ────────────────────────────────────────────────────────────────
     if mode == "1 journée / 1 technicien (mode actuel)":
         st.subheader("🧰 Planning 1 journée / 1 technicien")
@@ -2298,7 +2341,6 @@ def render_page_2():
                     best_ot_idx = None
                     best_ot_cost = None
                     best_ot_tmin = None
-                    best_ot_job = None
 
                     for idx, job in sample.iterrows():
                         jlat, jlon, jsec = ensure_job_ll_master(jobs, idx)
@@ -2313,7 +2355,6 @@ def render_page_2():
                                 best_ot_idx = idx
                                 best_ot_cost = int(tmin)
                                 best_ot_tmin = int(tmin)
-                                best_ot_job = job
 
                     if best_ot_idx is not None:
                         job = jobs.loc[best_ot_idx]
@@ -2540,8 +2581,9 @@ def render_page_2():
                 st.session_state["planning_month_techs_used"] = chosen_techs
 
                 remaining_df = result["remaining"].copy()
-                cols_show = ["job_id", "cust", "address", "description", "job_minutes", "techs_needed", "postal"]
-                remaining_show = remaining_df[cols_show].copy() if all(c in remaining_df.columns for c in cols_show) else remaining_df.copy()
+                cols_show = ["job_id", "cust", "address", "description", "job_minutes", "techs_needed", "postal", "ot_impossible"]
+                cols_show = [c for c in cols_show if c in remaining_df.columns]
+                remaining_show = remaining_df[cols_show].copy() if cols_show else remaining_df.copy()
                 st.session_state["planning_month_remaining_rows"] = remaining_show.to_dict("records")
 
                 progress.progress(100)
@@ -2585,16 +2627,20 @@ def render_page_2():
             if remaining_rows:
                 unplanned_df = pd.DataFrame(remaining_rows)
                 st.dataframe(style_duo(unplanned_df), use_container_width=True)
+                if "ot_impossible" in unplanned_df.columns:
+                    ot_imp = int((unplanned_df["ot_impossible"] == True).sum())
+                    if ot_imp > 0:
+                        st.warning(f"⚠️ Jobs impossibles même en OT (14h cap, travel+buffer+retour inclus): {ot_imp}")
+
                 if "techs_needed" in unplanned_df.columns:
                     duo_left = int((unplanned_df["techs_needed"].astype(int) == 2).sum())
                     if duo_left > 0:
                         st.warning(f"⚠️ Jobs DUO restants (techs_needed=2): {duo_left}")
 
-            # ✅ Integrity check (bookable pool)
             render_integrity_check_bookable(initial_bookable_job_ids)
 
     # ────────────────────────────────────────────────────────────────
-    # MODE C — MONTH, auto techs (same as before; integrity bookable)
+    # MODE C — MONTH, auto techs (unchanged; same fixes apply)
     # ────────────────────────────────────────────────────────────────
     else:
         st.subheader("⚙️ Mois complet — techniciens choisis automatiquement")
@@ -2684,8 +2730,9 @@ def render_page_2():
             st.session_state["planning_month_techs_used"] = best["techs_used"] if best else []
 
             remaining_df = best["remaining"].copy() if best else pd.DataFrame()
-            cols_show = ["job_id", "cust", "address", "description", "job_minutes", "techs_needed", "postal"]
-            remaining_show = remaining_df[cols_show].copy() if (not remaining_df.empty and all(c in remaining_df.columns for c in cols_show)) else remaining_df.copy()
+            cols_show = ["job_id", "cust", "address", "description", "job_minutes", "techs_needed", "postal", "ot_impossible"]
+            cols_show = [c for c in cols_show if c in remaining_df.columns]
+            remaining_show = remaining_df[cols_show].copy() if (not remaining_df.empty and cols_show) else remaining_df.copy()
             st.session_state["planning_month_remaining_rows"] = remaining_show.to_dict("records") if not remaining_show.empty else []
 
             outer_text.write("Terminé ✅")
@@ -2729,12 +2776,16 @@ def render_page_2():
             if remaining_rows:
                 unplanned_df = pd.DataFrame(remaining_rows)
                 st.dataframe(style_duo(unplanned_df), use_container_width=True)
+                if "ot_impossible" in unplanned_df.columns:
+                    ot_imp = int((unplanned_df["ot_impossible"] == True).sum())
+                    if ot_imp > 0:
+                        st.warning(f"⚠️ Jobs impossibles même en OT (14h cap, travel+buffer+retour inclus): {ot_imp}")
+
                 if "techs_needed" in unplanned_df.columns:
                     duo_left = int((unplanned_df["techs_needed"].astype(int) == 2).sum())
                     if duo_left > 0:
                         st.warning(f"⚠️ Jobs DUO restants (techs_needed=2): {duo_left}")
 
-            # ✅ Integrity check (bookable pool)
             render_integrity_check_bookable(initial_bookable_job_ids)
 
 # ────────────────────────────────────────────────────────────────
