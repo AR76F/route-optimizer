@@ -2215,13 +2215,21 @@ def render_page_2():
             remaining_out = pd.concat([remaining_out, pd.DataFrame(carryover_rows)], ignore_index=True)
 
         # Flag OT-impossible
+        # Ignoré si le cache n'est pas chaud — paires domicile→job souvent absentes
+        # Timeout 30s pour éviter de bloquer après la planification
         if not remaining_out.empty:
             remaining_out = remaining_out.copy()
             remaining_out["ot_impossible"] = False
             OT_IMPOSSIBLE_TOP_TECHS = 4
             _best_need_cache = {}
+            _ot_flag_start = time.time()
+            _ot_flag_timeout = False
 
             for i, r in remaining_out.iterrows():
+                # Timeout 30s — l'indicateur OT-impossible est secondaire
+                if time.time() - _ot_flag_start > 30:
+                    _ot_flag_timeout = True
+                    break
                 try:
                     addr = str(r.get("address", "")).strip()
                     jm = int(r.get("job_minutes", 0))
@@ -2251,12 +2259,21 @@ def render_page_2():
 
                         best_need = None
                         for t in candidates:
-                            need = (
-                                travel_min_cached(_home_map[t], addr)
-                                + jm
-                                + int(buffer_job)
-                                + travel_min_cached(addr, _home_map[t])
-                            )
+                            # Utiliser seulement le cache SQLite — pas d'appel API si absent
+                            k_fwd = _key(_home_map[t], addr, use_traffic)
+                            k_bck = _key(addr, _home_map[t], use_traffic)
+                            conn = _get_db()
+                            cur = conn.cursor()
+                            now = int(time.time())
+                            min_ts = now - int(cache_days) * 86400
+                            cur.execute("SELECT minutes FROM travel WHERE k=? AND ts>=?", (k_fwd, min_ts))
+                            row_fwd = cur.fetchone()
+                            cur.execute("SELECT minutes FROM travel WHERE k=? AND ts>=?", (k_bck, min_ts))
+                            row_bck = cur.fetchone()
+                            # Si une des deux paires manque dans le cache → ignorer ce job
+                            if not row_fwd or not row_bck:
+                                continue
+                            need = int(row_fwd[0]) + jm + int(buffer_job) + int(row_bck[0])
                             if best_need is None or need < best_need:
                                 best_need = need
                         _best_need_cache[ck] = best_need
@@ -2535,7 +2552,8 @@ def render_page_2():
         return out
 
     def repair_month_plan(planned_rows, tech_names, day_available_min, buffer_job,
-                          max_jobs_per_day, threshold_travel_min=50, candidate_techs_top_n=4, max_moves=25):
+                          max_jobs_per_day, threshold_travel_min=50, candidate_techs_top_n=4, max_moves=25,
+                          timeout_seconds=120):
         if not planned_rows:
             return planned_rows, {"moves": 0, "attempts": 0, "improved": 0}
 
@@ -2590,10 +2608,14 @@ def render_page_2():
                 candidates.append((int(jb["travel_min_orig"]), day, tech, jb))
         candidates.sort(key=lambda x: x[0], reverse=True)
 
-        stats = {"moves": 0, "attempts": 0, "improved": 0}
+        stats = {"moves": 0, "attempts": 0, "improved": 0, "timeout": False}
         tech_list = list(tech_names)
+        _repair_start = time.time()
 
         for (tmin_orig, day, src_tech, jb) in candidates:
+            if time.time() - _repair_start > float(timeout_seconds):
+                stats["timeout"] = True
+                break
             if stats["moves"] >= int(max_moves):
                 break
             if int(tmin_orig) <= int(threshold_travel_min):
@@ -3039,6 +3061,7 @@ def render_page_2():
         repair_threshold = st.sidebar.number_input("Seuil travel (min) pour réparer", min_value=20, max_value=120, value=50, step=5, key="p2_repair_thr")
         repair_top_n = st.sidebar.slider("Nb techs candidats (lat/lon)", 2, 6, 4, 1, key="p2_repair_topn")
         repair_max_moves = st.sidebar.slider("Max déplacements (moves)", 0, 80, 25, 5, key="p2_repair_moves")
+        repair_timeout = st.sidebar.number_input("Timeout repair (secondes)", min_value=10, max_value=600, value=120, step=10, key="p2_repair_timeout")
 
         run_month = st.button("🚀 Générer le mois (techs imposés)", type="primary", key="p2_run_month_fixed")
 
@@ -3071,9 +3094,11 @@ def render_page_2():
                         day_available_min=day_available_min, buffer_job=int(buffer_job_m),
                         max_jobs_per_day=int(max_jobs_m), threshold_travel_min=int(repair_threshold),
                         candidate_techs_top_n=int(repair_top_n), max_moves=int(repair_max_moves),
+                        timeout_seconds=int(repair_timeout),
                     )
                     result["rows"] = repaired_rows
-                    st.sidebar.caption(f"Repair: moves={rep_stats['moves']} | attempts={rep_stats['attempts']} | improved={rep_stats['improved']}")
+                    timeout_msg = " ⏱️ timeout" if rep_stats.get("timeout") else ""
+                    st.sidebar.caption(f"Repair: moves={rep_stats['moves']} | attempts={rep_stats['attempts']} | improved={rep_stats['improved']}{timeout_msg}")
 
                 st.session_state["planning_month_rows"] = result["rows"]
                 st.session_state["planning_month_success"] = result["success"]
@@ -3160,6 +3185,7 @@ def render_page_2():
         repair_threshold = st.sidebar.number_input("Seuil travel (min) pour réparer (auto)", min_value=20, max_value=120, value=50, step=5, key="p2_repair_thr_auto")
         repair_top_n = st.sidebar.slider("Nb techs candidats (lat/lon) (auto)", 2, 6, 4, 1, key="p2_repair_topn_auto")
         repair_max_moves = st.sidebar.slider("Max déplacements (moves) (auto)", 0, 80, 25, 5, key="p2_repair_moves_auto")
+        repair_timeout = st.sidebar.number_input("Timeout repair (secondes)", min_value=10, max_value=600, value=120, step=10, key="p2_repair_timeout_auto")
 
         run_month = st.button("🚀 Générer le mois (auto)", type="primary", key="p2_run_month_auto")
 
@@ -3191,9 +3217,11 @@ def render_page_2():
                         day_available_min=day_available_min, buffer_job=int(buffer_job_m),
                         max_jobs_per_day=int(max_jobs_m), threshold_travel_min=int(repair_threshold),
                         candidate_techs_top_n=int(repair_top_n), max_moves=int(repair_max_moves),
+                        timeout_seconds=int(repair_timeout),
                     )
                     result["rows"] = repaired_rows
-                    st.sidebar.caption(f"Repair(auto,k={k}): moves={rep_stats['moves']}")
+                    timeout_msg = " ⏱️ timeout" if rep_stats.get("timeout") else ""
+                    st.sidebar.caption(f"Repair(auto,k={k}): moves={rep_stats['moves']}{timeout_msg}")
                 return result, chosen
 
             # Phase 1 : binary search pour trouver le k minimal suffisant
