@@ -1133,45 +1133,6 @@ def render_page_2():
     techs_near_job = st.sidebar.slider("DUO: nb de techs proches à tester", 2, 6, 4, 1, key="p2_duo_near_techs")
     include_nearby_fsa = st.sidebar.checkbox("Inclure FSA voisins si peu de candidats", value=True, key="p2_include_nearby_fsa")
 
-    # Reset cache zones — utile après changement de logique de secteurs
-    # ── Précalcul Distance Matrix Batch ──────────────────────────
-    st.sidebar.subheader("⚡ Distance Matrix Batch")
-    st.sidebar.caption(
-        "Précalcule tous les trajets techs↔jobs en quelques appels API batch "
-        "au lieu d'un appel par paire. À lancer UNE FOIS avant de planifier."
-    )
-    if st.sidebar.button("🔄 Précalculer matrice trajets", key="p2_prefetch_btn"):
-        # Collecter toutes les adresses uniques : domiciles techs + jobs
-        all_tech_addrs = list(home_map.values())
-        all_job_addrs  = jobs["address"].dropna().unique().tolist()
-        all_addrs      = list(dict.fromkeys(all_tech_addrs + all_job_addrs))
-
-        prog_bar  = st.sidebar.progress(0)
-        prog_text = st.sidebar.empty()
-        total_pairs = len(all_addrs) * len(all_addrs)
-
-        def _cb(calls_done):
-            # estimation grossière de progression
-            pct = min(99, int(calls_done * CHUNK_SIZE / max(1, total_pairs) * 100))
-            prog_bar.progress(pct)
-            prog_text.write(f"Appels batch effectués : {calls_done}")
-
-        CHUNK_SIZE = 100  # 10×10 éléments par appel
-        new_pairs = prefetch_travel_matrix(all_addrs, all_addrs, progress_cb=_cb)
-        prog_bar.progress(100)
-        prog_text.write(f"✅ {new_pairs} nouvelles paires ajoutées au cache.")
-        st.sidebar.success(
-            f"Matrice précalculée : {new_pairs} nouvelles paires. "
-            f"Appels API batch : {st.session_state.get('p2_api_calls', 0)}"
-        )
-
-    st.sidebar.markdown("---")
-    st.sidebar.caption(
-        "💡 OR-Tools actif" if ORTOOLS_AVAILABLE
-        else "⚠️ OR-Tools non installé (`pip install ortools`). "
-             "Optimisation de route désactivée — greedy utilisé."
-    )
-
     st.sidebar.subheader("\U0001f5d1\ufe0f Cache zones géographiques")
     st.sidebar.caption("À utiliser si vous changez la logique des zones ou après une mise à jour.")
     if st.sidebar.button("\U0001f504 Recalculer zones géo (techs + jobs)", key="p2_reset_geo_cache"):
@@ -1528,6 +1489,44 @@ def render_page_2():
         return t_ll, t_sec
 
     tech_ll_map, tech_sector_map = compute_tech_maps(tuple(sorted(home_map.items())))
+
+    # ── Précalcul Distance Matrix Batch (sidebar) ─────────────────
+    # Placé ICI car home_map et jobs sont maintenant définis
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("⚡ Distance Matrix Batch")
+    st.sidebar.caption(
+        "Précalcule tous les trajets techs↔jobs en quelques appels API batch "
+        "au lieu d'un appel par paire. À lancer UNE FOIS avant de planifier."
+    )
+    if st.sidebar.button("🔄 Précalculer matrice trajets", key="p2_prefetch_btn"):
+        all_tech_addrs = list(home_map.values())
+        all_job_addrs  = jobs["address"].dropna().unique().tolist()
+        all_addrs      = list(dict.fromkeys(all_tech_addrs + all_job_addrs))
+
+        prog_bar  = st.sidebar.progress(0)
+        prog_text = st.sidebar.empty()
+        CHUNK_SIZE = 100
+
+        total_calls_est = max(1, (len(all_addrs) * len(all_addrs)) // CHUNK_SIZE)
+
+        def _cb(calls_done):
+            pct = min(99, int(calls_done / max(1, total_calls_est) * 100))
+            prog_bar.progress(pct)
+            prog_text.write(f"Appels batch effectués : {calls_done}")
+
+        new_pairs = prefetch_travel_matrix(all_addrs, all_addrs, progress_cb=_cb)
+        prog_bar.progress(100)
+        prog_text.write(f"✅ {new_pairs} nouvelles paires ajoutées au cache.")
+        st.sidebar.success(
+            f"Matrice précalculée — {new_pairs} nouvelles paires. "
+            f"Appels API batch : {st.session_state.get('p2_api_calls', 0)}"
+        )
+
+    st.sidebar.caption(
+        "💡 OR-Tools actif" if ORTOOLS_AVAILABLE
+        else "⚠️ OR-Tools non installé (`pip install ortools`). "
+             "Greedy utilisé à la place."
+    )
 
     if "job_lat" not in jobs.columns:
         jobs["job_lat"] = None
