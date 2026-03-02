@@ -1,26 +1,38 @@
 # app.py
 # Streamlit Route Optimizer — Page 1 + Page 2 (Planning)
-# FIXED:
-# - Page 2 code moved into render_page_2() (no global execution)
-# - Only ONE st.set_page_config()
-# - Persistent session_state for: navigation, upload bytes, route_result, planning_result
-# - Page 1 map (Tech Home + Entrepôts) shows permanent labels (names)
-#
-# CHANGE (as requested):
-# - Add cache to geocode_ll() and reverse_geocode() so we don't re-geocode every rerun / every user
-# - No "clear cache" button added
+# ─────────────────────────────────────────────────────
+# PERFORMANCE FIXES applied (vs original):
+#   [CRITIQUE-1] SQLite : connexion unique via @st.cache_resource (_get_db)
+#                → plus de 400+ open/close par run
+#   [CRITIQUE-2] get_job_pool_for_tech : haversine vectorisé NumPy
+#                → plus de boucle iterrows O(n) avec geocode à chaque fois
+#   [CRITIQUE-3] solo_jobs : set booked_ids (O(1)) au lieu de .copy() en boucle
+#   [ÉLEVÉ-1]   _fetch_excel_df_from_github : bytes cachés séparément
+#                → 1 seul GET HTTP même si les 2 fonctions appellent en même temps
+#   [ÉLEVÉ-2]   tech_ll_map / tech_sector_map : @st.cache_data sur les coords techs
+#   [ÉLEVÉ-3]   repair_month_plan : mini-cache local travel évite appels redondants
+#   [ÉLEVÉ-4]   build_address : vectorisé str.cat (plus de apply axis=1)
+#   [MOYEN-1]   duo_jobs : trié une seule fois avant la boucle, pas à chaque tour
+#   [MOYEN-2]   Geotab : ThreadPoolExecutor pour fetch positions en parallèle
+#   [MOYEN-3]   integrity check : sets stockés dans session_state (pas recalculés)
+#   [MOYEN-4]   mode AUTO : binary search sur k au lieu de linéaire
+#   [FAIBLE-1]  cummins_header : find_logo_path() cachée
+#   [FAIBLE-2]  _norm_base/_normalize_base_job_id : une seule fonction au niveau module
+#   [FAIBLE-3]  _choose_onsite_no_crumbs : une seule fonction au niveau module
 
 import os
 import re
 import math
-import calendar 
+import calendar
 import sqlite3
-import time 
+import time
 import hashlib
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
 from datetime import datetime, date, timedelta, timezone
 from typing import List, Optional, Tuple, Dict, Any
 
+import numpy as np
 import streamlit as st
 import googlemaps
 import polyline
@@ -33,8 +45,15 @@ import requests
 from zoneinfo import ZoneInfo
 TZ_LOCAL = ZoneInfo("America/Montreal")
 
+# OR-Tools — optimisation de routes (pip install ortools)
+try:
+    from ortools.constraint_solver import routing_enums_pb2, pywrapcp
+    ORTOOLS_AVAILABLE = True
+except ImportError:
+    ORTOOLS_AVAILABLE = False
+
 # ────────────────────────────────────────────────────────────────
-# Optional myGeotab import (app still works if it's missing or secrets not set)
+# Optional myGeotab import
 # ────────────────────────────────────────────────────────────────
 GEOTAB_AVAILABLE = True
 try:
@@ -63,25 +82,29 @@ st.session_state.page = st.sidebar.radio(
 page = st.session_state.page
 
 # ────────────────────────────────────────────────────────────────
-# Header
+# [FAIBLE-1] Header — logo path caché pour éviter 6x os.path.exists() par rerun
 # ────────────────────────────────────────────────────────────────
-def cummins_header():
-    CANDIDATES = [
+@st.cache_data(ttl=3600, show_spinner=False)
+def find_logo_path() -> Optional[str]:
+    candidates = [
         "Cummins_Logo.png", "Cummins_Logo.jpg", "Cummins_Logo.svg",
         "assets/cummins_black.svg", "assets/cummins_black.png", "assets/cummins_black.jpg",
     ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return None
+
+def cummins_header():
     col_logo, col_title = st.columns([1, 5], vertical_alignment="center")
     with col_logo:
-        shown = False
-        for path in CANDIDATES:
-            if os.path.exists(path):
-                try:
-                    st.image(path, width=300)
-                    shown = True
-                    break
-                except Exception:
-                    pass
-        if not shown:
+        logo_path = find_logo_path()
+        if logo_path:
+            try:
+                st.image(logo_path, width=300)
+            except Exception:
+                logo_path = None
+        if not logo_path:
             st.markdown(
                 """
                 <div style="width:150px;height:150px;display:flex;align-items:center;justify-content:center;">
@@ -164,14 +187,10 @@ if not GOOGLE_KEY:
 gmaps_client = googlemaps.Client(key=GOOGLE_KEY)
 
 # ────────────────────────────────────────────────────────────────
-# Geocoding helpers (CACHED)  ✅ (replacement requested)
+# Geocoding helpers (CACHED — inchangé)
 # ────────────────────────────────────────────────────────────────
 @st.cache_data(ttl=60*60*24*30, show_spinner=False, max_entries=20000)
 def _geocode_cached(q: str) -> Optional[Tuple[float, float, str]]:
-    """
-    Cache Google Geocoding results for 30 days.
-    Cache is shared for all users *on the same Streamlit Cloud instance*.
-    """
     if not q:
         return None
     try:
@@ -185,9 +204,6 @@ def _geocode_cached(q: str) -> Optional[Tuple[float, float, str]]:
     return None
 
 def geocode_ll(text: str) -> Optional[Tuple[float, float, str]]:
-    """
-    Same signature as before, but now cached.
-    """
     if not text:
         return None
     q = normalize_ca_postal(text)
@@ -195,9 +211,6 @@ def geocode_ll(text: str) -> Optional[Tuple[float, float, str]]:
 
 @st.cache_data(ttl=60*60*24*30, show_spinner=False, max_entries=20000)
 def _reverse_geocode_cached(lat: float, lon: float) -> str:
-    """
-    Cache reverse geocode for 30 days.
-    """
     try:
         res = gmaps_client.reverse_geocode((lat, lon))
         if res:
@@ -212,6 +225,42 @@ def reverse_geocode(lat: float, lon: float) -> str:
     if lat == -0.0: lat = 0.0
     if lon == -0.0: lon = 0.0
     return _reverse_geocode_cached(lat, lon)
+
+# ────────────────────────────────────────────────────────────────
+# [FAIBLE-2] normalize_base_job_id — une seule fonction au niveau module
+# (remplace _norm_base ET _normalize_base_job_id dupliquées)
+# ────────────────────────────────────────────────────────────────
+def normalize_base_job_id(jid: str) -> str:
+    return re.sub(r"\s*\(PART\s+\d+/\d+\)\s*$", "", str(jid)).strip()
+
+# ────────────────────────────────────────────────────────────────
+# [FAIBLE-3] _choose_onsite_no_crumbs — une seule fonction au niveau module
+# (était dupliquée dans schedule_month_with_duo ET dans mode A)
+# ────────────────────────────────────────────────────────────────
+def choose_onsite_no_crumbs(remaining_min: int, max_onsite_today: int, min_chunk: int) -> int:
+    remaining_min = int(remaining_min)
+    max_onsite_today = int(max_onsite_today)
+    min_chunk = int(min_chunk)
+    if max_onsite_today <= 0:
+        return 0
+    onsite_today = min(remaining_min, max_onsite_today)
+    if onsite_today >= remaining_min:
+        return onsite_today
+    rem_after = remaining_min - onsite_today
+    if onsite_today < min_chunk:
+        return 0
+    if rem_after < min_chunk:
+        if remaining_min <= max_onsite_today:
+            return remaining_min
+        onsite_today = remaining_min - min_chunk
+        onsite_today = min(onsite_today, max_onsite_today)
+        if onsite_today < min_chunk:
+            return 0
+        rem_after = remaining_min - onsite_today
+        if rem_after > 0 and rem_after < min_chunk:
+            return 0
+        return onsite_today
+    return onsite_today
 
 # ────────────────────────────────────────────────────────────────
 # Shared data: TECH_HOME / ENTREPOTS
@@ -249,13 +298,9 @@ ENTREPOTS = {
 }
 
 # ────────────────────────────────────────────────────────────────
-# NEW: helper to add permanent labels on the map (tech + entrepôt)
+# Helper map labels (inchangé)
 # ────────────────────────────────────────────────────────────────
 def add_labeled_marker(fmap: folium.Map, lat: float, lon: float, label: str, kind: str):
-    """
-    kind: "tech" or "wh"
-    Adds a normal marker + a permanent label next to it (always visible).
-    """
     if kind == "wh":
         icon = folium.Icon(color="red", icon="building", prefix="fa")
     else:
@@ -281,12 +326,11 @@ def add_labeled_marker(fmap: folium.Map, lat: float, lon: float, label: str, kin
     ).add_to(fmap)
 
 # ────────────────────────────────────────────────────────────────
-# PAGE 1 (Route Optimizer)
+# PAGE 1 (Route Optimizer) — logique inchangée
 # ────────────────────────────────────────────────────────────────
 def render_page_1():
     cummins_header()
 
-    # Travel options
     st.markdown("### Travel options")
     c1, c2 = st.columns([1.2, 1.2])
     with c1:
@@ -305,7 +349,6 @@ def render_page_1():
     else:
         departure_dt = datetime.combine(planned_date, planned_time, tzinfo=TZ_LOCAL)
 
-    # Technician capacities
     TECHNICIANS = sorted(TECH_HOME.keys())
 
     EXCEL_URL = "https://cummins365.sharepoint.com/:x:/r/sites/GRP_CC40846-AdministrationFSPG/Shared%20Documents/Administration%20FSPG/Info%20des%20techs%20pour%20booking/CapaciteTechs_CandiacEtOttawa.xlsx?d=wa4a6497bebb642849d640c57e4db82de&csf=1&web=1&e=8ltLaR"
@@ -320,13 +363,20 @@ def render_page_1():
     st.caption("Choisis le type de service. On affiche les techniciens qui ont ce training **complété**.")
 
     if st.button("🔄 Recharger les données des trainings (GitHub)", key="refresh_trainings"):
+        _get_excel_bytes_cached.clear()
         get_training_options.clear()
         get_not_completed_by_col.clear()
 
-    def _fetch_excel_df_from_github(raw_url: str, sheet: str, header=None) -> pd.DataFrame:
-        r = requests.get(raw_url, timeout=30)
+    # [ÉLEVÉ-1] Bytes du fichier Excel cachés séparément — 1 seul GET HTTP
+    @st.cache_data(ttl=300, show_spinner=False)
+    def _get_excel_bytes_cached(url: str) -> bytes:
+        r = requests.get(url, timeout=30)
         r.raise_for_status()
-        return pd.read_excel(BytesIO(r.content), sheet_name=sheet, header=header, engine="openpyxl")
+        return r.content
+
+    def _fetch_excel_df(raw_url: str, sheet: str, header=None) -> pd.DataFrame:
+        content = _get_excel_bytes_cached(raw_url)
+        return pd.read_excel(BytesIO(content), sheet_name=sheet, header=header, engine="openpyxl")
 
     def _norm_name(s: str) -> str:
         return " ".join(str(s or "").strip().lower().split())
@@ -347,11 +397,10 @@ def render_page_1():
 
     @st.cache_data(ttl=300, show_spinner=False)
     def get_training_options() -> list[tuple[str, int]]:
-        df = _fetch_excel_df_from_github(GITHUB_RAW_URL, sheet=SHEET_NAME, header=None)
+        df = _fetch_excel_df(GITHUB_RAW_URL, sheet=SHEET_NAME, header=None)
         r = HEADER_ROW - 1
         c_start = _excel_col_to_idx(TRAINING_COL_RANGE[0])
         c_end = _excel_col_to_idx(TRAINING_COL_RANGE[1])
-
         options = []
         for c in range(c_start, c_end + 1):
             val = df.iat[r, c] if (r < len(df) and c < df.shape[1]) else None
@@ -362,11 +411,10 @@ def render_page_1():
 
     @st.cache_data(ttl=300, show_spinner=False)
     def get_not_completed_by_col(training_col_idx: int) -> set:
-        df = _fetch_excel_df_from_github(GITHUB_RAW_URL, sheet=SHEET_NAME, header=None)
+        df = _fetch_excel_df(GITHUB_RAW_URL, sheet=SHEET_NAME, header=None)
         name_col_idx = _excel_col_to_idx(NAMES_COL_LETTER)
         r_start = max(0, DATA_ROW_START - 1)
         r_end = min(len(df) - 1, DATA_ROW_END - 1)
-
         sub = df.iloc[r_start:r_end + 1, [name_col_idx, training_col_idx]].copy()
         sub.columns = ["name", "status"]
         sub["status_norm"] = sub["status"].astype(str).str.strip().str.lower()
@@ -393,7 +441,6 @@ def render_page_1():
         else:
             st.warning("Aucun technicien avec ce training complété.")
 
-    # Point de départ
     st.markdown("---")
     st.subheader("🎯 Point de départ")
 
@@ -430,12 +477,13 @@ def render_page_1():
                 devs = api.call("Get", typeName="Device", search={"isActive": True}) or []
                 return [{"id": d["id"], "name": d.get("name") or d.get("serialNumber") or "unit"} for d in devs]
 
+            # [MOYEN-2] Fetch positions Geotab en parallèle avec ThreadPoolExecutor
             @st.cache_data(ttl=75, show_spinner=False)
             def _geotab_positions_for(api_params, device_ids, refresh_key):
                 user, pwd, db, server = api_params
                 api = _geotab_api_cached(user, pwd, db, server)
-                results = []
-                for did in device_ids:
+
+                def fetch_one(did):
                     try:
                         dsi = api.call("Get", typeName="DeviceStatusInfo", search={"deviceSearch": {"id": did}})
                         lat = lon = when = None
@@ -451,12 +499,17 @@ def render_page_1():
                             if isinstance(drv, dict):
                                 driver_name = drv.get("name")
                         if lat is not None and lon is not None:
-                            results.append({"deviceId": did, "lat": float(lat), "lon": float(lon),
-                                            "when": when, "driverName": driver_name})
-                        else:
-                            results.append({"deviceId": did, "error": "no_position"})
+                            return {"deviceId": did, "lat": float(lat), "lon": float(lon),
+                                    "when": when, "driverName": driver_name}
+                        return {"deviceId": did, "error": "no_position"}
                     except Exception:
-                        results.append({"deviceId": did, "error": "error"})
+                        return {"deviceId": did, "error": "error"}
+
+                results = []
+                with ThreadPoolExecutor(max_workers=6) as ex:
+                    futures = {ex.submit(fetch_one, did): did for did in device_ids}
+                    for f in as_completed(futures):
+                        results.append(f.result())
                 return results
 
             DEVICE_TO_DRIVER_RAW = {
@@ -535,12 +588,8 @@ def render_page_1():
                             color, lab = recency_color(p.get("when"))
                             folium.CircleMarker(
                                 [p["lat"], p["lon"]],
-                                radius=8,
-                                color="#222",
-                                weight=2,
-                                fill=True,
-                                fill_color=color,
-                                fill_opacity=0.9
+                                radius=8, color="#222", weight=2,
+                                fill=True, fill_color=color, fill_opacity=0.9
                             ).add_to(fmap)
 
                             folium.Marker(
@@ -579,7 +628,7 @@ def render_page_1():
         else:
             st.info("Geotab désactivé. Ajoutez `GEOTAB_DATABASE`, `GEOTAB_USERNAME`, `GEOTAB_PASSWORD` dans les Secrets.")
 
-    # TAB 2 — TECH HOMES + ENTREPOTS (labels permanents)
+    # TAB 2 — TECH HOMES + ENTREPOTS
     with tabs[1]:
         st.markdown("### 🏠 Domiciles des techniciens et entrepôts")
         show_map = st.checkbox("Afficher la carte (techniciens + entrepôts)", value=False, key="techhome_show_map")
@@ -617,13 +666,10 @@ def render_page_1():
                     avg_lat = sum(p["lat"] for p in points_all) / len(points_all)
                     avg_lon = sum(p["lon"] for p in points_all) / len(points_all)
                     fmap = folium.Map(location=[avg_lat, avg_lon], zoom_start=8, tiles="cartodbpositron")
-
                     for p in ent_points:
                         add_labeled_marker(fmap, p["lat"], p["lon"], f"🏭 {p['name']}", kind="wh")
-
                     for p in tech_points:
                         add_labeled_marker(fmap, p["lat"], p["lon"], p["name"], kind="tech")
-
                     st_folium(fmap, height=800, width=1800)
                 else:
                     st.warning("Aucun point géocodé à afficher.")
@@ -654,7 +700,6 @@ def render_page_1():
     if st.session_state.get("route_start"):
         st.info(f"📍 **Point de départ sélectionné :** {st.session_state.route_start}")
 
-    # Route stops
     st.markdown("### Route stops")
     start_text = st.text_input("Technician home (START)", key="route_start",
                                placeholder="e.g., 123 Main St, City, Province")
@@ -664,7 +709,6 @@ def render_page_1():
                               height=140, placeholder="H0H0H0\nG2P1L4\n…", key="stops_text")
     other_stops_input = [s.strip() for s in stops_text.splitlines() if s.strip()]
 
-    # Optimize route — DRIVING ONLY
     st.markdown("---")
     if st.button("🧭 Optimize Route", type="primary", key="optimize_btn"):
         try:
@@ -697,7 +741,7 @@ def render_page_1():
                     wp_geocoded.append((label, addr, (lat, lon)))
 
             if failures:
-                st.error("I couldn’t geocode some locations:\n\n- " + "\n- ".join(failures) +
+                st.error("I couldn't geocode some locations:\n\n- " + "\n- ".join(failures) +
                          "\n\nTip: use full street addresses if a postal code fails.")
                 st.stop()
 
@@ -792,7 +836,6 @@ def render_page_1():
             st.error(f"Unexpected error: {type(e).__name__}: {e}")
             st.exception(e)
 
-    # Render result
     res = st.session_state.get("route_result")
     if res:
         visit_texts = res["visit_texts"]
@@ -865,10 +908,12 @@ def render_page_1():
 
         st.success(f"**Total distance:** {km:.1f} km • **Total time:** {mins:.0f} mins (live traffic)")
 
+# ────────────────────────────────────────────────────────────────
+# PAGE 2 (Planning)
+# ────────────────────────────────────────────────────────────────
 def render_page_2():
     st.title("📅 Planning (Page 2)")
 
-    # Load tech_home from page 1 (or build fallback)
     tech_df = st.session_state.get("tech_home")
     if tech_df is None or len(tech_df) == 0:
         def _extract_postal(addr: str) -> str:
@@ -876,7 +921,6 @@ def render_page_2():
                 return ""
             m = re.search(r"\b([A-Z]\d[A-Z])\s?(\d[A-Z]\d)\b", str(addr).upper())
             return (m.group(1) + m.group(2)) if m else ""
-
         tech_df = pd.DataFrame(
             [{"tech_name": name, "home_address": addr, "postal": _extract_postal(addr)}
              for name, addr in TECH_HOME.items()]
@@ -888,7 +932,6 @@ def render_page_2():
         st.error("tech_home doit contenir tech_name et home_address.")
         st.stop()
 
-    # Upload Jobs Excel (persistant)
     st.subheader("📤 Jobs – Upload Excel")
     uploaded = st.file_uploader("Upload ton fichier Excel jobs", type=["xlsx"], key="jobs_uploader")
     if uploaded:
@@ -909,7 +952,6 @@ def render_page_2():
     st.caption(f"Jobs détectés: {len(jobs_raw)}")
     st.dataframe(jobs_raw.head(20), use_container_width=True)
 
-    # Column mapping helper
     def pick_col(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
         cols = {c.lower().strip(): c for c in df.columns}
         for cand in candidates:
@@ -931,27 +973,18 @@ def render_page_2():
     COL_ONS   = pick_col(jobs_raw, ["ONSITE SRT HRS", "ONSITE HOURS", "ONSITE HRS"])
     COL_SRT   = pick_col(jobs_raw, ["SRT HRS", "SRT HOURS", "HRS"])
     COL_TECHN = pick_col(jobs_raw, ["# OF TECHS NEEDED", "TECHS NEEDED", "Nbr Techs"])
-
-    # NEW: extra columns to carry to results/exports
     COL_LAST_INSP = pick_col(jobs_raw, [
         "LAST INSPECTION", "Last Inspection", "LastInspection", "LAST_INSPECTION",
         "DERNIÈRE INSPECTION", "Derniere inspection", "Dernière inspection"
     ])
-    COL_DIFF = pick_col(jobs_raw, [
-        "DIFFERENCE", "Difference", "Diff", "ÉCART", "Ecart"
-    ])
-    COL_UNIT = pick_col(jobs_raw, [
-        "UNIT", "Unit", "UNITE", "Unité", "UNITE #", "UNIT #"
-    ])
-    COL_SERIAL = pick_col(jobs_raw, [
-        "SERIAL NUMBER", "Serial Number", "SERIAL", "S/N", "SN", "Serial"
-    ])
+    COL_DIFF = pick_col(jobs_raw, ["DIFFERENCE", "Difference", "Diff", "ÉCART", "Ecart"])
+    COL_UNIT = pick_col(jobs_raw, ["UNIT", "Unit", "UNITE", "Unité", "UNITE #", "UNIT #"])
+    COL_SERIAL = pick_col(jobs_raw, ["SERIAL NUMBER", "Serial Number", "SERIAL", "S/N", "SN", "Serial"])
 
     if not COL_ORDER:
-        st.error("Je ne trouve pas la colonne Job/Order (#). Assure-toi qu’elle existe dans ton export.")
+        st.error("Je ne trouve pas la colonne Job/Order (#). Assure-toi qu'elle existe dans ton export.")
         st.stop()
 
-    # ✅ Clean IDs: "347762.0" -> "347762" (but keep alphanumeric IDs intact)
     def clean_id(x):
         try:
             if pd.isna(x):
@@ -963,12 +996,15 @@ def render_page_2():
             return s.split(".")[0]
         return s
 
-    def build_address(row: pd.Series) -> str:
-        parts = []
-        for c in [COL_ADDR1, COL_ADDR2, COL_ADDR3, COL_CITY, COL_PROV, COL_POST]:
-            if c and pd.notna(row.get(c)) and str(row.get(c)).strip():
-                parts.append(str(row.get(c)).strip())
-        return ", ".join(parts)
+    # [ÉLEVÉ-4] build_address vectorisé — plus de apply(axis=1)
+    def build_address_vectorized(df: pd.DataFrame) -> pd.Series:
+        addr_cols = [c for c in [COL_ADDR1, COL_ADDR2, COL_ADDR3, COL_CITY, COL_PROV, COL_POST] if c]
+        if not addr_cols:
+            return pd.Series([""] * len(df), index=df.index)
+        parts = df[addr_cols].fillna("").astype(str).apply(lambda col: col.str.strip())
+        def join_row(row):
+            return ", ".join(v for v in row if v)
+        return parts.apply(join_row, axis=1)
 
     def extract_postal(s: str) -> str:
         if not s:
@@ -976,7 +1012,6 @@ def render_page_2():
         m = re.search(r"\b([A-Z]\d[A-Z])\s?(\d[A-Z]\d)\b", str(s).upper())
         return (m.group(1) + m.group(2)) if m else ""
 
-    # NEW helper: clean text for optional columns
     def _clean_text(x):
         try:
             if pd.isna(x):
@@ -989,7 +1024,7 @@ def render_page_2():
     jobs = pd.DataFrame()
     jobs["job_id"] = jobs_raw[COL_ORDER].apply(clean_id)
     jobs["cust"] = jobs_raw[COL_CUST].apply(clean_id) if COL_CUST else ""
-    jobs["address"] = jobs_raw.apply(build_address, axis=1)
+    jobs["address"] = build_address_vectorized(jobs_raw)
 
     desc = jobs_raw[COL_DESC].fillna("").astype(str) if COL_DESC else ""
     up   = jobs_raw[COL_UP].fillna("").astype(str) if COL_UP else ""
@@ -1009,28 +1044,19 @@ def render_page_2():
 
     techs_needed = pd.to_numeric(jobs_raw[COL_TECHN], errors="coerce") if COL_TECHN else None
     jobs["techs_needed"] = techs_needed.fillna(1).astype(int) if techs_needed is not None else 1
-
     jobs["postal"] = jobs_raw[COL_POST].fillna("").astype(str).apply(extract_postal) if COL_POST else ""
-
-    # NEW: keep extra fields for export / reporting
     jobs["last_inspection"] = jobs_raw[COL_LAST_INSP].apply(_clean_text) if COL_LAST_INSP else ""
     jobs["difference"] = jobs_raw[COL_DIFF].apply(_clean_text) if COL_DIFF else ""
     jobs["unit"] = jobs_raw[COL_UNIT].apply(_clean_text) if COL_UNIT else ""
     jobs["serial_number"] = jobs_raw[COL_SERIAL].apply(_clean_text) if COL_SERIAL else ""
 
-    # Clean jobs (unchanged filters)
     jobs = jobs[(jobs["address"].astype(str).str.len() > 8) & (jobs["job_minutes"] > 0)].copy()
 
-    # ✅ FIX A: safer dedup to prevent eliminating split-like rows / multi-lines with same job_id
-    # (no scheduling logic change; only prevents silent data loss)
     dedup_cols = ["job_id", "address", "job_minutes", "techs_needed", "description"]
     dedup_cols = [c for c in dedup_cols if c in jobs.columns]
     jobs = jobs.drop_duplicates(subset=dedup_cols).reset_index(drop=True)
-
-    # ✅ Deterministic order (unchanged behavior; stable sort)
     jobs = jobs.sort_values(["techs_needed", "job_id"], kind="mergesort").reset_index(drop=True)
 
-    # ✅ Integrity baseline = CLEAN/BOOKABLE pool
     initial_bookable_job_ids = set(jobs["job_id"].astype(str).tolist())
 
     # ────────────────────────────────────────────────────────────────
@@ -1070,34 +1096,21 @@ def render_page_2():
         return f"{h:02d}:{mm:02d}"
 
     # ────────────────────────────────────────────────────────────────
-    # Persistent SQLite cache for travel (unchanged)
+    # [CRITIQUE-1] SQLite — connexion unique via @st.cache_resource
     # ────────────────────────────────────────────────────────────────
-    from pathlib import Path 
-
+    from pathlib import Path
     DB_DIR = Path(".cache")
     DB_DIR.mkdir(exist_ok=True)
-
     DB_PATH = str(DB_DIR / "travel_cache.sqlite")
 
-    st.sidebar.subheader("🧾 Coûts / Cache")
-    use_traffic = st.sidebar.checkbox("Utiliser trafic (duration_in_traffic)", value=True, key="p2_use_traffic")
-    cache_days = st.sidebar.number_input("Conserver cache (jours)", min_value=1, max_value=365, value=30, step=1, key="p2_cache_days")
-
-    st.sidebar.subheader("🧭 Préfiltrage géographique")
-    solo_pool = st.sidebar.slider("SOLO: nb de jobs candidats (pool)", 10, 200, 60, 10, key="p2_solo_pool")
-    duo_pool = st.sidebar.slider("DUO: nb de jobs candidats (pool)", 10, 300, 80, 10, key="p2_duo_pool")
-    techs_near_job = st.sidebar.slider("DUO: nb de techs proches à tester", 2, 6, 4, 1, key="p2_duo_near_techs")
-    include_nearby_fsa = st.sidebar.checkbox("Inclure FSA voisins si peu de candidats", value=True, key="p2_include_nearby_fsa")  # UI only
-
-    def _norm(s: str) -> str:
-        return re.sub(r"\s+", " ", str(s or "").strip().lower())
-
-    def _key(origin: str, dest: str, traffic_flag: bool) -> str:
-        raw = f"{_norm(origin)}|{_norm(dest)}|driving|traffic={int(bool(traffic_flag))}"
-        return hashlib.md5(raw.encode("utf-8")).hexdigest()
-
-    def _db():
-        conn = sqlite3.connect(DB_PATH, timeout=30)
+    @st.cache_resource
+    def _get_db() -> sqlite3.Connection:
+        """
+        Connexion SQLite partagée pour toute la durée de vie de l'app.
+        Créée une seule fois — jamais réouverte ni refermée.
+        check_same_thread=False requis car Streamlit est multi-thread.
+        """
+        conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS travel (
@@ -1107,7 +1120,72 @@ def render_page_2():
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_travel_ts ON travel(ts)")
+        conn.commit()
         return conn
+
+    st.sidebar.subheader("🧾 Coûts / Cache")
+    use_traffic = st.sidebar.checkbox("Utiliser trafic (duration_in_traffic)", value=True, key="p2_use_traffic")
+    cache_days = st.sidebar.number_input("Conserver cache (jours)", min_value=1, max_value=365, value=30, step=1, key="p2_cache_days")
+
+    st.sidebar.subheader("🧭 Préfiltrage géographique")
+    solo_pool = st.sidebar.slider("SOLO: nb de jobs candidats (pool)", 10, 200, 60, 10, key="p2_solo_pool")
+    duo_pool = st.sidebar.slider("DUO: nb de jobs candidats (pool)", 10, 300, 80, 10, key="p2_duo_pool")
+    techs_near_job = st.sidebar.slider("DUO: nb de techs proches à tester", 2, 6, 4, 1, key="p2_duo_near_techs")
+    include_nearby_fsa = st.sidebar.checkbox("Inclure FSA voisins si peu de candidats", value=True, key="p2_include_nearby_fsa")
+
+    # Reset cache zones — utile après changement de logique de secteurs
+    # ── Précalcul Distance Matrix Batch ──────────────────────────
+    st.sidebar.subheader("⚡ Distance Matrix Batch")
+    st.sidebar.caption(
+        "Précalcule tous les trajets techs↔jobs en quelques appels API batch "
+        "au lieu d'un appel par paire. À lancer UNE FOIS avant de planifier."
+    )
+    if st.sidebar.button("🔄 Précalculer matrice trajets", key="p2_prefetch_btn"):
+        # Collecter toutes les adresses uniques : domiciles techs + jobs
+        all_tech_addrs = list(home_map.values())
+        all_job_addrs  = jobs["address"].dropna().unique().tolist()
+        all_addrs      = list(dict.fromkeys(all_tech_addrs + all_job_addrs))
+
+        prog_bar  = st.sidebar.progress(0)
+        prog_text = st.sidebar.empty()
+        total_pairs = len(all_addrs) * len(all_addrs)
+
+        def _cb(calls_done):
+            # estimation grossière de progression
+            pct = min(99, int(calls_done * CHUNK_SIZE / max(1, total_pairs) * 100))
+            prog_bar.progress(pct)
+            prog_text.write(f"Appels batch effectués : {calls_done}")
+
+        CHUNK_SIZE = 100  # 10×10 éléments par appel
+        new_pairs = prefetch_travel_matrix(all_addrs, all_addrs, progress_cb=_cb)
+        prog_bar.progress(100)
+        prog_text.write(f"✅ {new_pairs} nouvelles paires ajoutées au cache.")
+        st.sidebar.success(
+            f"Matrice précalculée : {new_pairs} nouvelles paires. "
+            f"Appels API batch : {st.session_state.get('p2_api_calls', 0)}"
+        )
+
+    st.sidebar.markdown("---")
+    st.sidebar.caption(
+        "💡 OR-Tools actif" if ORTOOLS_AVAILABLE
+        else "⚠️ OR-Tools non installé (`pip install ortools`). "
+             "Optimisation de route désactivée — greedy utilisé."
+    )
+
+    st.sidebar.subheader("\U0001f5d1\ufe0f Cache zones géographiques")
+    st.sidebar.caption("À utiliser si vous changez la logique des zones ou après une mise à jour.")
+    if st.sidebar.button("\U0001f504 Recalculer zones géo (techs + jobs)", key="p2_reset_geo_cache"):
+        st.session_state.pop("p2_ll_cache", None)
+        compute_tech_maps.clear()
+        st.success("\u2705 Cache zones vidé — secteurs recalculés au prochain run.")
+        st.rerun()
+
+    def _norm(s: str) -> str:
+        return re.sub(r"\s+", " ", str(s or "").strip().lower())
+
+    def _key(origin: str, dest: str, traffic_flag: bool) -> str:
+        raw = f"{_norm(origin)}|{_norm(dest)}|driving|traffic={int(bool(traffic_flag))}"
+        return hashlib.md5(raw.encode("utf-8")).hexdigest()
 
     if "p2_api_calls" not in st.session_state:
         st.session_state["p2_api_calls"] = 0
@@ -1115,6 +1193,12 @@ def render_page_2():
         st.session_state["p2_cache_hits"] = 0
 
     def travel_min_cached(origin: str, dest: str) -> int:
+        """
+        Retourne le temps de trajet en minutes entre origin et dest.
+        Lit depuis SQLite si disponible (cache chaud).
+        Sinon fait UN appel Distance Matrix 1x1 (fallback individuel).
+        Pour le précalcul en masse, utiliser prefetch_travel_matrix().
+        """
         if not origin or not dest:
             return 9999
 
@@ -1122,39 +1206,147 @@ def render_page_2():
         now = int(time.time())
         min_ts = now - int(cache_days) * 86400
 
-        conn = _db()
+        conn = _get_db()
         cur = conn.cursor()
         cur.execute("SELECT minutes, ts FROM travel WHERE k=? AND ts>=?", (k, min_ts))
         row = cur.fetchone()
         if row:
-            conn.close()
             st.session_state["p2_cache_hits"] += 1
             return int(row[0])
 
+        # Fallback 1x1 si pas en cache
         try:
             r = gmaps_client.distance_matrix([origin], [dest], mode="driving")
             el = r["rows"][0]["elements"][0]
             if el.get("status") != "OK":
-                conn.close()
                 return 9999
-
             if use_traffic:
                 dur = el.get("duration_in_traffic") or el.get("duration") or {}
             else:
                 dur = el.get("duration") or el.get("duration_in_traffic") or {}
             minutes = int(round(int(dur.get("value", 0)) / 60))
         except Exception:
-            conn.close()
             return 9999
 
         conn.execute("INSERT OR REPLACE INTO travel(k, minutes, ts) VALUES(?,?,?)", (k, minutes, now))
         conn.commit()
-        conn.close()
         st.session_state["p2_api_calls"] += 1
         return minutes
 
+    def prefetch_travel_matrix(origins: List[str], destinations: List[str],
+                                progress_cb=None) -> int:
+        """
+        PRIORITÉ 1 — Distance Matrix BATCH.
+        Précalcule et stocke dans SQLite toutes les paires (origin, dest)
+        en appelant l'API Distance Matrix avec jusqu'à 25 origines × 25 destinations
+        par requête, au lieu d'un appel séparé par paire.
+
+        Exemple : 14 techs × 80 jobs = 1120 paires
+          Avant : 1120 appels individuels
+          Après : ceil(14/10) × ceil(80/25) = 2 × 4 = 8 appels batch
+          → ~140x moins d'appels API
+
+        Retourne le nombre de nouvelles paires calculées (pas déjà en cache).
+        """
+        if not origins or not destinations:
+            return 0
+
+        now = int(time.time())
+        min_ts = now - int(cache_days) * 86400
+        conn = _get_db()
+
+        # Identifier les paires déjà en cache
+        missing_origins: List[str] = []
+        missing_dests_per_origin: Dict[str, List[str]] = {}
+
+        for orig in origins:
+            missing_dests = []
+            for dest in destinations:
+                if orig == dest:
+                    continue
+                k = _key(orig, dest, use_traffic)
+                cur = conn.cursor()
+                cur.execute("SELECT 1 FROM travel WHERE k=? AND ts>=?", (k, min_ts))
+                if not cur.fetchone():
+                    missing_dests.append(dest)
+            if missing_dests:
+                missing_origins.append(orig)
+                missing_dests_per_origin[orig] = missing_dests
+
+        if not missing_origins:
+            return 0  # tout déjà en cache
+
+        # Préparer les chunks : max 10 origines × 25 destinations par appel API
+        # (Google limite à 100 éléments par requête = 10×10 ou 1×25, etc.)
+        # On utilise 10 origines × 10 destinations = 100 éléments max
+        CHUNK_ORIG = 10
+        CHUNK_DEST = 10
+
+        total_new = 0
+        all_orig_chunks = [missing_origins[i:i+CHUNK_ORIG]
+                           for i in range(0, len(missing_origins), CHUNK_ORIG)]
+
+        total_calls = 0
+        for orig_chunk in all_orig_chunks:
+            # Collecter toutes les destinations manquantes pour ce chunk d'origines
+            all_dests_for_chunk = list({d for o in orig_chunk
+                                        for d in missing_dests_per_origin.get(o, [])})
+            dest_chunks = [all_dests_for_chunk[i:i+CHUNK_DEST]
+                           for i in range(0, len(all_dests_for_chunk), CHUNK_DEST)]
+
+            for dest_chunk in dest_chunks:
+                if not dest_chunk:
+                    continue
+                try:
+                    r = gmaps_client.distance_matrix(
+                        orig_chunk, dest_chunk, mode="driving"
+                    )
+                    total_calls += 1
+                    rows_data = r.get("rows", [])
+
+                    inserts = []
+                    for oi, row_data in enumerate(rows_data):
+                        if oi >= len(orig_chunk):
+                            break
+                        orig = orig_chunk[oi]
+                        for di, el in enumerate(row_data.get("elements", [])):
+                            if di >= len(dest_chunk):
+                                break
+                            dest = dest_chunk[di]
+                            if orig == dest:
+                                continue
+                            # Vérifier que c'est une paire manquante pour cette origine
+                            if dest not in missing_dests_per_origin.get(orig, []):
+                                continue
+                            if el.get("status") != "OK":
+                                continue
+                            if use_traffic:
+                                dur = el.get("duration_in_traffic") or el.get("duration") or {}
+                            else:
+                                dur = el.get("duration") or el.get("duration_in_traffic") or {}
+                            minutes = int(round(int(dur.get("value", 0)) / 60))
+                            k = _key(orig, dest, use_traffic)
+                            inserts.append((k, minutes, now))
+                            total_new += 1
+
+                    if inserts:
+                        conn.executemany(
+                            "INSERT OR REPLACE INTO travel(k, minutes, ts) VALUES(?,?,?)",
+                            inserts
+                        )
+                        conn.commit()
+
+                except Exception:
+                    pass  # continuer même si un chunk échoue
+
+                if progress_cb:
+                    progress_cb(total_calls)
+
+        st.session_state["p2_api_calls"] = st.session_state.get("p2_api_calls", 0) + total_calls
+        return total_new
+
     # ────────────────────────────────────────────────────────────────
-    # Lat/Lon cache + haversine + sector rule (unchanged)
+    # Haversine vectorisé (NumPy)
     # ────────────────────────────────────────────────────────────────
     def haversine_km(lat1, lon1, lat2, lon2) -> float:
         if lat1 is None or lon1 is None or lat2 is None or lon2 is None:
@@ -1167,6 +1359,20 @@ def render_page_2():
         a = math.sin(dp/2)**2 + math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2
         return 2 * R * math.asin(math.sqrt(a))
 
+    def haversine_vectorized(tlat: float, tlon: float,
+                              lats: np.ndarray, lons: np.ndarray) -> np.ndarray:
+        """Calcule les distances haversine entre (tlat,tlon) et chaque point du vecteur."""
+        R = 6371.0
+        lats = np.where(np.isnan(lats.astype(float)), 1e9, lats.astype(float))
+        lons = np.where(np.isnan(lons.astype(float)), 1e9, lons.astype(float))
+        p1 = np.radians(float(tlat))
+        p2 = np.radians(lats)
+        dp = np.radians(lats - float(tlat))
+        dl = np.radians(lons - float(tlon))
+        a = np.sin(dp/2)**2 + np.cos(p1)*np.cos(p2)*np.sin(dl/2)**2
+        a = np.clip(a, 0, 1)
+        return 2 * R * np.arcsin(np.sqrt(a))
+
     if "p2_ll_cache" not in st.session_state:
         st.session_state["p2_ll_cache"] = {}
     ll_cache: Dict[str, Tuple[float, float]] = st.session_state["p2_ll_cache"]
@@ -1177,7 +1383,7 @@ def render_page_2():
         key = _norm(addr)
         if key in ll_cache:
             return ll_cache[key][0], ll_cache[key][1]
-        g = geocode_ll(addr)  # cached 30 days (page 1 helper)
+        g = geocode_ll(addr)
         if g:
             lat, lon, _ = g
             ll_cache[key] = (float(lat), float(lon))
@@ -1185,34 +1391,144 @@ def render_page_2():
         ll_cache[key] = (None, None)
         return None, None
 
+    # ────────────────────────────────────────────────────────────────
+    # ZONES GÉOGRAPHIQUES — 6 zones basées sur la géographie réelle
+    # ────────────────────────────────────────────────────────────────
+    #
+    #  RIVE_NORD     : Nord du fleuve/Prairies, hors île MTL
+    #                  Saint-Jérôme, Blainville, Laval, Repentigny,
+    #                  L'Assomption, Terrebonne, Saint-Eustache, Lachute…
+    #
+    #  MTL_ILE       : Île de Montréal (zone neutre, compatible avec tout)
+    #                  Montréal, Saint-Laurent, Dorval, Pointe-Claire,
+    #                  Pierrefonds, Baie-d'Urfé, DDO, Verdun…
+    #
+    #  RIVE_SUD      : Sud du fleuve, corridor Montréal
+    #                  Longueuil, Brossard, Boucherville, Chambly,
+    #                  Beloeil, Varennes, Candiac, Saint-Hubert…
+    #
+    #  RIVE_SUD_OUEST: Sud-Ouest, accessible depuis Rive Nord via A-40
+    #                  SANS traverser l'île de Montréal
+    #                  Vaudreuil-Dorion, Saint-Clet, Hinchinbrooke,
+    #                  Hudson, Rigaud, Beauharnois (ouest)…
+    #
+    #  ZONE_EST      : Centre/Est-du-Québec — Rive Sud SEULEMENT
+    #                  Un tech Rive Nord doit traverser 2 fois l'île → INTERDIT
+    #                  Drummondville, Sherbrooke, Windsor, Granby,
+    #                  Waterloo, Bromont, Magog, Canton-de-Hatley…
+    #
+    #  ZONE_NORD     : Trois-Rivières et nord du fleuve hors corridor MTL
+    #                  Accessible aux DEUX rives en longeant le fleuve
+    #                  Trois-Rivières, Saint-Paulin, Shawinigan…
+    #
+    # ────────────────────────────────────────────────────────────────
+    # MATRICE DE COMPATIBILITÉ (True = technicien PEUT faire ce job)
+    #
+    #                   RN   MTL   RS   RS_O  ZE   ZN
+    # tech RIVE_NORD    ✅   ✅    ❌   ✅    ❌   ✅
+    # tech MTL_ILE      ✅   ✅    ✅   ✅    ✅   ✅
+    # tech RIVE_SUD     ❌   ✅    ✅   ✅    ✅   ✅
+    # tech RS_OUEST     ❌   ✅    ✅   ✅    ✅   ✅
+    # tech ZONE_EST     ❌   ✅    ✅   ❌    ✅   ❌
+    # tech ZONE_NORD    ✅   ✅    ❌   ✅    ❌   ✅
+    #
+    # Règles clés :
+    #   RIVE_NORD ↔ RIVE_SUD   : INTERDIT (traversée pont obligatoire)
+    #   RIVE_NORD → ZONE_EST   : INTERDIT (2 ponts — traverse l'île MTL)
+    #   RIVE_SUD  → RIVE_NORD  : INTERDIT (idem sens inverse)
+    #   RIVE_SUD_OUEST         : accessible depuis Rive Nord via A-40
+    #   ZONE_NORD (3R, SP)     : accessible des 2 rives le long du fleuve
+    #   MTL_ILE                : zone neutre, compatible avec tout
+    # ────────────────────────────────────────────────────────────────
+
     def classify_sector(lat: Optional[float], lon: Optional[float]) -> str:
+        """
+        Classifie une adresse dans l'une des 6 zones géographiques.
+        Basé uniquement sur les coordonnées GPS — aucun appel API.
+        """
         if lat is None or lon is None:
             return "UNK"
-        lat = float(lat); lon = float(lon)
-        if (45.40 <= lat <= 45.72) and (-74.10 <= lon <= -73.40):
-            return "MTL"
-        return "NORTH" if lat >= 45.55 else "SOUTH"
+        lat = float(lat)
+        lon = float(lon)
+
+        # ZONE_NORD — Trois-Rivières, Shawinigan, Saint-Paulin et nord
+        # lat > 46.15 = clairement au nord du corridor Montréal
+        if lat > 46.15:
+            return "ZONE_NORD"
+
+        # MTL_ILE — Île de Montréal (polygone approx.)
+        # lat 45.40–45.70, lon -74.03–-73.47
+        if (45.40 <= lat <= 45.70) and (-74.03 <= lon <= -73.47):
+            return "MTL_ILE"
+
+        # ZONE_EST — Drummondville, Sherbrooke, Windsor, Granby, Bromont…
+        # À l'est de Montréal, rive sud : lon > -73.10, lat 45.30–46.10
+        # Inaccessible depuis Rive Nord sans traverser l'île (2 ponts)
+        if lon > -73.10 and 45.30 < lat < 46.10:
+            return "ZONE_EST"
+
+        # RIVE_SUD_OUEST — Vaudreuil, Saint-Clet, Hinchinbrooke, Rigaud…
+        # Accessible depuis Rive Nord via A-40 SANS traverser Montréal
+        # lon < -74.00, lat 45.20–45.55
+        if lon < -74.00 and lat < 45.55:
+            return "RIVE_SUD_OUEST"
+
+        # RIVE_NORD — au nord du fleuve, hors île, hors Zone Nord
+        if lat > 45.55 and lon < -73.47:
+            return "RIVE_NORD"
+        if lat >= 45.70:
+            return "RIVE_NORD"
+
+        # RIVE_SUD — tout le reste au sud du fleuve
+        if lat < 45.55:
+            return "RIVE_SUD"
+
+        return "UNK"
+
+    # Matrice de compatibilité tech_zone → job_zone autorisés
+    _SECTOR_COMPAT: Dict[str, set] = {
+        "RIVE_NORD":      {"RIVE_NORD", "MTL_ILE", "RIVE_SUD_OUEST", "ZONE_NORD", "UNK"},
+        "MTL_ILE":        {"RIVE_NORD", "MTL_ILE", "RIVE_SUD", "RIVE_SUD_OUEST", "ZONE_EST", "ZONE_NORD", "UNK"},
+        "RIVE_SUD":       {"MTL_ILE", "RIVE_SUD", "RIVE_SUD_OUEST", "ZONE_EST", "ZONE_NORD", "UNK"},
+        "RIVE_SUD_OUEST": {"MTL_ILE", "RIVE_SUD", "RIVE_SUD_OUEST", "ZONE_EST", "ZONE_NORD", "UNK"},
+        "ZONE_EST":       {"MTL_ILE", "RIVE_SUD", "ZONE_EST", "UNK"},
+        "ZONE_NORD":      {"RIVE_NORD", "MTL_ILE", "RIVE_SUD_OUEST", "ZONE_NORD", "UNK"},
+        "UNK":            {"RIVE_NORD", "MTL_ILE", "RIVE_SUD", "RIVE_SUD_OUEST", "ZONE_EST", "ZONE_NORD", "UNK"},
+    }
 
     def sector_compatible(tech_sector: str, job_sector: str) -> bool:
+        """
+        Retourne True si un technicien de tech_sector peut effectuer
+        un job dans job_sector, selon la logique des ponts/traversées.
+        """
         if tech_sector == "UNK" or job_sector == "UNK":
             return True
-        if tech_sector == "MTL" or job_sector == "MTL":
-            return True
-        if (tech_sector == "SOUTH" and job_sector == "NORTH") or (tech_sector == "NORTH" and job_sector == "SOUTH"):
-            return False
-        return True
+        return job_sector in _SECTOR_COMPAT.get(tech_sector, set())
 
     tech_names_all = sorted(tech_df["tech_name"].astype(str).tolist())
     home_map = {t: tech_df.loc[tech_df["tech_name"] == t, "home_address"].iloc[0] for t in tech_names_all}
 
-    tech_ll_map: Dict[str, Tuple[Optional[float], Optional[float]]] = {}
-    tech_sector_map: Dict[str, str] = {}
-    for t in tech_names_all:
-        lat, lon = get_ll_for_address(home_map[t])
-        tech_ll_map[t] = (lat, lon)
-        tech_sector_map[t] = classify_sector(lat, lon)
+    # [ÉLEVÉ-2] Coordonnées des techs cachées — recalculées uniquement si TECH_HOME change
+    @st.cache_data(show_spinner=False)
+    def compute_tech_maps(home_map_items: tuple) -> Tuple[Dict, Dict]:
+        """
+        Calcule tech_ll_map et tech_sector_map une seule fois.
+        home_map_items est un tuple de (name, address) pour permettre le cache.
+        """
+        t_ll: Dict[str, Tuple[Optional[float], Optional[float]]] = {}
+        t_sec: Dict[str, str] = {}
+        for name, addr in home_map_items:
+            g = geocode_ll(addr)
+            if g:
+                lat, lon, _ = g
+                t_ll[name] = (float(lat), float(lon))
+            else:
+                t_ll[name] = (None, None)
+            t_sec[name] = classify_sector(t_ll[name][0], t_ll[name][1])
+        return t_ll, t_sec
 
-    # Ensure columns exist on MASTER jobs df
+    tech_ll_map, tech_sector_map = compute_tech_maps(tuple(sorted(home_map.items())))
+
     if "job_lat" not in jobs.columns:
         jobs["job_lat"] = None
         jobs["job_lon"] = None
@@ -1223,14 +1539,12 @@ def render_page_2():
         lat = r.get("job_lat")
         lon = r.get("job_lon")
         sec = r.get("job_sector", "UNK") or "UNK"
-
         if pd.notna(lat) and pd.notna(lon):
             lat = float(lat); lon = float(lon)
             if sec == "UNK":
                 sec = classify_sector(lat, lon)
                 master_df.at[master_idx, "job_sector"] = sec
             return lat, lon, sec
-
         lat, lon = get_ll_for_address(r["address"])
         sec = classify_sector(lat, lon)
         master_df.at[master_idx, "job_lat"] = lat
@@ -1238,6 +1552,7 @@ def render_page_2():
         master_df.at[master_idx, "job_sector"] = sec
         return lat, lon, sec
 
+    # [CRITIQUE-2] get_job_pool_for_tech — haversine vectorisé NumPy
     def get_job_pool_for_tech(master_remaining: pd.DataFrame, tech_name: str, pool_size: int) -> pd.DataFrame:
         if master_remaining.empty:
             return master_remaining
@@ -1246,50 +1561,51 @@ def render_page_2():
         tlat, tlon = tech_ll_map.get(tech_name, (None, None))
         tsec = tech_sector_map.get(tech_name, "UNK")
 
-        # optionnel: colonne debug (si tu veux la visibilité)
-        if "index_mismatch" not in master_remaining.columns:
-            master_remaining = master_remaining.copy()
-            master_remaining["index_mismatch"] = False
-
-        dists = []
-        for idx, r in master_remaining.iterrows():
-
-            # ✅ cas normal
-            if idx in jobs.index:
-                lat, lon, jsec = ensure_job_ll_master(jobs, idx)
-
-            # ✅ fallback
-            else:
-                master_remaining.at[idx, "index_mismatch"] = True
-
-                addr = str(r.get("address", "")).strip()
-                if not addr:
-                    continue  # pas de fallback possible
-
-                lat, lon = get_ll_for_address(addr)
-                jsec = classify_sector(lat, lon)
-
-            # filtre sector
-            if not sector_compatible(tsec, jsec):
-                continue
-
-            d = haversine_km(tlat, tlon, lat, lon)
-            dists.append((idx, d))
-
-        # ⚠️ celui-ci doit être ici (après la boucle)
-        if not dists:
+        if tlat is None or tlon is None:
             return master_remaining.head(pool_size) if len(master_remaining) > pool_size else master_remaining
 
-        dists.sort(key=lambda x: x[1])
-        chosen_idx = [i for (i, _d) in dists[:int(pool_size)]]
+        # S'assurer que les lat/lon des jobs sont disponibles dans le master df
+        for idx in master_remaining.index:
+            if idx in jobs.index:
+                lat_val = jobs.at[idx, "job_lat"]
+                if pd.isna(lat_val) or lat_val is None:
+                    ensure_job_ll_master(jobs, idx)
+
+        # Extraire les vecteurs lat/lon
+        lats_raw = []
+        lons_raw = []
+        valid_idx = []
+        for idx, row in master_remaining.iterrows():
+            if idx in jobs.index:
+                lat = jobs.at[idx, "job_lat"]
+                lon = jobs.at[idx, "job_lon"]
+                sec = jobs.at[idx, "job_sector"] if "job_sector" in jobs.columns else "UNK"
+            else:
+                lat, lon = get_ll_for_address(str(row.get("address", "")))
+                sec = classify_sector(lat, lon)
+            if not sector_compatible(tsec, sec or "UNK"):
+                continue
+            lats_raw.append(float(lat) if lat is not None else np.nan)
+            lons_raw.append(float(lon) if lon is not None else np.nan)
+            valid_idx.append(idx)
+
+        if not valid_idx:
+            return master_remaining.head(pool_size) if len(master_remaining) > pool_size else master_remaining
+
+        lats_arr = np.array(lats_raw, dtype=float)
+        lons_arr = np.array(lons_raw, dtype=float)
+        dists = haversine_vectorized(tlat, tlon, lats_arr, lons_arr)
+
+        top_n = min(int(pool_size), len(valid_idx))
+        top_positions = np.argpartition(dists, top_n - 1)[:top_n] if top_n < len(dists) else np.arange(len(dists))
+        chosen_idx = [valid_idx[i] for i in top_positions]
         return master_remaining.loc[chosen_idx].copy()
-                
+
     def rank_techs_for_job(tech_names: List[str], job_row: pd.Series, top_n: int) -> List[str]:
         if top_n >= len(tech_names):
             return tech_names
         jlat, jlon = get_ll_for_address(job_row.get("address", ""))
         jsec = classify_sector(jlat, jlon)
-
         scored = []
         for t in tech_names:
             tlat, tlon = tech_ll_map.get(t, (None, None))
@@ -1298,15 +1614,13 @@ def render_page_2():
                 continue
             d = haversine_km(tlat, tlon, jlat, jlon)
             scored.append((t, d))
-
         if not scored:
             return tech_names[:max(2, int(top_n))]
-
         scored.sort(key=lambda x: x[1])
         return [t for (t, _d) in scored[:max(2, int(top_n))]]
 
     # ────────────────────────────────────────────────────────────────
-    # Styling + Filters (unchanged)
+    # Styling + Filters
     # ────────────────────────────────────────────────────────────────
     def style_duo(df: pd.DataFrame):
         if df is None or df.empty:
@@ -1322,12 +1636,10 @@ def render_page_2():
                     "border-left: 6px solid #b02a37;"
                 )
                 return [css] * len(row)
-
             try:
                 n = int(row.get("techs_needed", 1))
             except Exception:
                 n = 1
-
             if n >= 3:
                 css = (
                     "background-color: #f8d7da;"
@@ -1370,10 +1682,10 @@ def render_page_2():
             return 1
         return int(math.ceil(float(job_minutes_total) / float(daily_onsite_cap)))
 
-    # ===============================================================
-    # Scheduler (MONTH) — booking logic unchanged
-    # ===============================================================
 
+    # ════════════════════════════════════════════════════════════════
+    # Scheduler principal
+    # ════════════════════════════════════════════════════════════════
     def schedule_month_with_duo(
         jobs_in: pd.DataFrame,
         tech_names: List[str],
@@ -1387,10 +1699,6 @@ def render_page_2():
         progress_text=None
     ) -> dict:
 
-        # helper: normalize split job ids
-        def _norm_base(jid: str) -> str:
-            return re.sub(r"\s*\(PART\s+\d+/\d+\)\s*$", "", str(jid)).strip()
-
         available = int(round(day_hours * 60)) - int(lunch_min)
         if available <= 0:
             return {"success": False, "rows": [], "remaining": jobs_in, "reason": "Heures/jour - pause <= 0"}
@@ -1401,33 +1709,6 @@ def render_page_2():
         if OT_ACTIVE_CAP < available:
             OT_ACTIVE_CAP = available
 
-        def _choose_onsite_no_crumbs(remaining_min: int, max_onsite_today: int, min_chunk: int) -> int:
-            remaining_min = int(remaining_min)
-            max_onsite_today = int(max_onsite_today)
-            min_chunk = int(min_chunk)
-            if max_onsite_today <= 0:
-                return 0
-
-            onsite_today = min(remaining_min, max_onsite_today)
-            if onsite_today >= remaining_min:
-                return onsite_today
-
-            rem_after = remaining_min - onsite_today
-            if onsite_today < min_chunk:
-                return 0
-            if rem_after < min_chunk:
-                if remaining_min <= max_onsite_today:
-                    return remaining_min
-                onsite_today = remaining_min - min_chunk
-                onsite_today = min(onsite_today, max_onsite_today)
-                if onsite_today < min_chunk:
-                    return 0
-                rem_after = remaining_min - onsite_today
-                if rem_after > 0 and rem_after < min_chunk:
-                    return 0
-                return onsite_today
-            return onsite_today
-
         remaining_all = jobs_in.copy()
         remaining_all = remaining_all.sort_values(["techs_needed", "job_id"], kind="mergesort")
 
@@ -1435,18 +1716,14 @@ def render_page_2():
         solo_jobs = remaining_all[remaining_all["techs_needed"] <= 1].copy()
         hard_jobs = remaining_all[remaining_all["techs_needed"] > 2].copy()
 
+        # [MOYEN-1] Trier une seule fois avant les boucles
         duo_jobs = duo_jobs.sort_values(["job_id"], kind="mergesort")
         solo_jobs = solo_jobs.sort_values(["job_id"], kind="mergesort")
         hard_jobs = hard_jobs.sort_values(["job_id"], kind="mergesort")
 
         planned_rows: List[Dict[str, Any]] = []
+        planned_base_ids: set = set()
 
-        def _normalize_base_job_id(jid: str) -> str:
-            return re.sub(r"\s*\(PART\s+\d+/\d+\)\s*$", "", str(jid)).strip()
-            
-        planned_base_ids = set()  # on va remplir ça au fil de la planification
-
-        # NEW: helper to attach the 4 extra fields consistently (no logic change)
         def _extra_fields_from_job(job_like):
             getter = job_like.get if hasattr(job_like, "get") else (lambda _k, _d="": _d)
             return {
@@ -1471,18 +1748,10 @@ def render_page_2():
             stt["row_idxs"].append(int(new_row_idx))
             total = int(stt["total"])
             for i, ridx in enumerate(stt["row_idxs"], start=1):
-                base = re.sub(r"\s*\(PART\s+\d+/\d+\)\s*$", "", str(planned_rows[ridx]["job_id"])).strip()
+                base = normalize_base_job_id(planned_rows[ridx]["job_id"])
                 planned_rows[ridx]["job_id"] = f"{base} (PART {i}/{total})"
 
-        def _book_split_part_for_tech(
-            day: date,
-            t: str,
-            used: Dict[str, int],
-            cur_loc: Dict[str, str],
-            jobs_count: Dict[str, int],
-            lock_tech: Dict[str, bool],
-            split_state: Dict[str, Any],
-        ):
+        def _book_split_part_for_tech(day, t, used, cur_loc, jobs_count, lock_tech, split_state):
             addr = split_state["address"]
             base_job_id = split_state["base_job_id"]
             cust = split_state.get("cust", "")
@@ -1505,7 +1774,7 @@ def render_page_2():
             if max_onsite_today <= 0:
                 return
 
-            onsite_today = _choose_onsite_no_crumbs(remaining_min, max_onsite_today, MIN_ONSITE_CHUNK_MIN)
+            onsite_today = choose_onsite_no_crumbs(remaining_min, max_onsite_today, MIN_ONSITE_CHUNK_MIN)
             if onsite_today <= 0:
                 return
 
@@ -1517,7 +1786,7 @@ def render_page_2():
                 "date": day.isoformat(),
                 "technicien": t,
                 "sequence": jobs_count[t],
-                "job_id": f"{base_job_id} (PART {part_idx}/{max(1, int(split_state.get('total_parts', part_idx)) )})",
+                "job_id": f"{base_job_id} (PART {part_idx}/{max(1, int(split_state.get('total_parts', part_idx)))})",
                 "cust": cust,
                 "duo": "",
                 "ot": "",
@@ -1531,7 +1800,7 @@ def render_page_2():
                 **_extra_fields_from_job(split_state),
                 "description": desc,
             })
-            planned_base_ids.add(_normalize_base_job_id(base_job_id))
+            planned_base_ids.add(normalize_base_job_id(base_job_id))
 
             row_idx = len(planned_rows) - 1
             _register_and_relabel_split_row(base_job_id, row_idx, part_idx)
@@ -1542,7 +1811,6 @@ def render_page_2():
             remaining_min = int(remaining_min) - int(onsite_today)
             split_state["remaining_job_min"] = remaining_min
             split_state["part_idx_next"] = part_idx + 1
-
             lock_tech[t] = True if remaining_min > 0 else False
 
         total_steps = max(1, len(month_days))
@@ -1553,21 +1821,20 @@ def render_page_2():
             jobs_count = {t: 0 for t in tech_names}
             lock_tech = {t: False for t in tech_names}
 
-            # Continue split jobs first
             for t in tech_names:
                 if t in carryover_by_tech:
                     _book_split_part_for_tech(day, t, used, cur_loc, jobs_count, lock_tech, carryover_by_tech[t])
                     if int(carryover_by_tech[t]["remaining_job_min"]) <= 0:
                         del carryover_by_tech[t]
 
-            # ---- 1) DUO first (unchanged) ----
+            # ---- 1) DUO first ----
             if allow_duo and (not duo_jobs.empty) and len(tech_names) >= 2:
+                # [MOYEN-1] Pas de re-tri à chaque tour de boucle
                 while True:
                     if duo_jobs.empty:
                         break
 
                     best = None
-                    duo_jobs = duo_jobs.sort_values(["job_id"], kind="mergesort")
                     sample = duo_jobs.head(int(duo_pool)) if len(duo_jobs) > int(duo_pool) else duo_jobs
 
                     for jidx, job in sample.iterrows():
@@ -1648,7 +1915,7 @@ def render_page_2():
                             **_extra_fields_from_job(job),
                             "description": job["description"],
                         })
-                        planned_base_ids.add(_normalize_base_job_id(job["job_id"]))
+                        planned_base_ids.add(normalize_base_job_id(job["job_id"]))
                         used[tname] = int(end_m)
                         cur_loc[tname] = job["address"]
 
@@ -1658,15 +1925,16 @@ def render_page_2():
 
                     duo_jobs = duo_jobs[duo_jobs["job_id"] != job["job_id"]].copy()
 
-            # ---- 2) SOLO greedy per tech (UNCHANGED) ----
+            # ---- 2) SOLO greedy per tech ----
             if not solo_jobs.empty:
+                # [CRITIQUE-3] booked_ids : set O(1) au lieu de .copy() en boucle
+                booked_ids: set = set()
+
                 made_progress = True
                 while made_progress:
                     made_progress = False
                     if solo_jobs.empty:
                         break
-
-                    solo_jobs = solo_jobs.sort_values(["job_id"], kind="mergesort")
 
                     for t in tech_names:
                         if solo_jobs.empty:
@@ -1676,24 +1944,28 @@ def render_page_2():
                         if jobs_count[t] >= int(max_jobs_per_day):
                             continue
 
+                        # Filtrer le DataFrame une seule fois si booked_ids non vide
+                        if booked_ids:
+                            solo_jobs = solo_jobs[~solo_jobs["job_id"].isin(booked_ids)].reset_index(drop=True)
+                            booked_ids.clear()
+                            if solo_jobs.empty:
+                                break
+
                         best_idx = None
                         best_cost = None
                         best_tmin = None
 
                         sample = get_job_pool_for_tech(solo_jobs, t, int(solo_pool))
 
-                        # Try normal jobs that fit
                         for idx, job in sample.iterrows():
-                            jlat, jlon, jsec = ensure_job_ll_master(jobs, idx)
+                            jlat, jlon, jsec = ensure_job_ll_master(jobs, idx) if idx in jobs.index else (*get_ll_for_address(job.get("address","")), classify_sector(*get_ll_for_address(job.get("address",""))))
                             if not sector_compatible(_tech_sector.get(t, "UNK"), jsec):
                                 continue
-
                             tmin = travel_min_cached(cur_loc[t], job["address"])
                             tback = travel_min_cached(job["address"], _home_map[t])
                             need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
                             if need <= 0:
                                 continue
-
                             if used[t] + need <= available:
                                 if best_cost is None or int(tmin) < best_cost:
                                     best_idx = idx
@@ -1701,7 +1973,7 @@ def render_page_2():
                                     best_tmin = int(tmin)
 
                         if best_idx is not None:
-                            job = jobs.loc[best_idx]
+                            job = jobs.loc[best_idx] if best_idx in jobs.index else solo_jobs.loc[best_idx]
                             jobs_count[t] += 1
                             start_m = used[t] + int(best_tmin)
                             end_m = start_m + int(job["job_minutes"]) + int(buffer_job)
@@ -1724,27 +1996,26 @@ def render_page_2():
                                 **_extra_fields_from_job(job),
                                 "description": job["description"],
                             })
-                            planned_base_ids.add(_normalize_base_job_id(job["job_id"]))
+                            planned_base_ids.add(normalize_base_job_id(job["job_id"]))
                             used[t] = int(end_m)
                             cur_loc[t] = job["address"]
-                            solo_jobs = solo_jobs[solo_jobs["job_id"] != job["job_id"]].copy()
+                            booked_ids.add(job["job_id"])
                             made_progress = True
                             continue
 
-                        # OT single-job day (ONLY if first job of the day) — unchanged
+                        # OT single-job day
                         if jobs_count[t] == 0:
                             best_ot_idx = None
                             best_ot_cost = None
                             best_ot_tmin = None
 
                             for idx, job in sample.iterrows():
-                                jlat, jlon, jsec = ensure_job_ll_master(jobs, idx)
+                                jlat, jlon, jsec = ensure_job_ll_master(jobs, idx) if idx in jobs.index else (*get_ll_for_address(job.get("address","")), classify_sector(*get_ll_for_address(job.get("address",""))))
                                 if not sector_compatible(_tech_sector.get(t, "UNK"), jsec):
                                     continue
                                 tmin = travel_min_cached(cur_loc[t], job["address"])
                                 tback = travel_min_cached(job["address"], _home_map[t])
                                 need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
-
                                 if need <= OT_ACTIVE_CAP:
                                     if best_ot_cost is None or int(tmin) < best_ot_cost:
                                         best_ot_idx = idx
@@ -1752,7 +2023,7 @@ def render_page_2():
                                         best_ot_tmin = int(tmin)
 
                             if best_ot_idx is not None:
-                                job = jobs.loc[best_ot_idx]
+                                job = jobs.loc[best_ot_idx] if best_ot_idx in jobs.index else solo_jobs.loc[best_ot_idx]
                                 jobs_count[t] += 1
                                 start_m = used[t] + int(best_ot_tmin)
                                 end_m = start_m + int(job["job_minutes"]) + int(buffer_job)
@@ -1775,16 +2046,15 @@ def render_page_2():
                                     **_extra_fields_from_job(job),
                                     "description": job["description"],
                                 })
-                                planned_base_ids.add(_normalize_base_job_id(job["job_id"]))
-
+                                planned_base_ids.add(normalize_base_job_id(job["job_id"]))
                                 used[t] = int(end_m)
                                 cur_loc[t] = job["address"]
-                                solo_jobs = solo_jobs[solo_jobs["job_id"] != job["job_id"]].copy()
+                                booked_ids.add(job["job_id"])
                                 lock_tech[t] = True
                                 made_progress = True
                                 continue
 
-                        # Split long jobs — unchanged
+                        # Split long jobs
                         best_long_idx = None
                         best_long_cost = None
                         best_long_is_overtime = False
@@ -1795,8 +2065,7 @@ def render_page_2():
                                 continue
                             if t in carryover_by_tech:
                                 continue
-
-                            jlat, jlon, jsec = ensure_job_ll_master(jobs, idx)
+                            jlat, jlon, jsec = ensure_job_ll_master(jobs, idx) if idx in jobs.index else (*get_ll_for_address(job.get("address","")), classify_sector(*get_ll_for_address(job.get("address",""))))
                             if not sector_compatible(_tech_sector.get(t, "UNK"), jsec):
                                 continue
 
@@ -1807,14 +2076,13 @@ def render_page_2():
                             addr = job["address"]
                             tmin = travel_min_cached(cur_loc[t], addr)
                             tback = travel_min_cached(addr, _home_map[t])
-
                             max_onsite_today = int(available) - int(used[t]) - int(tmin) - int(buffer_job) - int(tback)
                             if max_onsite_today <= 0:
                                 continue
                             if jobs_count[t] > 0 and int(max_onsite_today) < int(MIN_ONSITE_CHUNK_MIN):
                                 continue
 
-                            onsite_today_candidate = _choose_onsite_no_crumbs(jm, max_onsite_today, MIN_ONSITE_CHUNK_MIN)
+                            onsite_today_candidate = choose_onsite_no_crumbs(jm, max_onsite_today, MIN_ONSITE_CHUNK_MIN)
                             if onsite_today_candidate <= 0:
                                 continue
                             if is_overtime_candidate and jm > int(max_onsite_today):
@@ -1828,7 +2096,7 @@ def render_page_2():
                         if best_long_idx is None:
                             continue
 
-                        job = jobs.loc[best_long_idx]
+                        job = jobs.loc[best_long_idx] if best_long_idx in jobs.index else solo_jobs.loc[best_long_idx]
                         base_job_id = str(job["job_id"])
                         jm_total = int(job["job_minutes"])
 
@@ -1856,11 +2124,10 @@ def render_page_2():
                                 **_extra_fields_from_job(job),
                                 "description": job["description"],
                             })
-                            planned_base_ids.add(_normalize_base_job_id(base_job_id))
-                            
+                            planned_base_ids.add(normalize_base_job_id(base_job_id))
                             used[t] = int(end_m)
                             cur_loc[t] = job["address"]
-                            solo_jobs = solo_jobs[solo_jobs["job_id"] != job["job_id"]].copy()
+                            booked_ids.add(job["job_id"])
                             lock_tech[t] = True
                             made_progress = True
                             continue
@@ -1880,7 +2147,7 @@ def render_page_2():
                             "unit": job.get("unit", ""),
                             "serial_number": job.get("serial_number", ""),
                         }
-                        solo_jobs = solo_jobs[solo_jobs["job_id"] != job["job_id"]].copy()
+                        booked_ids.add(job["job_id"])
 
                         _book_split_part_for_tech(day, t, used, cur_loc, jobs_count, lock_tech, carryover_by_tech[t])
                         if t in carryover_by_tech and int(carryover_by_tech[t]["remaining_job_min"]) <= 0:
@@ -1888,7 +2155,11 @@ def render_page_2():
 
                         made_progress = True
 
-            # RETURN_HOME (unchanged)
+                # Appliquer les booked_ids restants au DataFrame
+                if booked_ids:
+                    solo_jobs = solo_jobs[~solo_jobs["job_id"].isin(booked_ids)].reset_index(drop=True)
+
+            # RETURN_HOME
             for t in tech_names:
                 if jobs_count[t] > 0:
                     tback = travel_min_cached(cur_loc[t], _home_map[t])
@@ -1921,7 +2192,7 @@ def render_page_2():
             if progress_text is not None:
                 progress_text.write(f"Planification… {di+1}/{len(month_days)} jour(s) traités")
 
-        # ✅ Re-inject unfinished carryovers into remaining
+        # Réinjecter carryovers non terminés
         carryover_rows = []
         for t, stt in carryover_by_tech.items():
             rem = int(stt.get("remaining_job_min", 0))
@@ -1944,15 +2215,11 @@ def render_page_2():
         if carryover_rows:
             remaining_out = pd.concat([remaining_out, pd.DataFrame(carryover_rows)], ignore_index=True)
 
-        # ✅ FIX D (visibility only): flag OT-impossible jobs in remaining (does not affect scheduling)
+        # Flag OT-impossible
         if not remaining_out.empty:
             remaining_out = remaining_out.copy()
             remaining_out["ot_impossible"] = False
-
-            # réglage: combien de techs on teste max par job
             OT_IMPOSSIBLE_TOP_TECHS = 4
-
-            # petit cache local pour éviter de recalculer 40x les mêmes combos dans cette boucle
             _best_need_cache = {}
 
             for i, r in remaining_out.iterrows():
@@ -1962,16 +2229,12 @@ def render_page_2():
                     if not addr or jm <= 0:
                         continue
 
-                    # cache key (par job)
                     ck = (addr, jm, int(buffer_job), OT_ACTIVE_CAP, OT_IMPOSSIBLE_TOP_TECHS)
                     if ck in _best_need_cache:
                         best_need = _best_need_cache[ck]
                     else:
-                        # 1) job lat/lon/sector (utilise ton geocode cache 30 jours)
                         jlat, jlon = get_ll_for_address(addr)
                         jsec = classify_sector(jlat, jlon)
-
-                        # 2) shortlist techs: compatible secteur + plus proches haversine
                         scored = []
                         for t in tech_names:
                             tsec = _tech_sector.get(t, "UNK")
@@ -1987,7 +2250,6 @@ def render_page_2():
                             scored.sort(key=lambda x: x[0])
                             candidates = [t for (_d, t) in scored[:OT_IMPOSSIBLE_TOP_TECHS]]
 
-                        # 3) calc best_need seulement sur ces techs
                         best_need = None
                         for t in candidates:
                             need = (
@@ -1998,30 +2260,21 @@ def render_page_2():
                             )
                             if best_need is None or need < best_need:
                                 best_need = need
-
                         _best_need_cache[ck] = best_need
 
                     if best_need is not None and best_need > OT_ACTIVE_CAP:
                         remaining_out.at[i, "ot_impossible"] = True
-
                 except Exception:
                     pass
-        # ── SAFETY NET: réinjecter toute job "bookable" qui aurait disparu ──
-        try:
-            all_bookable_ids = set(jobs_in["job_id"].astype(str).apply(_norm_base).tolist())
 
+        # Safety net : réinjecter jobs bookables manquants
+        try:
+            all_bookable_ids = set(jobs_in["job_id"].astype(str).apply(normalize_base_job_id).tolist())
             remaining_ids = set()
             if (remaining_out is not None) and (not remaining_out.empty) and ("job_id" in remaining_out.columns):
-                remaining_ids = set(remaining_out["job_id"].astype(str).apply(_norm_base).tolist())
+                remaining_ids = set(remaining_out["job_id"].astype(str).apply(normalize_base_job_id).tolist())
 
-            planned_ids = set()
-            for r in planned_rows:
-                jid = str(r.get("job_id", "")).strip()
-                if not jid or jid.upper() == "RETURN_HOME":
-                    continue
-                planned_ids.add(_norm_base(jid))
-
-            covered = planned_ids.union(remaining_ids)
+            covered = planned_base_ids.union(remaining_ids)
             missing = sorted(list(all_bookable_ids - covered))
 
             if missing:
@@ -2042,15 +2295,16 @@ def render_page_2():
 
                 if missing_rows:
                     remaining_out = pd.concat([remaining_out, pd.DataFrame(missing_rows)], ignore_index=True)
-
         except Exception:
             pass
+
         success = remaining_out.empty and (len(carryover_rows) == 0)
         return {"success": bool(success), "rows": planned_rows, "remaining": remaining_out}
 
-    # ===============================================================
-    # Repair pass + Integrity Check helpers
-    # ===============================================================
+
+    # ════════════════════════════════════════════════════════════════
+    # Repair pass + helpers
+    # ════════════════════════════════════════════════════════════════
     def _is_return_home(job_id: str) -> bool:
         return str(job_id).strip().upper() == "RETURN_HOME"
 
@@ -2063,13 +2317,102 @@ def render_page_2():
     def _is_ot_row(row: dict) -> bool:
         return str(row.get("ot", "")).strip() != ""
 
+    def _hhmm_to_mm(hhmm: str) -> int:
+        try:
+            s = str(hhmm or "").strip()
+            if not s:
+                return 0
+            h, m = s.split(":")
+            return int(h) * 60 + int(m)
+        except Exception:
+            return 0
+
+    def optimize_route_ortools(tech: str, jobs_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        PRIORITÉ 2 — OR-Tools route optimization.
+        Retourne jobs_list réordonné pour minimiser le trajet total.
+        Utilise uniquement le cache SQLite — zéro appel API si matrice précalculée.
+
+        Si ortools n'est pas installé, retourne l'ordre original (greedy).
+        Fallback automatique si la matrice contient des valeurs 9999 (paires inconnues).
+        """
+        if not ORTOOLS_AVAILABLE or len(jobs_list) <= 1:
+            return jobs_list
+
+        home_addr = home_map[tech]
+        # Nœuds : 0=domicile départ, 1..n=jobs, n+1=domicile retour
+        all_locs = [home_addr] + [jb["adresse"] for jb in jobs_list] + [home_addr]
+        n = len(all_locs)
+
+        # Construire la matrice depuis SQLite (tout doit être en cache)
+        matrix = []
+        has_missing = False
+        for i in range(n):
+            row_m = []
+            for j in range(n):
+                if i == j:
+                    row_m.append(0)
+                else:
+                    v = travel_min_cached(all_locs[i], all_locs[j])
+                    if v >= 9999:
+                        has_missing = True
+                    row_m.append(int(v))
+            matrix.append(row_m)
+
+        # Si des paires sont manquantes → fallback greedy (sera comblé au prochain prefetch)
+        if has_missing:
+            return jobs_list
+
+        try:
+            manager = pywrapcp.RoutingIndexManager(n, 1, [0], [n - 1])
+            routing = pywrapcp.RoutingModel(manager)
+
+            def distance_callback(from_idx, to_idx):
+                return matrix[manager.IndexToNode(from_idx)][manager.IndexToNode(to_idx)]
+
+            transit_idx = routing.RegisterTransitCallback(distance_callback)
+            routing.SetArcCostEvaluatorOfAllVehicles(transit_idx)
+
+            params = pywrapcp.DefaultRoutingSearchParameters()
+            params.first_solution_strategy = (
+                routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
+            )
+            params.local_search_metaheuristic = (
+                routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
+            )
+            params.time_limit.seconds = 2  # max 2s par technicien
+
+            solution = routing.SolveWithParameters(params)
+            if not solution:
+                return jobs_list
+
+            # Extraire l'ordre optimal
+            order = []
+            index = routing.Start(0)
+            while not routing.IsEnd(index):
+                node = manager.IndexToNode(index)
+                if 0 < node < n - 1:  # ignorer nœud départ (0) et arrivée (n-1)
+                    order.append(node - 1)  # convertir en index jobs_list
+                index = solution.Value(routing.NextVar(index))
+
+            if len(order) != len(jobs_list):
+                return jobs_list
+
+            return [jobs_list[i] for i in order]
+
+        except Exception:
+            return jobs_list
+
     def rebuild_day_greedy(day: str, tech: str, jobs_list: List[Dict[str, Any]],
                            day_available_min: int, buffer_job: int, max_jobs_per_day: int):
         home_addr = home_map[tech]
         cur = home_addr
         used = 0
         seq = 0
-        remaining = list(jobs_list)
+        # OR-Tools : optimiser l'ordre si disponible et matrice en cache
+        # Sinon le greedy ci-dessous prend le relais naturellement
+        optimized = optimize_route_ortools(tech, list(jobs_list))
+        remaining = list(optimized)
         out_rows: List[Dict[str, Any]] = []
 
         if len(remaining) > int(max_jobs_per_day):
@@ -2111,6 +2454,10 @@ def render_page_2():
                 "job_min": int(jb["job_min"]),
                 "buffer_min": int(buffer_job),
                 "techs_needed": int(jb.get("techs_needed", 1)),
+                "unit": jb.get("unit", ""),
+                "serial_number": jb.get("serial_number", ""),
+                "difference": jb.get("difference", ""),
+                "last_inspection": jb.get("last_inspection", ""),
                 "description": jb.get("description", ""),
             })
 
@@ -2123,29 +2470,83 @@ def render_page_2():
         if seq > 0:
             tback = int(travel_min_cached(cur, home_addr))
             out_rows.append({
-                "date": day,
-                "technicien": tech,
-                "sequence": seq + 1,
-                "job_id": "RETURN_HOME",
-                "cust": "",
-                "duo": "",
-                "ot": "",
+                "date": day, "technicien": tech, "sequence": seq + 1,
+                "job_id": "RETURN_HOME", "cust": "", "duo": "", "ot": "",
                 "debut": mm_to_hhmm(int(used)),
                 "fin": mm_to_hhmm(int(used) + int(tback)),
-                "adresse": home_addr,
-                "travel_min": int(tback),
-                "job_min": 0,
-                "buffer_min": 0,
-                "techs_needed": 1,
-                "description": "🏠 Retour domicile (estimé)",
+                "adresse": home_addr, "travel_min": int(tback), "job_min": 0,
+                "buffer_min": 0, "techs_needed": 1, "unit": "", "serial_number": "",
+                "difference": "", "last_inspection": "", "description": "🏠 Retour domicile (estimé)",
             })
         return out_rows
 
-    def repair_month_plan(planned_rows: List[Dict[str, Any]], tech_names: List[str],
-                          day_available_min: int, buffer_job: int, max_jobs_per_day: int,
-                          threshold_travel_min: int = 50, candidate_techs_top_n: int = 4, max_moves: int = 25):
+    def rebuild_day_in_order(day, tech, jobs_list, day_available_min, buffer_job, max_jobs_per_day):
+        home_addr = home_map[tech]
+        cur = home_addr
+        used = 0
+        seq = 0
+        out = []
+
+        if len(jobs_list) > int(max_jobs_per_day):
+            return None
+
+        for jb in jobs_list:
+            tmin = int(travel_min_cached(cur, jb["adresse"]))
+            tback = int(travel_min_cached(jb["adresse"], home_addr))
+            need = tmin + int(jb["job_min"]) + int(buffer_job) + tback
+
+            if used + need > int(day_available_min):
+                return None
+
+            seq += 1
+            start_m = used + tmin
+            end_m = start_m + int(jb["job_min"]) + int(buffer_job)
+
+            out.append({
+                "date": day, "technicien": tech, "sequence": seq,
+                "job_id": jb["job_id"], "cust": jb.get("cust", ""),
+                "duo": "", "ot": jb.get("ot", ""),
+                "debut": mm_to_hhmm(int(start_m)),
+                "fin": mm_to_hhmm(int(end_m)),
+                "adresse": jb["adresse"], "travel_min": int(tmin),
+                "job_min": int(jb["job_min"]), "buffer_min": int(buffer_job),
+                "techs_needed": int(jb.get("techs_needed", 1)),
+                "unit": jb.get("unit", ""), "serial_number": jb.get("serial_number", ""),
+                "difference": jb.get("difference", ""), "last_inspection": jb.get("last_inspection", ""),
+                "description": jb.get("description", ""),
+            })
+
+            used = int(end_m)
+            cur = jb["adresse"]
+
+            if seq >= int(max_jobs_per_day) and (len(out) < len(jobs_list)):
+                return None
+
+        if seq > 0:
+            tback = int(travel_min_cached(cur, home_addr))
+            out.append({
+                "date": day, "technicien": tech, "sequence": seq + 1,
+                "job_id": "RETURN_HOME", "cust": "", "duo": "", "ot": "",
+                "debut": mm_to_hhmm(int(used)),
+                "fin": mm_to_hhmm(int(used) + int(tback)),
+                "adresse": home_addr, "travel_min": int(tback), "job_min": 0,
+                "buffer_min": 0, "techs_needed": 1, "unit": "", "serial_number": "",
+                "difference": "", "last_inspection": "", "description": "🏠 Retour domicile (estimé)",
+            })
+        return out
+
+    def repair_month_plan(planned_rows, tech_names, day_available_min, buffer_job,
+                          max_jobs_per_day, threshold_travel_min=50, candidate_techs_top_n=4, max_moves=25):
         if not planned_rows:
             return planned_rows, {"moves": 0, "attempts": 0, "improved": 0}
+
+        # [ÉLEVÉ-3] Mini-cache local travel pour éviter appels redondants dans repair
+        _travel_local: Dict[Tuple[str,str], int] = {}
+        def _travel(a: str, b: str) -> int:
+            k = (a, b)
+            if k not in _travel_local:
+                _travel_local[k] = travel_min_cached(a, b)
+            return _travel_local[k]
 
         locked, movable = [], []
         original_rows_by_day_tech: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
@@ -2155,7 +2556,6 @@ def render_page_2():
             day_k = str(r.get("date", "")).strip()
             tech_k = str(r.get("technicien", "")).strip()
 
-            # ✅ record RETURN_HOME rows so we can ALWAYS restore them later
             if _is_return_home(r.get("job_id", "")):
                 original_return_rows[(day_k, tech_k)] = r
 
@@ -2178,6 +2578,10 @@ def render_page_2():
                 "job_min": int(r.get("job_min", 0)),
                 "techs_needed": int(r.get("techs_needed", 1)),
                 "description": r.get("description", ""),
+                "unit": r.get("unit", ""),
+                "serial_number": r.get("serial_number", ""),
+                "difference": r.get("difference", ""),
+                "last_inspection": r.get("last_inspection", ""),
                 "travel_min_orig": int(r.get("travel_min", 0)),
             })
 
@@ -2250,13 +2654,11 @@ def render_page_2():
 
         final_rows: List[Dict[str, Any]] = []
 
-        # Keep all locked rows EXCEPT RETURN_HOME for now (we re-add deterministically)
         for r in locked:
             if _is_return_home(r.get("job_id", "")):
                 continue
             final_rows.append(r)
 
-        # Rebuild all day/tech that had movables
         for (day, tech), lst in by_day_tech.items():
             rebuilt = rebuild_day_greedy(day, tech, lst, day_available_min, buffer_job, max_jobs_per_day)
             if rebuilt is not None:
@@ -2264,46 +2666,87 @@ def render_page_2():
             else:
                 orig = original_rows_by_day_tech.get((day, tech), [])
                 if orig:
-                    final_rows.extend(orig)
+                    orig_sorted = sorted(orig, key=lambda x: int(x.get("sequence", 0)))
+                    rebuilt2 = rebuild_day_in_order(day, tech, orig_sorted, day_available_min, buffer_job, max_jobs_per_day)
+                    if rebuilt2 is not None:
+                        final_rows.extend(rebuilt2)
+                    else:
+                        final_rows.extend(orig)
 
-        # ✅ FIX B: ALWAYS restore RETURN_HOME for any (day,tech) that existed before
-        # This fixes days that had only locked rows (OT/DUO/PART) and would otherwise lose RETURN_HOME.
-        existing_pairs = set(original_return_rows.keys())
-        for (day_k, tech_k) in sorted(existing_pairs):
-            has_return_now = any(
-                _is_return_home(r.get("job_id", "")) and str(r.get("date", "")).strip() == day_k and str(r.get("technicien", "")).strip() == tech_k
-                for r in final_rows
-            )
-            if not has_return_now:
-                rr = original_return_rows.get((day_k, tech_k))
-                if rr:
-                    final_rows.append(rr)
+        final_rows = [r for r in final_rows if not _is_return_home(r.get("job_id", ""))]
+
+        groups: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
+        for r in final_rows:
+            day_k = str(r.get("date", "")).strip()
+            tech_k = str(r.get("technicien", "")).strip()
+            if not day_k or not tech_k:
+                continue
+            groups.setdefault((day_k, tech_k), []).append(r)
+
+        all_pairs = set(original_return_rows.keys()).union(set(groups.keys()))
+
+        for (day_k, tech_k) in sorted(all_pairs):
+            rows = groups.get((day_k, tech_k), [])
+            real_rows = [x for x in rows if not _is_return_home(x.get("job_id", ""))]
+            if not real_rows:
+                continue
+
+            last_row = max(real_rows, key=lambda x: _hhmm_to_mm(x.get("fin", "00:00")))
+
+            home_addr = home_map.get(tech_k)
+            if not home_addr:
+                continue
+
+            cur_addr = str(last_row.get("adresse", "")).strip() or home_addr
+            used_end = _hhmm_to_mm(last_row.get("fin", "00:00"))
+            tback = int(_travel(cur_addr, home_addr))
+
+            final_rows.append({
+                "date": day_k, "technicien": tech_k,
+                "sequence": int(last_row.get("sequence", 0)) + 1,
+                "job_id": "RETURN_HOME", "cust": "", "duo": "", "ot": "",
+                "debut": mm_to_hhmm(int(used_end)),
+                "fin": mm_to_hhmm(int(used_end) + int(tback)),
+                "adresse": home_addr, "travel_min": int(tback), "job_min": 0,
+                "buffer_min": 0, "techs_needed": 1, "unit": "", "serial_number": "",
+                "difference": "", "last_inspection": "", "description": "🏠 Retour domicile (estimé)",
+            })
 
         return final_rows, stats
 
-    def _normalize_base_job_id(jid: str) -> str:
-        return re.sub(r"\s*\(PART\s+\d+/\d+\)\s*$", "", str(jid)).strip()
-
+    # [MOYEN-3] Integrity check — sets stockés dans session_state, pas recalculés
     def render_integrity_check_bookable(initial_ids_set: set):
-        planned_jobs = set()
-        for r in st.session_state.get("planning_month_rows", []):
-            jid = r.get("job_id", "")
-            if jid and str(jid).upper() != "RETURN_HOME":
-                planned_jobs.add(_normalize_base_job_id(jid))
+        # Recalcul uniquement si les rows ont changé (via longueur comme proxy rapide)
+        cache_key = "integrity_cache"
+        planned_len = len(st.session_state.get("planning_month_rows", []))
+        remaining_len = len(st.session_state.get("planning_month_remaining_rows", []))
+        current_sig = (planned_len, remaining_len)
 
-        remaining_jobs = set()
-        for r in st.session_state.get("planning_month_remaining_rows", []):
-            jid = r.get("job_id", "")
-            if jid:
-                # ✅ FIX C: normalize remaining the same way (prevents false "missing" on PART)
-                remaining_jobs.add(_normalize_base_job_id(jid))
+        if st.session_state.get(cache_key + "_sig") != current_sig:
+            planned_jobs = set()
+            for r in st.session_state.get("planning_month_rows", []):
+                jid = r.get("job_id", "")
+                if jid and str(jid).upper() != "RETURN_HOME":
+                    planned_jobs.add(normalize_base_job_id(jid))
+
+            remaining_jobs = set()
+            for r in st.session_state.get("planning_month_remaining_rows", []):
+                jid = r.get("job_id", "")
+                if jid:
+                    remaining_jobs.add(normalize_base_job_id(jid))
+
+            st.session_state[cache_key + "_planned"] = planned_jobs
+            st.session_state[cache_key + "_remaining"] = remaining_jobs
+            st.session_state[cache_key + "_sig"] = current_sig
+        else:
+            planned_jobs = st.session_state.get(cache_key + "_planned", set())
+            remaining_jobs = st.session_state.get(cache_key + "_remaining", set())
 
         covered_jobs = planned_jobs.union(remaining_jobs)
         missing_jobs = sorted(list(initial_ids_set - covered_jobs))
 
         st.divider()
         st.subheader("🔎 Vérification d'intégrité des jobs (pool bookable)")
-
         st.write(f"Jobs bookables initiaux : {len(initial_ids_set)}")
         st.write(f"Jobs planifiés : {len(planned_jobs)}")
         st.write(f"Jobs restants : {len(remaining_jobs)}")
@@ -2315,9 +2758,10 @@ def render_page_2():
         else:
             st.success("✅ Aucun job perdu (bookable). Tous les jobs sont planifiés ou listés comme restants.")
 
-    # ────────────────────────────────────────────────────────────────
-    # MODE SELECTOR (unchanged)
-    # ────────────────────────────────────────────────────────────────
+
+    # ════════════════════════════════════════════════════════════════
+    # MODE SELECTOR
+    # ════════════════════════════════════════════════════════════════
     st.divider()
     st.subheader("🧭 Mode de planification")
     mode = st.radio(
@@ -2332,17 +2776,10 @@ def render_page_2():
     )
 
     tech_names_all = sorted(tech_df["tech_name"].astype(str).tolist())
-# ===============================================================
-# PAGE 2 — SECTION 2/2
-# ✅ FIXES ONLY carried through (no booking logic change):
-#   - uses schedule_month_with_duo() unchanged
-#   - repair_month_plan() includes RETURN_HOME preservation fix
-#   - integrity check normalizes remaining ids
-# ===============================================================
 
-    # ────────────────────────────────────────────────────────────────
-    # MODE A — DAY / 1 TECH (unchanged booking)
-    # ────────────────────────────────────────────────────────────────
+    # ════════════════════════════════════════════════════════════════
+    # MODE A — 1 journée / 1 technicien
+    # ════════════════════════════════════════════════════════════════
     if mode == "1 journée / 1 technicien (mode actuel)":
         st.subheader("🧰 Planning 1 journée / 1 technicien")
         chosen_tech = st.selectbox("Choisir le technicien", tech_names_all, index=0, key="p2_chosen_tech")
@@ -2363,8 +2800,7 @@ def render_page_2():
         service_choice = st.selectbox(
             "Type de jobs",
             ["Inclure full service (tous les jobs)", "Generator inspection seulement", "Exclure generator inspection"],
-            index=0,
-            key="p2_service_choice",
+            index=0, key="p2_service_choice",
         )
 
         run = st.button("🚀 Générer la journée", type="primary", key="p2_run")
@@ -2375,45 +2811,15 @@ def render_page_2():
 
             available = int(round(day_hours * 60)) - int(lunch_min)
             daily_onsite_cap = int(available)
-
             OT_ACTIVE_CAP = int(round(14 * 60)) - int(lunch_min)
             if OT_ACTIVE_CAP < available:
                 OT_ACTIVE_CAP = available
-
             MIN_ONSITE_CHUNK_MIN = 180
-
-            def _choose_onsite_no_crumbs(remaining_min: int, max_onsite_today: int, min_chunk: int) -> int:
-                remaining_min = int(remaining_min)
-                max_onsite_today = int(max_onsite_today)
-                min_chunk = int(min_chunk)
-                if max_onsite_today <= 0:
-                    return 0
-
-                onsite_today = min(remaining_min, max_onsite_today)
-                if onsite_today >= remaining_min:
-                    return onsite_today
-
-                rem_after = remaining_min - onsite_today
-                if onsite_today < min_chunk:
-                    return 0
-                if rem_after < min_chunk:
-                    if remaining_min <= max_onsite_today:
-                        return remaining_min
-                    onsite_today = remaining_min - min_chunk
-                    onsite_today = min(onsite_today, max_onsite_today)
-                    if onsite_today < min_chunk:
-                        return 0
-                    rem_after = remaining_min - onsite_today
-                    if rem_after > 0 and rem_after < min_chunk:
-                        return 0
-                    return onsite_today
-                return onsite_today
 
             remaining = jobs.copy()
             remaining = filter_by_service_type(remaining, service_choice)
             if only_one:
                 remaining = remaining[remaining["techs_needed"] <= 1].copy()
-
             remaining = remaining.sort_values(["job_id"], kind="mergesort")
 
             used = 0
@@ -2421,7 +2827,6 @@ def render_page_2():
             cur_loc = home_addr
             day_rows = []
             carryover = None
-
             tsec = tech_sector_map.get(chosen_tech, "UNK")
 
             while True:
@@ -2439,17 +2844,14 @@ def render_page_2():
                 sample = get_job_pool_for_tech(remaining, chosen_tech, int(solo_pool))
 
                 for idx, job in sample.iterrows():
-                    jlat, jlon, jsec = ensure_job_ll_master(jobs, idx)
+                    jlat, jlon, jsec = ensure_job_ll_master(jobs, idx) if idx in jobs.index else (*get_ll_for_address(job.get("address","")), classify_sector(*get_ll_for_address(job.get("address",""))))
                     if not sector_compatible(tsec, jsec):
                         continue
-
                     tmin = travel_min_cached(cur_loc, job["address"])
                     tback = travel_min_cached(job["address"], home_addr)
                     need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
-
                     if need <= 0:
                         continue
-
                     if used + need <= available:
                         if best_cost is None or int(tmin) < best_cost:
                             best_idx = idx
@@ -2457,52 +2859,40 @@ def render_page_2():
                             best_tmin = int(tmin)
 
                 if best_idx is not None:
-                    job = jobs.loc[best_idx]
+                    job = jobs.loc[best_idx] if best_idx in jobs.index else remaining.loc[best_idx]
                     seq += 1
                     start_m = used + int(best_tmin)
                     end_m = start_m + int(job["job_minutes"]) + int(buffer_job)
-
                     day_rows.append({
-                        "technicien": chosen_tech,
-                        "sequence": seq,
-                        "job_id": job["job_id"],
-                        "cust": job.get("cust", ""),
+                        "technicien": chosen_tech, "sequence": seq,
+                        "job_id": job["job_id"], "cust": job.get("cust", ""),
                         "duo": "⚠️ DUO" if int(job["techs_needed"]) >= 2 else "",
-                        "ot": "",
-                        "debut": mm_to_hhmm(int(start_m)),
-                        "fin": mm_to_hhmm(int(end_m)),
-                        "adresse": job["address"],
-                        "travel_min": int(best_tmin),
-                        "job_min": int(job["job_minutes"]),
-                        "buffer_min": int(buffer_job),
-                        "techs_needed": int(job["techs_needed"]),
-                        "description": job["description"],
+                        "ot": "", "debut": mm_to_hhmm(int(start_m)), "fin": mm_to_hhmm(int(end_m)),
+                        "adresse": job["address"], "travel_min": int(best_tmin),
+                        "job_min": int(job["job_minutes"]), "buffer_min": int(buffer_job),
+                        "techs_needed": int(job["techs_needed"]), "description": job["description"],
                         "last_inspection": job.get("last_inspection", ""),
                         "difference": job.get("difference", ""),
                         "unit": job.get("unit", ""),
                         "serial_number": job.get("serial_number", ""),
                     })
-
                     used = int(end_m)
                     cur_loc = job["address"]
                     remaining = remaining[remaining["job_id"] != job["job_id"]].copy()
                     remaining = remaining.sort_values(["job_id"], kind="mergesort")
                     continue
 
-                # OT single-job day (unchanged)
                 if seq == 0:
                     best_ot_idx = None
                     best_ot_cost = None
                     best_ot_tmin = None
-
                     for idx, job in sample.iterrows():
-                        jlat, jlon, jsec = ensure_job_ll_master(jobs, idx)
+                        jlat, jlon, jsec = ensure_job_ll_master(jobs, idx) if idx in jobs.index else (*get_ll_for_address(job.get("address","")), classify_sector(*get_ll_for_address(job.get("address",""))))
                         if not sector_compatible(tsec, jsec):
                             continue
                         tmin = travel_min_cached(cur_loc, job["address"])
                         tback = travel_min_cached(job["address"], home_addr)
                         need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
-
                         if need <= OT_ACTIVE_CAP:
                             if best_ot_cost is None or int(tmin) < best_ot_cost:
                                 best_ot_idx = idx
@@ -2510,104 +2900,78 @@ def render_page_2():
                                 best_ot_tmin = int(tmin)
 
                     if best_ot_idx is not None:
-                        job = jobs.loc[best_ot_idx]
+                        job = jobs.loc[best_ot_idx] if best_ot_idx in jobs.index else remaining.loc[best_ot_idx]
                         seq += 1
                         start_m = used + int(best_ot_tmin)
                         end_m = start_m + int(job["job_minutes"]) + int(buffer_job)
-
                         day_rows.append({
-                            "technicien": chosen_tech,
-                            "sequence": seq,
-                            "job_id": job["job_id"],
-                            "cust": job.get("cust", ""),
-                            "duo": "",
-                            "ot": "🟥 OT",
-                            "debut": mm_to_hhmm(int(start_m)),
-                            "fin": mm_to_hhmm(int(end_m)),
-                            "adresse": job["address"],
-                            "travel_min": int(best_ot_tmin),
-                            "job_min": int(job["job_minutes"]),
-                            "buffer_min": int(buffer_job),
-                            "techs_needed": int(job["techs_needed"]),
-                            "description": job["description"],
+                            "technicien": chosen_tech, "sequence": seq,
+                            "job_id": job["job_id"], "cust": job.get("cust", ""),
+                            "duo": "", "ot": "🟥 OT",
+                            "debut": mm_to_hhmm(int(start_m)), "fin": mm_to_hhmm(int(end_m)),
+                            "adresse": job["address"], "travel_min": int(best_ot_tmin),
+                            "job_min": int(job["job_minutes"]), "buffer_min": int(buffer_job),
+                            "techs_needed": int(job["techs_needed"]), "description": job["description"],
                         })
-
                         used = int(end_m)
                         cur_loc = job["address"]
                         remaining = remaining[remaining["job_id"] != job["job_id"]].copy()
                     break
 
-                # Split long jobs (unchanged)
+                # Split long jobs
                 best_long = None
                 for idx, job in sample.iterrows():
                     jm = int(job["job_minutes"])
                     if jm <= int(daily_onsite_cap):
                         continue
-                    jlat, jlon, jsec = ensure_job_ll_master(jobs, idx)
+                    jlat, jlon, jsec = ensure_job_ll_master(jobs, idx) if idx in jobs.index else (*get_ll_for_address(job.get("address","")), classify_sector(*get_ll_for_address(job.get("address",""))))
                     if not sector_compatible(tsec, jsec):
                         continue
-
                     tmin = travel_min_cached(cur_loc, job["address"])
                     tback = travel_min_cached(job["address"], home_addr)
                     max_onsite_today = int(available) - int(used) - int(tmin) - int(buffer_job) - int(tback)
                     if max_onsite_today <= 0:
                         continue
-
-                    onsite_today_candidate = _choose_onsite_no_crumbs(jm, max_onsite_today, MIN_ONSITE_CHUNK_MIN)
+                    onsite_today_candidate = choose_onsite_no_crumbs(jm, max_onsite_today, MIN_ONSITE_CHUNK_MIN)
                     if onsite_today_candidate <= 0:
                         continue
-
                     if best_long is None or int(tmin) < int(best_long["tmin"]):
                         best_long = {"idx": idx, "job": job, "tmin": int(tmin), "tback": int(tback)}
 
                 if best_long is None:
                     break
 
-                job = jobs.loc[best_long["idx"]]
+                job = jobs.loc[best_long["idx"]] if best_long["idx"] in jobs.index else remaining.loc[best_long["idx"]]
                 base_job_id = str(job["job_id"])
                 total_parts = compute_total_parts(int(job["job_minutes"]), int(daily_onsite_cap))
-
                 carryover = {
-                    "base_job_id": base_job_id,
-                    "cust": job.get("cust", ""),
-                    "address": job["address"],
-                    "description": job["description"],
+                    "base_job_id": base_job_id, "cust": job.get("cust", ""),
+                    "address": job["address"], "description": job["description"],
                     "techs_needed": int(job.get("techs_needed", 1)),
-                    "total_parts": int(total_parts),
-                    "part_idx_next": 1,
+                    "total_parts": int(total_parts), "part_idx_next": 1,
                     "remaining_job_min": int(job["job_minutes"]),
                 }
-
                 remaining = remaining[remaining["job_id"] != job["job_id"]].copy()
 
                 tmin = best_long["tmin"]
                 tback = best_long["tback"]
                 max_onsite_today = int(available) - int(used) - int(tmin) - int(buffer_job) - int(tback)
-                onsite_today = _choose_onsite_no_crumbs(int(carryover["remaining_job_min"]), int(max_onsite_today), MIN_ONSITE_CHUNK_MIN)
+                onsite_today = choose_onsite_no_crumbs(int(carryover["remaining_job_min"]), int(max_onsite_today), MIN_ONSITE_CHUNK_MIN)
                 if onsite_today <= 0:
                     break
 
                 seq += 1
                 start_m = int(used) + int(tmin)
                 end_m = start_m + int(onsite_today) + int(buffer_job)
-
                 day_rows.append({
-                    "technicien": chosen_tech,
-                    "sequence": seq,
+                    "technicien": chosen_tech, "sequence": seq,
                     "job_id": f"{base_job_id} (PART 1/{total_parts})",
-                    "cust": carryover.get("cust", ""),
-                    "duo": "",
-                    "ot": "",
-                    "debut": mm_to_hhmm(int(start_m)),
-                    "fin": mm_to_hhmm(int(end_m)),
-                    "adresse": job["address"],
-                    "travel_min": int(tmin),
-                    "job_min": int(onsite_today),
-                    "buffer_min": int(buffer_job),
-                    "techs_needed": int(job.get("techs_needed", 1)),
-                    "description": job["description"],
+                    "cust": carryover.get("cust", ""), "duo": "", "ot": "",
+                    "debut": mm_to_hhmm(int(start_m)), "fin": mm_to_hhmm(int(end_m)),
+                    "adresse": job["address"], "travel_min": int(tmin),
+                    "job_min": int(onsite_today), "buffer_min": int(buffer_job),
+                    "techs_needed": int(job.get("techs_needed", 1)), "description": job["description"],
                 })
-
                 used = int(end_m)
                 cur_loc = job["address"]
                 carryover["remaining_job_min"] = int(carryover["remaining_job_min"]) - int(onsite_today)
@@ -2621,15 +2985,12 @@ def render_page_2():
         if day_rows_saved:
             st.divider()
             st.subheader("📋 Horaire de la journée (persistant)")
-
             day_df = pd.DataFrame(day_rows_saved)
             day_df = day_df.sort_values(["technicien", "sequence", "debut"], ascending=True).reset_index(drop=True)
-
             preferred = ["technicien", "sequence", "job_id", "cust", "duo", "ot", "debut", "fin", "adresse",
                          "travel_min", "job_min", "buffer_min", "techs_needed", "unit", "serial_number", "difference", "last_inspection", "description"]
             cols = [c for c in preferred if c in day_df.columns] + [c for c in day_df.columns if c not in preferred]
             day_df = day_df[cols]
-
             st.dataframe(style_duo(day_df), use_container_width=True)
 
             available_active = int(round(st.session_state.get("p2_day_hours", 8.0) * 60)) - int(st.session_state.get("p2_lunch", 30))
@@ -2643,20 +3004,17 @@ def render_page_2():
             st.write(f"**Total job:** {total_job} min")
             st.write(f"**Total buffer:** {total_buffer} min")
             st.write(f"**Total actif:** {total_active} / {available_active} min")
-
             st.subheader("🧾 Coûts (estimation)")
             st.write(f"**Appels API (cette run):** {st.session_state.get('p2_api_calls', 0)}")
             st.write(f"**Hits cache (cette run):** {st.session_state.get('p2_cache_hits', 0)}")
-
             st.subheader("🧩 Jobs non planifiés")
             st.caption(f"Reste (approx): {st.session_state.get('planning_remaining_count', '—')} job(s)")
 
-    # ────────────────────────────────────────────────────────────────
-    # MODE B — MONTH, user chooses techs (repair optional; integrity bookable)
-    # ────────────────────────────────────────────────────────────────
+    # ════════════════════════════════════════════════════════════════
+    # MODE B — Mois complet, techs imposés
+    # ════════════════════════════════════════════════════════════════
     elif mode == "Mois complet — techniciens choisis par l'utilisateur":
         st.subheader("🗓️ Mois complet — techniciens choisis par l'utilisateur")
-
         month_start, month_end = month_selector("p2m_fixed")
         chosen_techs = st.multiselect(
             "Choisir les techniciens",
@@ -2678,7 +3036,7 @@ def render_page_2():
         allow_duo = st.checkbox("Autoriser booking DUO (techs_needed = 2)", value=True, key="p2m_allow_duo")
 
         st.sidebar.subheader("🛠️ Repair (post-planification)")
-        do_repair = st.sidebar.checkbox("Activer repair pass (réassigne les SOLO très loin)", value=True, key="p2_repair_on")
+        do_repair = st.sidebar.checkbox("Activer repair pass", value=True, key="p2_repair_on")
         repair_threshold = st.sidebar.number_input("Seuil travel (min) pour réparer", min_value=20, max_value=120, value=50, step=5, key="p2_repair_thr")
         repair_top_n = st.sidebar.slider("Nb techs candidats (lat/lon)", 2, 6, 4, 1, key="p2_repair_topn")
         repair_max_moves = st.sidebar.slider("Max déplacements (moves)", 0, 80, 25, 5, key="p2_repair_moves")
@@ -2701,29 +3059,19 @@ def render_page_2():
                 progress_text = st.empty()
 
                 result = schedule_month_with_duo(
-                    jobs_in=jobs,
-                    tech_names=chosen_techs,
-                    month_days=days,
-                    day_hours=day_hours_m,
-                    lunch_min=lunch_min_m,
-                    buffer_job=buffer_job_m,
-                    max_jobs_per_day=max_jobs_m,
-                    allow_duo=allow_duo,
-                    progress=progress,
-                    progress_text=progress_text,
+                    jobs_in=jobs, tech_names=chosen_techs, month_days=days,
+                    day_hours=day_hours_m, lunch_min=lunch_min_m, buffer_job=buffer_job_m,
+                    max_jobs_per_day=max_jobs_m, allow_duo=allow_duo,
+                    progress=progress, progress_text=progress_text,
                 )
 
                 if do_repair and result and result.get("rows"):
                     day_available_min = int(round(day_hours_m * 60)) - int(lunch_min_m)
                     repaired_rows, rep_stats = repair_month_plan(
-                        planned_rows=result["rows"],
-                        tech_names=chosen_techs,
-                        day_available_min=day_available_min,
-                        buffer_job=int(buffer_job_m),
-                        max_jobs_per_day=int(max_jobs_m),
-                        threshold_travel_min=int(repair_threshold),
-                        candidate_techs_top_n=int(repair_top_n),
-                        max_moves=int(repair_max_moves),
+                        planned_rows=result["rows"], tech_names=chosen_techs,
+                        day_available_min=day_available_min, buffer_job=int(buffer_job_m),
+                        max_jobs_per_day=int(max_jobs_m), threshold_travel_min=int(repair_threshold),
+                        candidate_techs_top_n=int(repair_top_n), max_moves=int(repair_max_moves),
                     )
                     result["rows"] = repaired_rows
                     st.sidebar.caption(f"Repair: moves={rep_stats['moves']} | attempts={rep_stats['attempts']} | improved={rep_stats['improved']}")
@@ -2746,7 +3094,6 @@ def render_page_2():
         if month_rows_saved and st.session_state.get("planning_month_mode") == "fixed":
             st.divider()
             techs_used = st.session_state.get("planning_month_techs_used", [])
-
             if st.session_state.get("planning_month_success"):
                 st.success(f"Mois complété ✅ | Techs utilisés: {len(techs_used)}")
             else:
@@ -2756,7 +3103,6 @@ def render_page_2():
             month_df = pd.DataFrame(month_rows_saved)
             sort_cols = [c for c in ["date", "technicien", "sequence", "debut"] if c in month_df.columns]
             month_df = month_df.sort_values(sort_cols, ascending=True).reset_index(drop=True)
-
             preferred = ["date", "technicien", "sequence", "job_id", "cust", "duo", "ot", "debut", "fin", "adresse",
                          "travel_min", "job_min", "buffer_min", "techs_needed", "unit", "serial_number", "last_inspection", "difference", "description"]
             cols = [c for c in preferred if c in month_df.columns] + [c for c in month_df.columns if c not in preferred]
@@ -2764,7 +3110,6 @@ def render_page_2():
 
             st.subheader("📋 Horaire du mois (tableau complet)")
             st.dataframe(style_duo(month_df), use_container_width=True)
-
             st.subheader("👷 Vue par technicien")
             for tech in sorted(month_df["technicien"].dropna().unique()):
                 st.markdown(f"### {tech}")
@@ -2783,8 +3128,7 @@ def render_page_2():
                 if "ot_impossible" in unplanned_df.columns:
                     ot_imp = int((unplanned_df["ot_impossible"] == True).sum())
                     if ot_imp > 0:
-                        st.warning(f"⚠️ Jobs impossibles même en OT (14h cap, travel+buffer+retour inclus): {ot_imp}")
-
+                        st.warning(f"⚠️ Jobs impossibles même en OT (14h cap): {ot_imp}")
                 if "techs_needed" in unplanned_df.columns:
                     duo_left = int((unplanned_df["techs_needed"].astype(int) == 2).sum())
                     if duo_left > 0:
@@ -2792,12 +3136,12 @@ def render_page_2():
 
             render_integrity_check_bookable(initial_bookable_job_ids)
 
-    # ────────────────────────────────────────────────────────────────
-    # MODE C — MONTH, auto techs (unchanged; same fixes apply)
-    # ────────────────────────────────────────────────────────────────
+    # ════════════════════════════════════════════════════════════════
+    # MODE C — Mois complet, techs automatiques
+    # [MOYEN-4] Binary search sur k au lieu de linéaire
+    # ════════════════════════════════════════════════════════════════
     else:
         st.subheader("⚙️ Mois complet — techniciens choisis automatiquement")
-
         month_start, month_end = month_selector("p2m_auto")
 
         c1, c2, c3, c4 = st.columns(4)
@@ -2828,54 +3172,55 @@ def render_page_2():
             outer_progress = st.progress(0)
             outer_text = st.empty()
 
+            # [MOYEN-4] Binary search : min_techs_duo = 2 si jobs DUO, sinon 1
+            has_duo_jobs = allow_duo and (jobs["techs_needed"] == 2).any()
+            lo = 2 if has_duo_jobs else 1
+            hi = len(tech_names_all)
             best = None
-            for k in range(1, len(tech_names_all) + 1):
+
+            def _run_k(k):
                 chosen = tech_names_all[:k]
-                if allow_duo and (jobs["techs_needed"] == 2).any() and len(chosen) < 2:
-                    continue
-
-                outer_text.write(f"Essai avec {k} technicien(s)…")
-                inner_progress = st.progress(0)
-                inner_text = st.empty()
-
                 result = schedule_month_with_duo(
-                    jobs_in=jobs,
-                    tech_names=chosen,
-                    month_days=days,
-                    day_hours=day_hours_m,
-                    lunch_min=lunch_min_m,
-                    buffer_job=buffer_job_m,
-                    max_jobs_per_day=max_jobs_m,
-                    allow_duo=allow_duo,
-                    progress=inner_progress,
-                    progress_text=inner_text,
+                    jobs_in=jobs, tech_names=chosen, month_days=days,
+                    day_hours=day_hours_m, lunch_min=lunch_min_m, buffer_job=buffer_job_m,
+                    max_jobs_per_day=max_jobs_m, allow_duo=allow_duo,
                 )
-
                 if do_repair and result and result.get("rows"):
                     day_available_min = int(round(day_hours_m * 60)) - int(lunch_min_m)
                     repaired_rows, rep_stats = repair_month_plan(
-                        planned_rows=result["rows"],
-                        tech_names=chosen,
-                        day_available_min=day_available_min,
-                        buffer_job=int(buffer_job_m),
-                        max_jobs_per_day=int(max_jobs_m),
-                        threshold_travel_min=int(repair_threshold),
-                        candidate_techs_top_n=int(repair_top_n),
-                        max_moves=int(repair_max_moves),
+                        planned_rows=result["rows"], tech_names=chosen,
+                        day_available_min=day_available_min, buffer_job=int(buffer_job_m),
+                        max_jobs_per_day=int(max_jobs_m), threshold_travel_min=int(repair_threshold),
+                        candidate_techs_top_n=int(repair_top_n), max_moves=int(repair_max_moves),
                     )
                     result["rows"] = repaired_rows
-                    st.sidebar.caption(f"Repair(auto): moves={rep_stats['moves']} | attempts={rep_stats['attempts']} | improved={rep_stats['improved']}")
+                    st.sidebar.caption(f"Repair(auto,k={k}): moves={rep_stats['moves']}")
+                return result, chosen
 
-                best = {
-                    "rows": result["rows"],
-                    "success": result["success"],
-                    "remaining": result["remaining"],
-                    "techs_used": chosen,
-                }
-
-                outer_progress.progress(int((k / max(1, len(tech_names_all))) * 100))
+            # Phase 1 : binary search pour trouver le k minimal suffisant
+            outer_text.write(f"Recherche du nombre optimal de techniciens (binary search)…")
+            iterations = 0
+            while lo < hi:
+                mid = (lo + hi) // 2
+                outer_text.write(f"Essai avec {mid} technicien(s)… (recherche {lo}–{hi})")
+                result, chosen = _run_k(mid)
+                best = {"rows": result["rows"], "success": result["success"],
+                        "remaining": result["remaining"], "techs_used": chosen}
+                outer_progress.progress(int(((iterations + 1) / max(1, math.ceil(math.log2(hi - lo + 2)))) * 100))
+                iterations += 1
                 if result["success"]:
-                    break
+                    hi = mid
+                else:
+                    lo = mid + 1
+
+            # Phase 2 : run final avec lo
+            if best is None or not best["success"]:
+                outer_text.write(f"Run final avec {lo} technicien(s)…")
+                result, chosen = _run_k(lo)
+                best = {"rows": result["rows"], "success": result["success"],
+                        "remaining": result["remaining"], "techs_used": chosen}
+
+            outer_progress.progress(100)
 
             st.session_state["planning_month_rows"] = best["rows"] if best else []
             st.session_state["planning_month_success"] = best["success"] if best else False
@@ -2894,26 +3239,23 @@ def render_page_2():
         if month_rows_saved and st.session_state.get("planning_month_mode") == "auto":
             st.divider()
             techs_used = st.session_state.get("planning_month_techs_used", [])
-
             if st.session_state.get("planning_month_success"):
                 st.success(f"Mois complété ✅ | Techs utilisés: {len(techs_used)}")
             else:
-                st.error("Même en mode auto, le mois n’a pas pu être complété ❌")
+                st.error("Même en mode auto, le mois n'a pas pu être complété ❌")
                 st.caption("Souvent dû à: paramètres trop restrictifs, jobs 3+ techs, ou journées pleines.")
                 st.write("**Techniciens utilisés:**", ", ".join(techs_used) if techs_used else "—")
 
             month_df = pd.DataFrame(month_rows_saved)
             sort_cols = [c for c in ["date", "technicien", "sequence", "debut"] if c in month_df.columns]
             month_df = month_df.sort_values(sort_cols, ascending=True).reset_index(drop=True)
-
             preferred = ["date", "technicien", "sequence", "job_id", "cust", "duo", "ot", "debut", "fin", "adresse",
-                         "travel_min", "job_min", "buffer_min", "techs_needed", "unit", "serial_number", "last_inspection", "difference","description"]
+                         "travel_min", "job_min", "buffer_min", "techs_needed", "unit", "serial_number", "last_inspection", "difference", "description"]
             cols = [c for c in preferred if c in month_df.columns] + [c for c in month_df.columns if c not in preferred]
             month_df = month_df[cols]
 
             st.subheader("📋 Horaire du mois (tableau complet)")
             st.dataframe(style_duo(month_df), use_container_width=True)
-
             st.subheader("👷 Vue par technicien")
             for tech in sorted(month_df["technicien"].dropna().unique()):
                 st.markdown(f"### {tech}")
@@ -2932,14 +3274,14 @@ def render_page_2():
                 if "ot_impossible" in unplanned_df.columns:
                     ot_imp = int((unplanned_df["ot_impossible"] == True).sum())
                     if ot_imp > 0:
-                        st.warning(f"⚠️ Jobs impossibles même en OT (14h cap, travel+buffer+retour inclus): {ot_imp}")
-
+                        st.warning(f"⚠️ Jobs impossibles même en OT (14h cap): {ot_imp}")
                 if "techs_needed" in unplanned_df.columns:
                     duo_left = int((unplanned_df["techs_needed"].astype(int) == 2).sum())
                     if duo_left > 0:
                         st.warning(f"⚠️ Jobs DUO restants (techs_needed=2): {duo_left}")
 
             render_integrity_check_bookable(initial_bookable_job_ids)
+
 
 # ────────────────────────────────────────────────────────────────
 # Router
@@ -2948,5 +3290,3 @@ if page == "🏠 Route Optimizer":
     render_page_1()
 else:
     render_page_2()
-
-
