@@ -12,9 +12,14 @@
 
 import os
 import re
+import math
+import calendar 
+import sqlite3
+import time 
+import hashlib
 from io import BytesIO
 from datetime import datetime, date, timedelta, timezone
-from typing import List, Tuple, Optional
+from typing import List, Optional, Tuple, Dict, Any
 
 import streamlit as st
 import googlemaps
@@ -24,6 +29,9 @@ from streamlit_folium import st_folium
 
 import pandas as pd
 import requests
+
+from zoneinfo import ZoneInfo
+TZ_LOCAL = ZoneInfo("America/Montreal")
 
 # ────────────────────────────────────────────────────────────────
 # Optional myGeotab import (app still works if it's missing or secrets not set)
@@ -176,7 +184,7 @@ def _geocode_cached(q: str) -> Optional[Tuple[float, float, str]]:
         pass
     return None
 
-def geocode_ll(gmaps_client: googlemaps.Client, text: str) -> Optional[Tuple[float, float, str]]:
+def geocode_ll(text: str) -> Optional[Tuple[float, float, str]]:
     """
     Same signature as before, but now cached.
     """
@@ -198,11 +206,12 @@ def _reverse_geocode_cached(lat: float, lon: float) -> str:
         pass
     return f"{lat:.5f},{lon:.5f}"
 
-def reverse_geocode(gmaps_client: googlemaps.Client, lat: float, lon: float) -> str:
-    """
-    Same signature as before, but now cached.
-    """
-    return _reverse_geocode_cached(float(lat), float(lon))
+def reverse_geocode(lat: float, lon: float) -> str:
+    lat = round(float(lat), 5)
+    lon = round(float(lon), 5)
+    if lat == -0.0: lat = 0.0
+    if lon == -0.0: lon = 0.0
+    return _reverse_geocode_cached(lat, lon)
 
 # ────────────────────────────────────────────────────────────────
 # Shared data: TECH_HOME / ENTREPOTS
@@ -213,7 +222,7 @@ TECH_HOME = {
     "Ali Reza-Sabour": "226 rue Felx, Saint-Clet, QC J0P 1S0",
     "David Robitaille": "1271 route des lac, saint-marcelline de kildare, QC J0K 2Y0",
     "Patrick Robitaille": "3365 ave laurier est, Montréal, QC H1X 1V3",
-    "Benoit Charrette": "34 rue de la Digue, Saint-Jérome, QC, J7Y 5J1",
+    "Benoit Charrette-Gosselin": "34 rue de la Digue, Saint-Jérome, QC, J7Y 5J1",
     "Benoit Larame": "12 rue de Beaudry, Mercier, J6R 2N7",
     "Christian Dubrueil": "31 rue des Roitelets, Delson, J5B 1T6",
     "Donald Lagace (IN SHOP)": "Montée Saint-Régis, Sainte-Catherine, QC, Canada",
@@ -292,19 +301,12 @@ def render_page_1():
     st.markdown("<hr style='margin:30px 0; border:1px solid #444;'>", unsafe_allow_html=True)
 
     if leave_now:
-        departure_dt = datetime.now(timezone.utc)
+        departure_dt = datetime.now(TZ_LOCAL)
     else:
-        naive = datetime.combine(planned_date, planned_time)
-        departure_dt = naive.replace(tzinfo=timezone.utc)
+        departure_dt = datetime.combine(planned_date, planned_time, tzinfo=TZ_LOCAL)
 
     # Technician capacities
-    TECHNICIANS = [
-        "Louis Lauzon","Patrick Bellefleur","Martin Bourbonniere","Francois Racine",
-        "Alain Duguay","Benoit Charrette-gosselin","Donald Lagace","Ali Reza-sabour",
-        "Kevin Duranceau","Maxime Roy","Christian Dubreuil","Pier-luc Cote","Fredy Diaz",
-        "Alexandre Pelletier guay","Sergio Mendoza caron","Benoit Laramee","Georges Yamna nghuedieu",
-        "Sebastien Pepin-millette","Elie Rajotte-lemay","Michael Sulte",
-    ]
+    TECHNICIANS = sorted(TECH_HOME.keys())
 
     EXCEL_URL = "https://cummins365.sharepoint.com/:x:/r/sites/GRP_CC40846-AdministrationFSPG/Shared%20Documents/Administration%20FSPG/Info%20des%20techs%20pour%20booking/CapaciteTechs_CandiacEtOttawa.xlsx?d=wa4a6497bebb642849d640c57e4db82de&csf=1&web=1&e=8ltLaR"
     GITHUB_RAW_URL = "https://raw.githubusercontent.com/AR76F/route-optimizer/main/CapaciteTechs_CandiacEtOttawa.xlsx"
@@ -318,7 +320,8 @@ def render_page_1():
     st.caption("Choisis le type de service. On affiche les techniciens qui ont ce training **complété**.")
 
     if st.button("🔄 Recharger les données des trainings (GitHub)", key="refresh_trainings"):
-        st.cache_data.clear()
+        get_training_options.clear()
+        get_not_completed_by_col.clear()
 
     def _fetch_excel_df_from_github(raw_url: str, sheet: str, header=None) -> pd.DataFrame:
         r = requests.get(raw_url, timeout=30)
@@ -566,7 +569,7 @@ def render_page_1():
                         start_choice = st.selectbox("Utiliser comme point de départ :", ["(aucun)"] + choice_labels, index=0, key="geo_start_choice")
                         if start_choice != "(aucun)":
                             chosen = valid[choice_labels.index(start_choice)]
-                            picked_addr = reverse_geocode(gmaps_client, chosen["lat"], chosen["lon"])
+                            picked_addr = reverse_geocode(chosen["lat"], chosen["lon"])
                             st.session_state.route_start = picked_addr
                             st.success(f"Départ défini depuis **{start_choice}** → {picked_addr}")
                     else:
@@ -597,14 +600,14 @@ def render_page_1():
             try:
                 tech_points = []
                 for name, addr in TECH_HOME.items():
-                    g = geocode_ll(gmaps_client, addr)
+                    g = geocode_ll(addr)
                     if g:
                         lat, lon, formatted = g
                         tech_points.append({"name": name, "address": formatted, "lat": lat, "lon": lon})
 
                 ent_points = []
                 for ent_name, addr in ENTREPOTS.items():
-                    g = geocode_ll(gmaps_client, addr)
+                    g = geocode_ll(addr)
                     if g:
                         lat, lon, formatted = g
                         ent_points.append({"name": ent_name, "address": formatted, "lat": lat, "lon": lon})
@@ -670,11 +673,11 @@ def render_page_1():
             other_stops_queries = [normalize_ca_postal(s.strip()) for s in other_stops_input if s.strip()]
 
             failures = []
-            start_g = geocode_ll(gmaps_client, start_text)
+            start_g = geocode_ll(start_text)
             if not start_g:
                 failures.append(f"START: `{start_text}`")
 
-            storage_g = geocode_ll(gmaps_client, storage_query) if storage_query else None
+            storage_g = geocode_ll(storage_query) if storage_query else None
             if storage_query and not storage_g:
                 failures.append(f"STORAGE: `{storage_text}`")
 
@@ -686,7 +689,7 @@ def render_page_1():
 
             wp_geocoded: List[Tuple[str, str, Tuple[float, float]]] = []
             for label, q in wp_raw:
-                g = geocode_ll(gmaps_client, q)
+                g = geocode_ll(q)
                 if not g:
                     failures.append(f"{label}: `{q}`")
                 else:
@@ -770,7 +773,7 @@ def render_page_1():
                 dist_m = int(leg.get("distance", {}).get("value", 0))
                 dist_km = dist_m / 1000.0
                 current_dt = current_dt + timedelta(seconds=dur_sec)
-                arr_str = current_dt.astimezone().strftime("%H:%M")
+                arr_str = current_dt.strftime("%H:%M")
                 stop_addr = visit_texts[i] if i < len(visit_texts) else ""
                 per_leg.append({"idx": i, "to": stop_addr, "dist_km": dist_km, "mins": leg_mins, "arrive": arr_str})
 
@@ -845,7 +848,7 @@ def render_page_1():
                 end_addr = visit_texts[-1]
                 end_ll = addr2ll.get(end_addr)
                 if not end_ll:
-                    g = geocode_ll(gmaps_client, end_addr)
+                    g = geocode_ll(end_addr)
                     if g:
                         end_ll = (g[0], g[1])
 
@@ -862,38 +865,7 @@ def render_page_1():
 
         st.success(f"**Total distance:** {km:.1f} km • **Total time:** {mins:.0f} mins (live traffic)")
 
-import os
-import re
-import math
-import calendar
-from io import BytesIO
-from datetime import datetime, date, timedelta
-from typing import List, Optional, Tuple
-
-import streamlit as st
-import pandas as pd
-
-# ===============================================================
-# PAGE 2 (Planning) — SECTION 1/2
-# ✅ FIXES ONLY (NO LOGIC CHANGE):
-#   A) Do NOT eliminate split/duplicate lines too aggressively:
-#      - replace drop_duplicates(subset=["job_id"]) with a safer dedup key
-#      - keeps distinct rows that share same job_id but differ by address/minutes/techs_needed/description
-#   B) Repair pass: preserve RETURN_HOME rows even on days that have only locked rows (OT / DUO / PART)
-#   C) Integrity check: normalize remaining job_ids the same way as planned (PART normalization)
-#   D) Keep OT jobs in remaining and make them visible (optional tag ot_impossible; does NOT affect booking)
-# ===============================================================
-
 def render_page_2():
-    import calendar
-    import math
-    import sqlite3
-    import time
-    import hashlib
-    from datetime import date, timedelta
-    from io import BytesIO
-    from typing import List, Optional, Tuple, Dict, Any
-
     st.title("📅 Planning (Page 2)")
 
     # Load tech_home from page 1 (or build fallback)
@@ -960,6 +932,21 @@ def render_page_2():
     COL_SRT   = pick_col(jobs_raw, ["SRT HRS", "SRT HOURS", "HRS"])
     COL_TECHN = pick_col(jobs_raw, ["# OF TECHS NEEDED", "TECHS NEEDED", "Nbr Techs"])
 
+    # NEW: extra columns to carry to results/exports
+    COL_LAST_INSP = pick_col(jobs_raw, [
+        "LAST INSPECTION", "Last Inspection", "LastInspection", "LAST_INSPECTION",
+        "DERNIÈRE INSPECTION", "Derniere inspection", "Dernière inspection"
+    ])
+    COL_DIFF = pick_col(jobs_raw, [
+        "DIFFERENCE", "Difference", "Diff", "ÉCART", "Ecart"
+    ])
+    COL_UNIT = pick_col(jobs_raw, [
+        "UNIT", "Unit", "UNITE", "Unité", "UNITE #", "UNIT #"
+    ])
+    COL_SERIAL = pick_col(jobs_raw, [
+        "SERIAL NUMBER", "Serial Number", "SERIAL", "S/N", "SN", "Serial"
+    ])
+
     if not COL_ORDER:
         st.error("Je ne trouve pas la colonne Job/Order (#). Assure-toi qu’elle existe dans ton export.")
         st.stop()
@@ -989,6 +976,16 @@ def render_page_2():
         m = re.search(r"\b([A-Z]\d[A-Z])\s?(\d[A-Z]\d)\b", str(s).upper())
         return (m.group(1) + m.group(2)) if m else ""
 
+    # NEW helper: clean text for optional columns
+    def _clean_text(x):
+        try:
+            if pd.isna(x):
+                return ""
+        except Exception:
+            pass
+        s = str(x).strip()
+        return "" if s.lower() in ("nan", "none") else s
+
     jobs = pd.DataFrame()
     jobs["job_id"] = jobs_raw[COL_ORDER].apply(clean_id)
     jobs["cust"] = jobs_raw[COL_CUST].apply(clean_id) if COL_CUST else ""
@@ -1014,6 +1011,12 @@ def render_page_2():
     jobs["techs_needed"] = techs_needed.fillna(1).astype(int) if techs_needed is not None else 1
 
     jobs["postal"] = jobs_raw[COL_POST].fillna("").astype(str).apply(extract_postal) if COL_POST else ""
+
+    # NEW: keep extra fields for export / reporting
+    jobs["last_inspection"] = jobs_raw[COL_LAST_INSP].apply(_clean_text) if COL_LAST_INSP else ""
+    jobs["difference"] = jobs_raw[COL_DIFF].apply(_clean_text) if COL_DIFF else ""
+    jobs["unit"] = jobs_raw[COL_UNIT].apply(_clean_text) if COL_UNIT else ""
+    jobs["serial_number"] = jobs_raw[COL_SERIAL].apply(_clean_text) if COL_SERIAL else ""
 
     # Clean jobs (unchanged filters)
     jobs = jobs[(jobs["address"].astype(str).str.len() > 8) & (jobs["job_minutes"] > 0)].copy()
@@ -1069,7 +1072,12 @@ def render_page_2():
     # ────────────────────────────────────────────────────────────────
     # Persistent SQLite cache for travel (unchanged)
     # ────────────────────────────────────────────────────────────────
-    DB_PATH = st.session_state.get("p2_travel_cache_db", "/tmp/travel_cache.sqlite")
+    from pathlib import Path 
+
+    DB_DIR = Path(".cache")
+    DB_DIR.mkdir(exist_ok=True)
+
+    DB_PATH = str(DB_DIR / "travel_cache.sqlite")
 
     st.sidebar.subheader("🧾 Coûts / Cache")
     use_traffic = st.sidebar.checkbox("Utiliser trafic (duration_in_traffic)", value=True, key="p2_use_traffic")
@@ -1089,7 +1097,7 @@ def render_page_2():
         return hashlib.md5(raw.encode("utf-8")).hexdigest()
 
     def _db():
-        conn = sqlite3.connect(DB_PATH, timeout=10)
+        conn = sqlite3.connect(DB_PATH, timeout=30)
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS travel (
@@ -1098,6 +1106,7 @@ def render_page_2():
                 ts INTEGER
             )
         """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_travel_ts ON travel(ts)")
         return conn
 
     if "p2_api_calls" not in st.session_state:
@@ -1168,7 +1177,7 @@ def render_page_2():
         key = _norm(addr)
         if key in ll_cache:
             return ll_cache[key][0], ll_cache[key][1]
-        g = geocode_ll(gmaps_client, addr)  # cached 30 days (page 1 helper)
+        g = geocode_ll(addr)  # cached 30 days (page 1 helper)
         if g:
             lat, lon, _ = g
             ll_cache[key] = (float(lat), float(lon))
@@ -1232,25 +1241,49 @@ def render_page_2():
     def get_job_pool_for_tech(master_remaining: pd.DataFrame, tech_name: str, pool_size: int) -> pd.DataFrame:
         if master_remaining.empty:
             return master_remaining
+
         master_remaining = master_remaining.sort_values(["job_id"], kind="mergesort")
         tlat, tlon = tech_ll_map.get(tech_name, (None, None))
         tsec = tech_sector_map.get(tech_name, "UNK")
 
+        # optionnel: colonne debug (si tu veux la visibilité)
+        if "index_mismatch" not in master_remaining.columns:
+            master_remaining = master_remaining.copy()
+            master_remaining["index_mismatch"] = False
+
         dists = []
         for idx, r in master_remaining.iterrows():
-            lat, lon, jsec = ensure_job_ll_master(jobs, idx)
+
+            # ✅ cas normal
+            if idx in jobs.index:
+                lat, lon, jsec = ensure_job_ll_master(jobs, idx)
+
+            # ✅ fallback
+            else:
+                master_remaining.at[idx, "index_mismatch"] = True
+
+                addr = str(r.get("address", "")).strip()
+                if not addr:
+                    continue  # pas de fallback possible
+
+                lat, lon = get_ll_for_address(addr)
+                jsec = classify_sector(lat, lon)
+
+            # filtre sector
             if not sector_compatible(tsec, jsec):
                 continue
+
             d = haversine_km(tlat, tlon, lat, lon)
             dists.append((idx, d))
 
+        # ⚠️ celui-ci doit être ici (après la boucle)
         if not dists:
             return master_remaining.head(pool_size) if len(master_remaining) > pool_size else master_remaining
 
         dists.sort(key=lambda x: x[1])
         chosen_idx = [i for (i, _d) in dists[:int(pool_size)]]
         return master_remaining.loc[chosen_idx].copy()
-
+                
     def rank_techs_for_job(tech_names: List[str], job_row: pd.Series, top_n: int) -> List[str]:
         if top_n >= len(tech_names):
             return tech_names
@@ -1340,6 +1373,7 @@ def render_page_2():
     # ===============================================================
     # Scheduler (MONTH) — booking logic unchanged
     # ===============================================================
+
     def schedule_month_with_duo(
         jobs_in: pd.DataFrame,
         tech_names: List[str],
@@ -1352,10 +1386,14 @@ def render_page_2():
         progress=None,
         progress_text=None
     ) -> dict:
+
+        # helper: normalize split job ids
+        def _norm_base(jid: str) -> str:
+            return re.sub(r"\s*\(PART\s+\d+/\d+\)\s*$", "", str(jid)).strip()
+
         available = int(round(day_hours * 60)) - int(lunch_min)
         if available <= 0:
             return {"success": False, "rows": [], "remaining": jobs_in, "reason": "Heures/jour - pause <= 0"}
-
         daily_onsite_cap = int(available)
         MIN_ONSITE_CHUNK_MIN = 180
 
@@ -1402,6 +1440,21 @@ def render_page_2():
         hard_jobs = hard_jobs.sort_values(["job_id"], kind="mergesort")
 
         planned_rows: List[Dict[str, Any]] = []
+
+        def _normalize_base_job_id(jid: str) -> str:
+            return re.sub(r"\s*\(PART\s+\d+/\d+\)\s*$", "", str(jid)).strip()
+            
+        planned_base_ids = set()  # on va remplir ça au fil de la planification
+
+        # NEW: helper to attach the 4 extra fields consistently (no logic change)
+        def _extra_fields_from_job(job_like):
+            getter = job_like.get if hasattr(job_like, "get") else (lambda _k, _d="": _d)
+            return {
+                "last_inspection": getter("last_inspection", ""),
+                "difference": getter("difference", ""),
+                "unit": getter("unit", ""),
+                "serial_number": getter("serial_number", ""),
+            }
 
         _home_map = {t: home_map[t] for t in tech_names}
         _tech_sector = {t: tech_sector_map.get(t, "UNK") for t in tech_names}
@@ -1475,8 +1528,10 @@ def render_page_2():
                 "job_min": int(onsite_today),
                 "buffer_min": int(buffer_job),
                 "techs_needed": techs_needed_val,
+                **_extra_fields_from_job(split_state),
                 "description": desc,
             })
+            planned_base_ids.add(_normalize_base_job_id(base_job_id))
 
             row_idx = len(planned_rows) - 1
             _register_and_relabel_split_row(base_job_id, row_idx, part_idx)
@@ -1590,8 +1645,10 @@ def render_page_2():
                             "job_min": int(job_min_each),
                             "buffer_min": int(buffer_job),
                             "techs_needed": int(job["techs_needed"]),
+                            **_extra_fields_from_job(job),
                             "description": job["description"],
                         })
+                        planned_base_ids.add(_normalize_base_job_id(job["job_id"]))
                         used[tname] = int(end_m)
                         cur_loc[tname] = job["address"]
 
@@ -1664,9 +1721,10 @@ def render_page_2():
                                 "job_min": int(job["job_minutes"]),
                                 "buffer_min": int(buffer_job),
                                 "techs_needed": int(job["techs_needed"]),
+                                **_extra_fields_from_job(job),
                                 "description": job["description"],
                             })
-
+                            planned_base_ids.add(_normalize_base_job_id(job["job_id"]))
                             used[t] = int(end_m)
                             cur_loc[t] = job["address"]
                             solo_jobs = solo_jobs[solo_jobs["job_id"] != job["job_id"]].copy()
@@ -1714,8 +1772,10 @@ def render_page_2():
                                     "job_min": int(job["job_minutes"]),
                                     "buffer_min": int(buffer_job),
                                     "techs_needed": int(job["techs_needed"]),
+                                    **_extra_fields_from_job(job),
                                     "description": job["description"],
                                 })
+                                planned_base_ids.add(_normalize_base_job_id(job["job_id"]))
 
                                 used[t] = int(end_m)
                                 cur_loc[t] = job["address"]
@@ -1793,9 +1853,11 @@ def render_page_2():
                                 "job_min": int(jm_total),
                                 "buffer_min": int(buffer_job),
                                 "techs_needed": int(job.get("techs_needed", 1)),
+                                **_extra_fields_from_job(job),
                                 "description": job["description"],
                             })
-
+                            planned_base_ids.add(_normalize_base_job_id(base_job_id))
+                            
                             used[t] = int(end_m)
                             cur_loc[t] = job["address"]
                             solo_jobs = solo_jobs[solo_jobs["job_id"] != job["job_id"]].copy()
@@ -1813,6 +1875,10 @@ def render_page_2():
                             "total_parts": int(total_parts_guess),
                             "part_idx_next": 1,
                             "remaining_job_min": int(job["job_minutes"]),
+                            "last_inspection": job.get("last_inspection", ""),
+                            "difference": job.get("difference", ""),
+                            "unit": job.get("unit", ""),
+                            "serial_number": job.get("serial_number", ""),
                         }
                         solo_jobs = solo_jobs[solo_jobs["job_id"] != job["job_id"]].copy()
 
@@ -1841,6 +1907,10 @@ def render_page_2():
                         "job_min": 0,
                         "buffer_min": 0,
                         "techs_needed": 1,
+                        "last_inspection": "",
+                        "difference": "",
+                        "unit": "",
+                        "serial_number": "",
                         "description": "🏠 Retour domicile (estimé)",
                     })
                     used[t] = int(used[t]) + int(tback)
@@ -1864,6 +1934,10 @@ def render_page_2():
                     "job_minutes": rem,
                     "techs_needed": int(stt.get("techs_needed", 1)),
                     "postal": extract_postal(str(stt.get("address", ""))),
+                    "last_inspection": str(stt.get("last_inspection", "")),
+                    "difference": str(stt.get("difference", "")),
+                    "unit": str(stt.get("unit", "")),
+                    "serial_number": str(stt.get("serial_number", "")),
                 })
 
         remaining_out = pd.concat([duo_jobs, solo_jobs, hard_jobs], ignore_index=True)
@@ -1871,31 +1945,106 @@ def render_page_2():
             remaining_out = pd.concat([remaining_out, pd.DataFrame(carryover_rows)], ignore_index=True)
 
         # ✅ FIX D (visibility only): flag OT-impossible jobs in remaining (does not affect scheduling)
-        #     Helps you see which jobs can NEVER fit even with 14h cap (incl travel + buffer + return)
         if not remaining_out.empty:
             remaining_out = remaining_out.copy()
             remaining_out["ot_impossible"] = False
+
+            # réglage: combien de techs on teste max par job
+            OT_IMPOSSIBLE_TOP_TECHS = 4
+
+            # petit cache local pour éviter de recalculer 40x les mêmes combos dans cette boucle
+            _best_need_cache = {}
+
             for i, r in remaining_out.iterrows():
                 try:
-                    addr = r.get("address", "")
+                    addr = str(r.get("address", "")).strip()
                     jm = int(r.get("job_minutes", 0))
                     if not addr or jm <= 0:
                         continue
-                    best_need = None
-                    for t in tech_names:
-                        need = (
-                            travel_min_cached(_home_map[t], addr)
-                            + jm
-                            + int(buffer_job)
-                            + travel_min_cached(addr, _home_map[t])
-                        )
-                        if best_need is None or need < best_need:
-                            best_need = need
+
+                    # cache key (par job)
+                    ck = (addr, jm, int(buffer_job), OT_ACTIVE_CAP, OT_IMPOSSIBLE_TOP_TECHS)
+                    if ck in _best_need_cache:
+                        best_need = _best_need_cache[ck]
+                    else:
+                        # 1) job lat/lon/sector (utilise ton geocode cache 30 jours)
+                        jlat, jlon = get_ll_for_address(addr)
+                        jsec = classify_sector(jlat, jlon)
+
+                        # 2) shortlist techs: compatible secteur + plus proches haversine
+                        scored = []
+                        for t in tech_names:
+                            tsec = _tech_sector.get(t, "UNK")
+                            if not sector_compatible(tsec, jsec):
+                                continue
+                            tlat, tlon = tech_ll_map.get(t, (None, None))
+                            d = haversine_km(tlat, tlon, jlat, jlon)
+                            scored.append((d, t))
+
+                        if not scored:
+                            candidates = list(tech_names)[:OT_IMPOSSIBLE_TOP_TECHS]
+                        else:
+                            scored.sort(key=lambda x: x[0])
+                            candidates = [t for (_d, t) in scored[:OT_IMPOSSIBLE_TOP_TECHS]]
+
+                        # 3) calc best_need seulement sur ces techs
+                        best_need = None
+                        for t in candidates:
+                            need = (
+                                travel_min_cached(_home_map[t], addr)
+                                + jm
+                                + int(buffer_job)
+                                + travel_min_cached(addr, _home_map[t])
+                            )
+                            if best_need is None or need < best_need:
+                                best_need = need
+
+                        _best_need_cache[ck] = best_need
+
                     if best_need is not None and best_need > OT_ACTIVE_CAP:
                         remaining_out.at[i, "ot_impossible"] = True
+
                 except Exception:
                     pass
+        # ── SAFETY NET: réinjecter toute job "bookable" qui aurait disparu ──
+        try:
+            all_bookable_ids = set(jobs_in["job_id"].astype(str).apply(_norm_base).tolist())
 
+            remaining_ids = set()
+            if (remaining_out is not None) and (not remaining_out.empty) and ("job_id" in remaining_out.columns):
+                remaining_ids = set(remaining_out["job_id"].astype(str).apply(_norm_base).tolist())
+
+            planned_ids = set()
+            for r in planned_rows:
+                jid = str(r.get("job_id", "")).strip()
+                if not jid or jid.upper() == "RETURN_HOME":
+                    continue
+                planned_ids.add(_norm_base(jid))
+
+            covered = planned_ids.union(remaining_ids)
+            missing = sorted(list(all_bookable_ids - covered))
+
+            if missing:
+                if "ot_impossible" not in remaining_out.columns:
+                    remaining_out["ot_impossible"] = False
+                if "missing_reinjected" not in remaining_out.columns:
+                    remaining_out["missing_reinjected"] = False
+
+                missing_rows = []
+                for mid in missing:
+                    src = jobs_in[jobs_in["job_id"].astype(str) == str(mid)]
+                    if src.empty:
+                        continue
+                    rr = src.iloc[0].to_dict()
+                    rr["missing_reinjected"] = True
+                    rr["ot_impossible"] = False
+                    missing_rows.append(rr)
+
+                if missing_rows:
+                    remaining_out = pd.concat([remaining_out, pd.DataFrame(missing_rows)], ignore_index=True)
+
+        except Exception:
+            pass
         success = remaining_out.empty and (len(carryover_rows) == 0)
         return {"success": bool(success), "rows": planned_rows, "remaining": remaining_out}
 
@@ -2328,6 +2477,10 @@ def render_page_2():
                         "buffer_min": int(buffer_job),
                         "techs_needed": int(job["techs_needed"]),
                         "description": job["description"],
+                        "last_inspection": job.get("last_inspection", ""),
+                        "difference": job.get("difference", ""),
+                        "unit": job.get("unit", ""),
+                        "serial_number": job.get("serial_number", ""),
                     })
 
                     used = int(end_m)
@@ -2473,7 +2626,7 @@ def render_page_2():
             day_df = day_df.sort_values(["technicien", "sequence", "debut"], ascending=True).reset_index(drop=True)
 
             preferred = ["technicien", "sequence", "job_id", "cust", "duo", "ot", "debut", "fin", "adresse",
-                         "travel_min", "job_min", "buffer_min", "techs_needed", "description"]
+                         "travel_min", "job_min", "buffer_min", "techs_needed", "unit", "serial_number", "difference", "last_inspection", "description"]
             cols = [c for c in preferred if c in day_df.columns] + [c for c in day_df.columns if c not in preferred]
             day_df = day_df[cols]
 
@@ -2605,7 +2758,7 @@ def render_page_2():
             month_df = month_df.sort_values(sort_cols, ascending=True).reset_index(drop=True)
 
             preferred = ["date", "technicien", "sequence", "job_id", "cust", "duo", "ot", "debut", "fin", "adresse",
-                         "travel_min", "job_min", "buffer_min", "techs_needed", "description"]
+                         "travel_min", "job_min", "buffer_min", "techs_needed", "unit", "serial_number", "last_inspection", "difference", "description"]
             cols = [c for c in preferred if c in month_df.columns] + [c for c in month_df.columns if c not in preferred]
             month_df = month_df[cols]
 
@@ -2754,7 +2907,7 @@ def render_page_2():
             month_df = month_df.sort_values(sort_cols, ascending=True).reset_index(drop=True)
 
             preferred = ["date", "technicien", "sequence", "job_id", "cust", "duo", "ot", "debut", "fin", "adresse",
-                         "travel_min", "job_min", "buffer_min", "techs_needed", "description"]
+                         "travel_min", "job_min", "buffer_min", "techs_needed", "unit", "serial_number", "last_inspection", "difference","description"]
             cols = [c for c in preferred if c in month_df.columns] + [c for c in month_df.columns if c not in preferred]
             month_df = month_df[cols]
 
