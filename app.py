@@ -1815,6 +1815,7 @@ def render_page_2():
         total_steps = max(1, len(month_days))
 
         for di, day in enumerate(month_days):
+            _t_day_start = time.time()
             used = {t: 0 for t in tech_names}
             cur_loc = {t: _home_map[t] for t in tech_names}
             jobs_count = {t: 0 for t in tech_names}
@@ -2189,7 +2190,18 @@ def render_page_2():
             if progress is not None:
                 progress.progress(int(((di + 1) / total_steps) * 100))
             if progress_text is not None:
-                progress_text.write(f"Planification… {di+1}/{len(month_days)} jour(s) traités")
+                _t_day = round(time.time() - _t_day_start, 1)
+                progress_text.write(
+                    f"Planification… {di+1}/{len(month_days)} jour(s) — "
+                    f"jour actuel: {_t_day}s | "
+                    f"API calls: {st.session_state.get('p2_api_calls',0)} | "
+                    f"cache hits: {st.session_state.get('p2_cache_hits',0)}"
+                )
+
+        _t_post = time.time()
+        _t_planning_done = _t_post
+        if progress_text is not None:
+            progress_text.write(f"✅ Planification terminée — post-traitement en cours…")
 
         # Réinjecter carryovers non terminés
         carryover_rows = []
@@ -2213,6 +2225,10 @@ def render_page_2():
         remaining_out = pd.concat([duo_jobs, solo_jobs, hard_jobs], ignore_index=True)
         if carryover_rows:
             remaining_out = pd.concat([remaining_out, pd.DataFrame(carryover_rows)], ignore_index=True)
+
+        _t_concat = round(time.time() - _t_post, 1)
+        if progress_text is not None:
+            progress_text.write(f"⏱️ Concat remaining: {_t_concat}s — {len(remaining_out)} jobs restants")
 
         # Flag OT-impossible
         # Ignoré si le cache n'est pas chaud — paires domicile→job souvent absentes
@@ -2283,6 +2299,10 @@ def render_page_2():
                 except Exception:
                     pass
 
+        _t_ot = round(time.time() - _t_post, 1)
+        if progress_text is not None:
+            progress_text.write(f"⏱️ Flag OT-impossible: {_t_ot}s")
+
         # Safety net : réinjecter jobs bookables manquants
         try:
             all_bookable_ids = set(jobs_in["job_id"].astype(str).apply(normalize_base_job_id).tolist())
@@ -2314,8 +2334,19 @@ def render_page_2():
         except Exception:
             pass
 
+        _t_safety = round(time.time() - _t_post, 1)
+        _timing_summary = {
+            "concat_s": _t_concat if "_t_concat" in dir() else "?",
+            "ot_flag_s": _t_ot if "_t_ot" in dir() else "?",
+            "safety_s": _t_safety,
+            "total_post_s": round(time.time() - _t_post, 1),
+        }
+        if progress_text is not None:
+            progress_text.write(f"⏱️ Safety net: {_t_safety}s — returning…")
+
         success = remaining_out.empty and (len(carryover_rows) == 0)
-        return {"success": bool(success), "rows": planned_rows, "remaining": remaining_out}
+        return {"success": bool(success), "rows": planned_rows, "remaining": remaining_out,
+                "timing": _timing_summary}
 
 
     # ════════════════════════════════════════════════════════════════
@@ -3121,6 +3152,16 @@ def render_page_2():
                 progress.progress(100)
                 progress_text.write("Terminé ✅")
 
+                timing = result.get("timing", {})
+                if timing:
+                    st.info(
+                        f"⏱️ **Post-planification** — "
+                        f"Concat: {timing.get('concat_s','?')}s | "
+                        f"OT-flag: {timing.get('ot_flag_s','?')}s | "
+                        f"Safety net: {timing.get('safety_s','?')}s | "
+                        f"**Total post: {timing.get('total_post_s','?')}s**"
+                    )
+
         month_rows_saved = st.session_state.get("planning_month_rows", [])
         if month_rows_saved and st.session_state.get("planning_month_mode") == "fixed":
             st.divider()
@@ -3255,6 +3296,17 @@ def render_page_2():
                         "remaining": result["remaining"], "techs_used": chosen}
 
             outer_progress.progress(100)
+
+            # Afficher timing du dernier run
+            if best and best.get("timing"):
+                timing = best["timing"]
+                st.info(
+                    f"⏱️ **Post-planification** — "
+                    f"Concat: {timing.get('concat_s','?')}s | "
+                    f"OT-flag: {timing.get('ot_flag_s','?')}s | "
+                    f"Safety net: {timing.get('safety_s','?')}s | "
+                    f"**Total post: {timing.get('total_post_s','?')}s**"
+                )
 
             st.session_state["planning_month_rows"] = best["rows"] if best else []
             st.session_state["planning_month_success"] = best["success"] if best else False
