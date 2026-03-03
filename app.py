@@ -2447,7 +2447,10 @@ def render_page_2():
 
             for _, jrow in remaining_solo.iterrows():
                 jid = str(jrow.get("job_id",""))
+                # Vérifier que ce job n'est pas déjà planifié (greedy principal ou backfill)
                 if jid in backfill_booked:
+                    continue
+                if normalize_base_job_id(jid) in planned_base_ids:
                     continue
                 addr = str(jrow.get("address","")).strip()
                 jm = int(jrow.get("job_minutes", 0))
