@@ -1406,6 +1406,13 @@ def render_page_2():
         """
         Classifie une adresse dans l'une des 6 zones géographiques.
         Basé uniquement sur les coordonnées GPS — aucun appel API.
+
+        Géographie réelle Montréal :
+          Fleuve St-Laurent : lat ~45.40–45.55 selon longitude
+          Île de Montréal   : lat 45.40–45.70, lon -74.03–-73.47
+                              MAIS Laval est au NORD (lat > 45.62, nord de la Rivière-des-Prairies)
+                              et Rive Sud est au SUD (lat < 45.50 hors île)
+          Rivière-des-Prairies sépare Laval de l'île : lat ~45.62
         """
         if lat is None or lon is None:
             return "UNK"
@@ -1413,38 +1420,47 @@ def render_page_2():
         lon = float(lon)
 
         # ZONE_NORD — Trois-Rivières, Shawinigan, Saint-Paulin et nord
-        # lat > 46.15 = clairement au nord du corridor Montréal
         if lat > 46.15:
             return "ZONE_NORD"
 
-        # MTL_ILE — Île de Montréal (polygone approx.)
-        # lat 45.40–45.70, lon -74.03–-73.47
-        if (45.40 <= lat <= 45.70) and (-74.03 <= lon <= -73.47):
-            return "MTL_ILE"
-
-        # ZONE_EST — Drummondville, Sherbrooke, Windsor, Granby, Bromont…
-        # À l'est de Montréal, rive sud : lon > -73.10, lat 45.30–46.10
-        # Inaccessible depuis Rive Nord sans traverser l'île (2 ponts)
-        if lon > -73.10 and 45.30 < lat < 46.10:
+        # ZONE_EST — Drummondville, Sherbrooke, Granby, Bromont, Sorel, Waterloo…
+        # Est de Montréal, lon > -73.15, inaccessible depuis Rive Nord (traversée obligatoire)
+        if lon > -73.15 and 45.25 < lat < 46.10:
             return "ZONE_EST"
 
-        # RIVE_SUD_OUEST — Vaudreuil, Saint-Clet, Hinchinbrooke, Rigaud…
-        # Accessible depuis Rive Nord via A-40 SANS traverser Montréal
-        # lon < -74.00, lat 45.20–45.55
-        if lon < -74.00 and lat < 45.55:
+        # RIVE_SUD_OUEST — Vaudreuil, Saint-Clet, Rigaud, Hinchinbrooke…
+        # Accessible depuis Rive Nord via A-40 SANS traverser l'île
+        if lon < -74.00 and lat < 45.60:
             return "RIVE_SUD_OUEST"
 
-        # RIVE_NORD — au nord du fleuve, hors île, hors Zone Nord
-        if lat > 45.55 and lon < -73.47:
-            return "RIVE_NORD"
-        if lat >= 45.70:
+        # RIVE_NORD stricte — lat > 45.70, hors île MTL
+        # Blainville, Saint-Jérôme, Lachute, Terrebonne, Saint-Eustache, Repentigny…
+        if lat > 45.70:
             return "RIVE_NORD"
 
-        # RIVE_SUD — tout le reste au sud du fleuve
+        # LAVAL — île entre Rivière-des-Prairies et Montréal
+        # lat 45.52–45.70, lon -73.97–-73.52
+        # Traité comme RIVE_NORD : accessible depuis nord, PAS depuis Rive Sud directement
+        if (45.52 <= lat <= 45.70) and (-73.97 <= lon <= -73.52):
+            return "RIVE_NORD"
+
+        # RIVE_NORD hors boîte — lat 45.62–45.70 à l'extérieur de l'île et de Laval
+        # (ex: Lachute, Argenteuil à l'ouest)
+        if lat >= 45.62 and not (-74.03 <= lon <= -73.38):
+            return "RIVE_NORD"
+
+        # MTL_ILE — Île de Montréal + rive proche (Brossard, Longueuil, Varennes…)
+        # Étendu à l'est jusqu'à -73.38 pour capturer Varennes (rive sud est)
+        if (45.42 <= lat <= 45.70) and (-74.03 <= lon <= -73.38):
+            return "MTL_ILE"
+
+        # RIVE_SUD — Sud du fleuve, corridor Montréal
+        # Candiac, Saint-Hubert, Saint-Lambert, Chambly, Carignan, Beloeil…
         if lat < 45.55:
             return "RIVE_SUD"
 
-        return "UNK"
+        # Zone ambiguë restante → MTL_ILE par défaut
+        return "MTL_ILE"
 
     # Matrice de compatibilité tech_zone → job_zone autorisés
     _SECTOR_COMPAT: Dict[str, set] = {
@@ -1603,7 +1619,13 @@ def render_page_2():
     def rank_techs_for_job(tech_names: List[str], job_row: pd.Series, top_n: int) -> List[str]:
         if top_n >= len(tech_names):
             return tech_names
-        jlat, jlon = get_ll_for_address(job_row.get("address", ""))
+        addr = job_row.get("address", "")
+        # Utiliser ll_cache directement si disponible — évite appel geocode API
+        _addr_key = re.sub(r"\s+", " ", str(addr or "").strip().lower())
+        if _addr_key in ll_cache:
+            jlat, jlon = ll_cache[_addr_key]
+        else:
+            jlat, jlon = get_ll_for_address(addr)
         jsec = classify_sector(jlat, jlon)
         scored = []
         for t in tech_names:
@@ -1810,7 +1832,13 @@ def render_page_2():
             remaining_min = int(remaining_min) - int(onsite_today)
             split_state["remaining_job_min"] = remaining_min
             split_state["part_idx_next"] = part_idx + 1
-            lock_tech[t] = True if remaining_min > 0 else False
+            # Locker seulement si carryover encore actif ET pas assez de temps
+            # pour un autre job après (évite de bloquer le tech pour la journée)
+            time_left = int(available) - int(end_m)
+            if remaining_min > 0 and time_left < int(MIN_ONSITE_CHUNK_MIN):
+                lock_tech[t] = True
+            else:
+                lock_tech[t] = False
 
         total_steps = max(1, len(month_days))
 
@@ -1863,7 +1891,10 @@ def render_page_2():
 
                                 duo_is_overtime = False
                                 if int(job_min_each) > int(daily_onsite_cap):
-                                    if (int(job_min_each) - int(daily_onsite_cap)) < 180:
+                                    _duo_tmin = travel_min_cached(cur_loc[t1], job["address"])
+                                    _duo_tback = travel_min_cached(job["address"], _home_map[t1])
+                                    _duo_need = _duo_tmin + int(job_min_each) + int(buffer_job) + _duo_tback
+                                    if _duo_need <= int(OT_ACTIVE_CAP):
                                         if jobs_count[t1] != 0 or jobs_count[t2] != 0:
                                             continue
                                         duo_is_overtime = True
@@ -2069,13 +2100,19 @@ def render_page_2():
                             if not sector_compatible(_tech_sector.get(t, "UNK"), jsec):
                                 continue
 
-                            is_overtime_candidate = False
-                            if (jobs_count[t] == 0) and ((jm - int(daily_onsite_cap)) < 180):
-                                is_overtime_candidate = True
-
                             addr = job["address"]
                             tmin = travel_min_cached(cur_loc[t], addr)
                             tback = travel_min_cached(addr, _home_map[t])
+
+                            # Décision OT-en-une-journée vs split :
+                            # Si trajet + job + buffer + retour <= 14h → OT en une journée
+                            # Sinon → split sur plusieurs jours
+                            full_need = int(tmin) + int(jm) + int(buffer_job) + int(tback)
+                            is_overtime_candidate = (
+                                jobs_count[t] == 0
+                                and full_need <= int(OT_ACTIVE_CAP)
+                            )
+
                             max_onsite_today = int(available) - int(used[t]) - int(tmin) - int(buffer_job) - int(tback)
                             if max_onsite_today <= 0:
                                 continue
@@ -2085,8 +2122,9 @@ def render_page_2():
                             onsite_today_candidate = choose_onsite_no_crumbs(jm, max_onsite_today, MIN_ONSITE_CHUNK_MIN)
                             if onsite_today_candidate <= 0:
                                 continue
-                            if is_overtime_candidate and jm > int(max_onsite_today):
-                                continue
+                            # Si OT candidat, on book en entier plus bas — pas de split partiel
+                            if is_overtime_candidate:
+                                pass  # sera booké en entier dans le bloc best_long_is_overtime
 
                             if best_long_cost is None or int(tmin) < best_long_cost:
                                 best_long_idx = idx
@@ -2463,9 +2501,13 @@ def render_page_2():
         used = 0
         seq = 0
         _tfn = _travel_fn if _travel_fn is not None else travel_min_cached
-        # OR-Tools : optimiser l'ordre si disponible et matrice en cache
-        # Sinon le greedy ci-dessous prend le relais naturellement
-        optimized = optimize_route_ortools(tech, list(jobs_list))
+        # OR-Tools : seulement si appelé directement (pas depuis repair)
+        # Dans repair, _travel_fn est fourni — on skip OR-Tools pour éviter
+        # de reconstruire une matrice complète à chaque rebuild testé
+        if _travel_fn is None:
+            optimized = optimize_route_ortools(tech, list(jobs_list))
+        else:
+            optimized = list(jobs_list)
         remaining = list(optimized)
         out_rows: List[Dict[str, Any]] = []
 
@@ -2534,19 +2576,21 @@ def render_page_2():
             })
         return out_rows
 
-    def rebuild_day_in_order(day, tech, jobs_list, day_available_min, buffer_job, max_jobs_per_day):
+    def rebuild_day_in_order(day, tech, jobs_list, day_available_min, buffer_job, max_jobs_per_day,
+                              _travel_fn=None):
         home_addr = home_map[tech]
         cur = home_addr
         used = 0
         seq = 0
         out = []
+        _tfn2 = _travel_fn if _travel_fn is not None else travel_min_cached
 
         if len(jobs_list) > int(max_jobs_per_day):
             return None
 
         for jb in jobs_list:
-            tmin = int(travel_min_cached(cur, jb["adresse"]))
-            tback = int(travel_min_cached(jb["adresse"], home_addr))
+            tmin = int(_tfn2(cur, jb["adresse"]))
+            tback = int(_tfn2(jb["adresse"], home_addr))
             need = tmin + int(jb["job_min"]) + int(buffer_job) + tback
 
             if used + need > int(day_available_min):
@@ -2577,7 +2621,7 @@ def render_page_2():
                 return None
 
         if seq > 0:
-            tback = int(travel_min_cached(cur, home_addr))
+            tback = int(_tfn2(cur, home_addr))
             out.append({
                 "date": day, "technicien": tech, "sequence": seq + 1,
                 "job_id": "RETURN_HOME", "cust": "", "duo": "", "ot": "",
@@ -2649,6 +2693,7 @@ def render_page_2():
         stats = {"moves": 0, "attempts": 0, "improved": 0, "timeout": False}
         tech_list = list(tech_names)
         _repair_start = time.time()
+        _modified_pairs: set = set()  # paires (day, tech) modifiées — seules à rebuilder
 
         for (tmin_orig, day, src_tech, jb) in candidates:
             if time.time() - _repair_start > float(timeout_seconds):
@@ -2708,6 +2753,8 @@ def render_page_2():
             delta, dst_tech, rebuilt_src, rebuilt_dst, src_list2, dst_list2 = best_move
             by_day_tech[(day, src_tech)] = src_list2
             by_day_tech[(day, dst_tech)] = dst_list2
+            _modified_pairs.add((day, src_tech))
+            _modified_pairs.add((day, dst_tech))
             stats["moves"] += 1
             stats["improved"] += 1
 
@@ -2719,18 +2766,24 @@ def render_page_2():
             final_rows.append(r)
 
         for (day, tech), lst in by_day_tech.items():
-            rebuilt = rebuild_day_greedy(day, tech, lst, day_available_min, buffer_job, max_jobs_per_day, _travel_fn=_travel)
-            if rebuilt is not None:
-                final_rows.extend(rebuilt)
+            if (day, tech) in _modified_pairs:
+                # Seulement rebuilder les paires qui ont été modifiées
+                rebuilt = rebuild_day_greedy(day, tech, lst, day_available_min, buffer_job, max_jobs_per_day, _travel_fn=_travel)
+                if rebuilt is not None:
+                    final_rows.extend(rebuilt)
+                else:
+                    orig = original_rows_by_day_tech.get((day, tech), [])
+                    if orig:
+                        orig_sorted = sorted(orig, key=lambda x: int(x.get("sequence", 0)))
+                        rebuilt2 = rebuild_day_in_order(day, tech, orig_sorted, day_available_min, buffer_job, max_jobs_per_day, _travel_fn=_travel)
+                        if rebuilt2 is not None:
+                            final_rows.extend(rebuilt2)
+                        else:
+                            final_rows.extend(orig)
             else:
+                # Paire non modifiée — réutiliser les rows originaux directement
                 orig = original_rows_by_day_tech.get((day, tech), [])
-                if orig:
-                    orig_sorted = sorted(orig, key=lambda x: int(x.get("sequence", 0)))
-                    rebuilt2 = rebuild_day_in_order(day, tech, orig_sorted, day_available_min, buffer_job, max_jobs_per_day)
-                    if rebuilt2 is not None:
-                        final_rows.extend(rebuilt2)
-                    else:
-                        final_rows.extend(orig)
+                final_rows.extend(orig)
 
         final_rows = [r for r in final_rows if not _is_return_home(r.get("job_id", ""))]
 
