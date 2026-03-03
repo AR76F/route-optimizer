@@ -1338,19 +1338,63 @@ def render_page_2():
         st.session_state["p2_ll_cache"] = {}
     ll_cache: Dict[str, Tuple[float, float]] = st.session_state["p2_ll_cache"]
 
+    def _ensure_geocode_table():
+        """Crée la table geocode dans SQLite si elle n'existe pas."""
+        conn = _get_db()
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS geocode (
+                addr_key TEXT PRIMARY KEY,
+                lat REAL,
+                lon REAL,
+                ts INTEGER
+            )
+        """)
+        conn.commit()
+
+    _ensure_geocode_table()
+
+    # Pré-charger le geocode SQLite dans ll_cache au démarrage
+    # (évite les appels API à chaque redémarrage Streamlit)
+    if not ll_cache:
+        try:
+            conn = _get_db()
+            rows = conn.execute("SELECT addr_key, lat, lon FROM geocode").fetchall()
+            for addr_key, lat, lon in rows:
+                ll_cache[addr_key] = (lat, lon)
+        except Exception:
+            pass
+
     def get_ll_for_address(addr: str) -> Tuple[Optional[float], Optional[float]]:
         if not addr:
             return None, None
         key = _norm(addr)
+        # 1. Cache mémoire (session_state)
         if key in ll_cache:
             return ll_cache[key][0], ll_cache[key][1]
+        # 2. Cache SQLite (persistant entre redémarrages)
+        try:
+            conn = _get_db()
+            row = conn.execute("SELECT lat, lon FROM geocode WHERE addr_key=?", (key,)).fetchone()
+            if row:
+                ll_cache[key] = (row[0], row[1])
+                return row[0], row[1]
+        except Exception:
+            pass
+        # 3. Appel API Google (seulement si absent du cache)
         g = geocode_ll(addr)
-        if g:
-            lat, lon, _ = g
-            ll_cache[key] = (float(lat), float(lon))
-            return float(lat), float(lon)
-        ll_cache[key] = (None, None)
-        return None, None
+        lat, lon = (float(g[0]), float(g[1])) if g else (None, None)
+        ll_cache[key] = (lat, lon)
+        # Persister dans SQLite
+        try:
+            conn = _get_db()
+            conn.execute(
+                "INSERT OR REPLACE INTO geocode (addr_key, lat, lon, ts) VALUES (?,?,?,?)",
+                (key, lat, lon, int(__import__("time").time()))
+            )
+            conn.commit()
+        except Exception:
+            pass
+        return lat, lon
 
     # ────────────────────────────────────────────────────────────────
     # ZONES GÉOGRAPHIQUES — 6 zones basées sur la géographie réelle
