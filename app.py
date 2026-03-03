@@ -2408,6 +2408,135 @@ def render_page_2():
         if progress_text is not None:
             progress_text.write(f"⏱️ Flag OT-impossible: {_t_ot}s")
 
+        # ── BACKFILL PASS ──────────────────────────────────────────────────────
+        # Deuxième passage sur les jobs restants — essaie de les insérer sur
+        # n'importe quel jour encore disponible pour les techs compatibles.
+        # Corrige le problème greedy myope : le scheduler s'arrêtait dès qu'un
+        # tour complet ne produisait rien, même avec 1000h de capacité libre.
+        # ───────────────────────────────────────────────────────────────────────
+        if not remaining_out.empty and month_days:
+            if progress_text is not None:
+                progress_text.write(f"🔄 Backfill pass — {len(remaining_out)} jobs restants…")
+
+            # Reconstruire l'utilisation actuelle par (jour, tech)
+            _used_by_day_tech: Dict[Tuple[str,str], int] = {}
+            _loc_by_day_tech: Dict[Tuple[str,str], str] = {}
+            _count_by_day_tech: Dict[Tuple[str,str], int] = {}
+
+            for row in planned_rows:
+                dk = str(row.get("date","")).strip()
+                tk = str(row.get("technicien","")).strip()
+                if not dk or not tk:
+                    continue
+                if _is_return_home(row.get("job_id","")):
+                    continue
+                fin_mm = _hhmm_to_mm(str(row.get("fin","00:00")))
+                key = (dk, tk)
+                _used_by_day_tech[key] = max(_used_by_day_tech.get(key, 0), int(fin_mm))
+                _loc_by_day_tech[key] = str(row.get("adresse", _home_map.get(tk,"")))
+                _count_by_day_tech[key] = _count_by_day_tech.get(key, 0) + 1
+
+            backfill_booked = set()
+            backfill_rows = []
+
+            # Trier les jobs restants par contrainte croissante (moins de techs = plus urgent)
+            remaining_solo = remaining_out[
+                (remaining_out["techs_needed"] <= 1) &
+                (remaining_out.get("ot_impossible", pd.Series([False]*len(remaining_out))).fillna(False) == False)
+            ].copy()
+
+            for _, jrow in remaining_solo.iterrows():
+                jid = str(jrow.get("job_id",""))
+                if jid in backfill_booked:
+                    continue
+                addr = str(jrow.get("address","")).strip()
+                jm = int(jrow.get("job_minutes", 0))
+                if not addr or jm <= 0:
+                    continue
+
+                jlat, jlon = get_ll_for_address(addr)
+                jsec = classify_sector(jlat, jlon)
+
+                booked = False
+                for day in month_days:
+                    if booked:
+                        break
+                    dk = day.isoformat()
+                    for t in tech_names:
+                        tsec = _tech_sector.get(t, "UNK")
+                        if not sector_compatible(tsec, jsec):
+                            continue
+
+                        key = (dk, t)
+                        cur_used = _used_by_day_tech.get(key, 0)
+                        cur_count = _count_by_day_tech.get(key, 0)
+                        home_addr = _home_map.get(t, "")
+
+                        if cur_count >= int(max_jobs_per_day):
+                            continue
+
+                        # Utiliser domicile comme point de départ — toujours en cache
+                        # (légèrement conservateur mais évite tout appel API)
+                        tmin = travel_min_cached(home_addr, addr)
+                        tback = travel_min_cached(addr, home_addr)
+                        need = int(tmin) + int(jm) + int(buffer_job) + int(tback)
+
+                        # Rentre dans la journée normale?
+                        fits_normal = (cur_used + need) <= int(available)
+                        # Rentre en OT (max 14h)?
+                        fits_ot = (cur_used == 0) and (need <= int(OT_ACTIVE_CAP))
+
+                        if not fits_normal and not fits_ot:
+                            continue
+
+                        # Booker ce job
+                        start_m = cur_used + int(tmin)
+                        end_m = start_m + int(jm) + int(buffer_job)
+                        ot_flag = "🟥 OT" if fits_ot and not fits_normal else ""
+
+                        new_row = {
+                            "date": dk,
+                            "technicien": t,
+                            "sequence": cur_count + 1,
+                            "job_id": jid,
+                            "cust": str(jrow.get("cust","")),
+                            "duo": "",
+                            "ot": ot_flag,
+                            "debut": mm_to_hhmm(int(start_m)),
+                            "fin": mm_to_hhmm(int(end_m)),
+                            "adresse": addr,
+                            "travel_min": int(tmin),
+                            "job_min": int(jm),
+                            "buffer_min": int(buffer_job),
+                            "techs_needed": int(jrow.get("techs_needed", 1)),
+                            "last_inspection": str(jrow.get("last_inspection","")),
+                            "difference": str(jrow.get("difference","")),
+                            "unit": str(jrow.get("unit","")),
+                            "serial_number": str(jrow.get("serial_number","")),
+                            "description": str(jrow.get("description","")),
+                        }
+                        backfill_rows.append(new_row)
+                        planned_base_ids.add(normalize_base_job_id(jid))
+                        backfill_booked.add(jid)
+
+                        # Mettre à jour l'état du jour/tech
+                        _used_by_day_tech[key] = int(end_m)
+                        _loc_by_day_tech[key] = addr
+                        _count_by_day_tech[key] = cur_count + 1
+                        booked = True
+                        break
+
+            if backfill_rows:
+                planned_rows.extend(backfill_rows)
+                # Retirer les jobs backfillés de remaining_out
+                remaining_out = remaining_out[
+                    ~remaining_out["job_id"].astype(str).isin(backfill_booked)
+                ].copy()
+                if progress_text is not None:
+                    progress_text.write(f"✅ Backfill: {len(backfill_rows)} jobs ajoutés")
+
+        # ── FIN BACKFILL PASS ──────────────────────────────────────────────────
+
         # Safety net : réinjecter jobs bookables manquants
         try:
             all_bookable_ids = set(jobs_in["job_id"].astype(str).apply(normalize_base_job_id).tolist())
