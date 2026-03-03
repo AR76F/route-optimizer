@@ -1739,7 +1739,30 @@ def render_page_2():
 
         # [MOYEN-1] Trier une seule fois avant les boucles
         duo_jobs = duo_jobs.sort_values(["job_id"], kind="mergesort")
-        solo_jobs = solo_jobs.sort_values(["job_id"], kind="mergesort")
+
+        # Trier solo_jobs par contrainte géographique croissante :
+        # Les jobs accessibles par peu de techs (zones spécifiques) passent EN PREMIER
+        # pour éviter que le greedy remplisse les techs sur des jobs faciles
+        # et laisse les jobs contraints pour la fin quand il n'y a plus de place.
+        def _count_compatible_techs(row):
+            try:
+                addr = str(row.get("address", ""))
+                lat = row.get("job_lat", None) if "job_lat" in row.index else None
+                lon = row.get("job_lon", None) if "job_lon" in row.index else None
+                if lat is None or pd.isna(lat):
+                    lat, lon = get_ll_for_address(addr)
+                sec = classify_sector(lat, lon)
+                return sum(1 for t in tech_names if sector_compatible(_tech_sector.get(t,"UNK"), sec))
+            except Exception:
+                return len(tech_names)
+
+        try:
+            solo_jobs = solo_jobs.copy()
+            solo_jobs["_n_techs_compat"] = solo_jobs.apply(_count_compatible_techs, axis=1)
+            solo_jobs = solo_jobs.sort_values(["_n_techs_compat", "job_id"], kind="mergesort")
+            solo_jobs = solo_jobs.drop(columns=["_n_techs_compat"])
+        except Exception:
+            solo_jobs = solo_jobs.sort_values(["job_id"], kind="mergesort")
         hard_jobs = hard_jobs.sort_values(["job_id"], kind="mergesort")
 
         planned_rows: List[Dict[str, Any]] = []
