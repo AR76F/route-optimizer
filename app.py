@@ -2227,7 +2227,7 @@ def render_page_2():
 
             for i, r in remaining_out.iterrows():
                 # Timeout 30s — l'indicateur OT-impossible est secondaire
-                if time.time() - _ot_flag_start > 30:
+                if time.time() - _ot_flag_start > 10:
                     _ot_flag_timeout = True
                     break
                 try:
@@ -2420,11 +2420,18 @@ def render_page_2():
             return jobs_list
 
     def rebuild_day_greedy(day: str, tech: str, jobs_list: List[Dict[str, Any]],
-                           day_available_min: int, buffer_job: int, max_jobs_per_day: int):
+                           day_available_min: int, buffer_job: int, max_jobs_per_day: int,
+                           _travel_fn=None):
+        """
+        _travel_fn : fonction (a, b) -> int optionnelle.
+        Si fournie (ex: mini-cache local du repair pass), utilisée à la place
+        de travel_min_cached pour éviter les appels API redondants.
+        """
         home_addr = home_map[tech]
         cur = home_addr
         used = 0
         seq = 0
+        _tfn = _travel_fn if _travel_fn is not None else travel_min_cached
         # OR-Tools : optimiser l'ordre si disponible et matrice en cache
         # Sinon le greedy ci-dessous prend le relais naturellement
         optimized = optimize_route_ortools(tech, list(jobs_list))
@@ -2438,14 +2445,14 @@ def render_page_2():
             best_i = None
             best_tmin = None
             for i, jb in enumerate(remaining):
-                tmin = travel_min_cached(cur, jb["adresse"])
+                tmin = _tfn(cur, jb["adresse"])
                 if best_tmin is None or int(tmin) < int(best_tmin):
                     best_tmin = int(tmin)
                     best_i = i
 
             jb = remaining.pop(best_i)
             tmin = int(best_tmin)
-            tback = int(travel_min_cached(jb["adresse"], home_addr))
+            tback = int(_tfn(jb["adresse"], home_addr))
             need = tmin + int(jb["job_min"]) + int(buffer_job) + tback
 
             if used + need > int(day_available_min):
@@ -2484,7 +2491,7 @@ def render_page_2():
                 return None
 
         if seq > 0:
-            tback = int(travel_min_cached(cur, home_addr))
+            tback = int(_tfn(cur, home_addr))
             out_rows.append({
                 "date": day, "technicien": tech, "sequence": seq + 1,
                 "job_id": "RETURN_HOME", "cust": "", "duo": "", "ot": "",
@@ -2553,7 +2560,7 @@ def render_page_2():
 
     def repair_month_plan(planned_rows, tech_names, day_available_min, buffer_job,
                           max_jobs_per_day, threshold_travel_min=50, candidate_techs_top_n=4, max_moves=25,
-                          timeout_seconds=120):
+                          timeout_seconds=30):
         if not planned_rows:
             return planned_rows, {"moves": 0, "attempts": 0, "improved": 0}
 
@@ -2644,8 +2651,8 @@ def render_page_2():
                 if len(dst_list2) > int(max_jobs_per_day):
                     continue
 
-                rebuilt_src = rebuild_day_greedy(day, src_tech, src_list2, day_available_min, buffer_job, max_jobs_per_day)
-                rebuilt_dst = rebuild_day_greedy(day, dst_tech, dst_list2, day_available_min, buffer_job, max_jobs_per_day)
+                rebuilt_src = rebuild_day_greedy(day, src_tech, src_list2, day_available_min, buffer_job, max_jobs_per_day, _travel_fn=_travel)
+                rebuilt_dst = rebuild_day_greedy(day, dst_tech, dst_list2, day_available_min, buffer_job, max_jobs_per_day, _travel_fn=_travel)
                 if rebuilt_src is None or rebuilt_dst is None:
                     continue
 
@@ -2681,7 +2688,7 @@ def render_page_2():
             final_rows.append(r)
 
         for (day, tech), lst in by_day_tech.items():
-            rebuilt = rebuild_day_greedy(day, tech, lst, day_available_min, buffer_job, max_jobs_per_day)
+            rebuilt = rebuild_day_greedy(day, tech, lst, day_available_min, buffer_job, max_jobs_per_day, _travel_fn=_travel)
             if rebuilt is not None:
                 final_rows.extend(rebuilt)
             else:
@@ -3061,7 +3068,7 @@ def render_page_2():
         repair_threshold = st.sidebar.number_input("Seuil travel (min) pour réparer", min_value=20, max_value=120, value=50, step=5, key="p2_repair_thr")
         repair_top_n = st.sidebar.slider("Nb techs candidats (lat/lon)", 2, 6, 4, 1, key="p2_repair_topn")
         repair_max_moves = st.sidebar.slider("Max déplacements (moves)", 0, 80, 25, 5, key="p2_repair_moves")
-        repair_timeout = st.sidebar.number_input("Timeout repair (secondes)", min_value=10, max_value=600, value=120, step=10, key="p2_repair_timeout")
+        repair_timeout = st.sidebar.number_input("Timeout repair (secondes)", min_value=10, max_value=600, value=30, step=10, key="p2_repair_timeout")
 
         run_month = st.button("🚀 Générer le mois (techs imposés)", type="primary", key="p2_run_month_fixed")
 
@@ -3185,7 +3192,7 @@ def render_page_2():
         repair_threshold = st.sidebar.number_input("Seuil travel (min) pour réparer (auto)", min_value=20, max_value=120, value=50, step=5, key="p2_repair_thr_auto")
         repair_top_n = st.sidebar.slider("Nb techs candidats (lat/lon) (auto)", 2, 6, 4, 1, key="p2_repair_topn_auto")
         repair_max_moves = st.sidebar.slider("Max déplacements (moves) (auto)", 0, 80, 25, 5, key="p2_repair_moves_auto")
-        repair_timeout = st.sidebar.number_input("Timeout repair (secondes)", min_value=10, max_value=600, value=120, step=10, key="p2_repair_timeout_auto")
+        repair_timeout = st.sidebar.number_input("Timeout repair (secondes)", min_value=10, max_value=600, value=30, step=10, key="p2_repair_timeout_auto")
 
         run_month = st.button("🚀 Générer le mois (auto)", type="primary", key="p2_run_month_auto")
 
