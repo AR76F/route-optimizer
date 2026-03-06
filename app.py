@@ -1940,10 +1940,11 @@ def render_page_2():
             lock_tech = {t: False for t in tech_names}
 
             # Reconstruire solo_jobs depuis la source en excluant ce qui est déjà planifié
+            # IMPORTANT: NE PAS reset_index — les index doivent correspondre à jobs.index
             solo_jobs = remaining_all[remaining_all["techs_needed"] <= 1].copy()
             solo_jobs = solo_jobs[
                 ~solo_jobs["job_id"].apply(normalize_base_job_id).isin(planned_base_ids)
-            ].reset_index(drop=True)
+            ]
             try:
                 solo_jobs["_n_techs_compat"] = solo_jobs.apply(_count_compatible_techs, axis=1)
                 solo_jobs = solo_jobs.sort_values(["_n_techs_compat", "job_id"], kind="mergesort")
@@ -1954,7 +1955,7 @@ def render_page_2():
             duo_jobs = remaining_all[remaining_all["techs_needed"] == 2].copy() if allow_duo else remaining_all.iloc[0:0].copy()
             duo_jobs = duo_jobs[
                 ~duo_jobs["job_id"].apply(normalize_base_job_id).isin(planned_base_ids)
-            ].reset_index(drop=True)
+            ]
 
             for t in tech_names:
                 if t in carryover_by_tech:
@@ -2087,7 +2088,7 @@ def render_page_2():
 
                         # Filtrer le DataFrame une seule fois si booked_ids non vide
                         if booked_ids:
-                            solo_jobs = solo_jobs[~solo_jobs["job_id"].isin(booked_ids)].reset_index(drop=True)
+                            solo_jobs = solo_jobs[~solo_jobs["job_id"].isin(booked_ids)]
                             booked_ids.clear()
                             if solo_jobs.empty:
                                 break
@@ -2107,6 +2108,12 @@ def render_page_2():
                                 continue
                             tmin = travel_min_cached(cur_loc[t], job["address"])
                             tback = travel_min_cached(job["address"], _home_map[t])
+                            # Fallback haversine si trajet non-caché (9999)
+                            tlat_f, tlon_f = tech_ll_map.get(t, (None, None))
+                            if tmin >= 9999 and tlat_f and jlat:
+                                tmin = min(int(haversine_km(tlat_f, tlon_f, jlat, jlon) * 1.4), 120)
+                            if tback >= 9999 and tlat_f and jlat:
+                                tback = min(int(haversine_km(jlat, jlon, tlat_f, tlon_f) * 1.4), 120)
                             need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
                             if need <= 0:
                                 continue
@@ -2161,6 +2168,11 @@ def render_page_2():
                                     continue
                                 tmin = travel_min_cached(cur_loc[t], job["address"])
                                 tback = travel_min_cached(job["address"], _home_map[t])
+                                tlat_f, tlon_f = tech_ll_map.get(t, (None, None))
+                                if tmin >= 9999 and tlat_f and jlat:
+                                    tmin = min(int(haversine_km(tlat_f, tlon_f, jlat, jlon) * 1.4), 120)
+                                if tback >= 9999 and tlat_f and jlat:
+                                    tback = min(int(haversine_km(jlat, jlon, tlat_f, tlon_f) * 1.4), 120)
                                 need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
                                 if need <= OT_ACTIVE_CAP:
                                     if best_ot_cost is None or int(tmin) < best_ot_cost:
@@ -2220,6 +2232,11 @@ def render_page_2():
                             addr = job["address"]
                             tmin = travel_min_cached(cur_loc[t], addr)
                             tback = travel_min_cached(addr, _home_map[t])
+                            tlat_f, tlon_f = tech_ll_map.get(t, (None, None))
+                            if tmin >= 9999 and tlat_f and jlat:
+                                tmin = min(int(haversine_km(tlat_f, tlon_f, jlat, jlon) * 1.4), 120)
+                            if tback >= 9999 and tlat_f and jlat:
+                                tback = min(int(haversine_km(jlat, jlon, tlat_f, tlon_f) * 1.4), 120)
 
                             # Décision OT-en-une-journée vs split :
                             # Si trajet + job + buffer + retour <= 14h → OT en une journée
@@ -2312,7 +2329,7 @@ def render_page_2():
 
                 # Appliquer les booked_ids restants au DataFrame
                 if booked_ids:
-                    solo_jobs = solo_jobs[~solo_jobs["job_id"].isin(booked_ids)].reset_index(drop=True)
+                    solo_jobs = solo_jobs[~solo_jobs["job_id"].isin(booked_ids)]
 
             # RETURN_HOME
             for t in tech_names:
