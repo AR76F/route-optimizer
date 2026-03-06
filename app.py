@@ -1102,9 +1102,12 @@ def render_page_2():
             d += timedelta(days=1)
         return out
 
+    DAY_START_MIN = 480  # 08:00
+
     def mm_to_hhmm(m: int) -> str:
-        h = m // 60
-        mm = m % 60
+        total = int(m) + DAY_START_MIN
+        h = total // 60
+        mm = total % 60
         return f"{h:02d}:{mm:02d}"
 
     # ────────────────────────────────────────────────────────────────
@@ -1140,7 +1143,7 @@ def render_page_2():
     cache_days = st.sidebar.number_input("Conserver cache (jours)", min_value=1, max_value=365, value=30, step=1, key="p2_cache_days")
 
     st.sidebar.subheader("🧭 Préfiltrage géographique")
-    solo_pool = st.sidebar.slider("SOLO: nb de jobs candidats (pool)", 10, 200, 60, 10, key="p2_solo_pool")
+    solo_pool = st.sidebar.slider("SOLO: nb de jobs candidats (pool)", 10, 300, 150, 10, key="p2_solo_pool")
     duo_pool = st.sidebar.slider("DUO: nb de jobs candidats (pool)", 10, 300, 80, 10, key="p2_duo_pool")
     techs_near_job = st.sidebar.slider("DUO: nb de techs proches à tester", 2, 6, 4, 1, key="p2_duo_near_techs")
     include_nearby_fsa = st.sidebar.checkbox("Inclure FSA voisins si peu de candidats", value=True, key="p2_include_nearby_fsa")
@@ -3420,20 +3423,28 @@ def render_page_2():
                     timeout_msg = " ⏱️ timeout" if rep_stats.get("timeout") else ""
                     st.sidebar.caption(f"Repair: moves={rep_stats['moves']} | attempts={rep_stats['attempts']} | improved={rep_stats['improved']}{timeout_msg}")
 
-                # ── Déduplication finale: un job = une seule ligne (sauf RETURN_HOME et splits légitimes)
+                # ── Déduplication finale: un job = une seule ligne
+                # Passe 1: dédupliquer les jobs (pas RETURN_HOME)
                 _dedup_seen: set = set()
                 _dedup_rows = []
                 for _r in result["rows"]:
                     _jid = str(_r.get("job_id", ""))
                     if _jid.upper() == "RETURN_HOME":
-                        _dedup_rows.append(_r)
-                        continue
+                        continue  # on retraitera les RETURN_HOME après
                     _base = normalize_base_job_id(_jid)
                     _is_split = bool(re.search(r"\(PART\s+\d+/\d+\)", _jid))
                     _key = (_r.get("date",""), _r.get("technicien",""), _base) if _is_split else _base
                     if _key not in _dedup_seen:
                         _dedup_seen.add(_key)
                         _dedup_rows.append(_r)
+                # Passe 2: ne garder RETURN_HOME que si le tech a ≥1 job ce jour-là
+                _active_dt = set(
+                    (_r.get("date",""), _r.get("technicien","")) for _r in _dedup_rows
+                )
+                for _r in result["rows"]:
+                    if str(_r.get("job_id","")).upper() == "RETURN_HOME":
+                        if (_r.get("date",""), _r.get("technicien","")) in _active_dt:
+                            _dedup_rows.append(_r)
                 result["rows"] = _dedup_rows
 
                 st.session_state["planning_month_rows"] = result["rows"]
@@ -3613,7 +3624,6 @@ def render_page_2():
                 for _r in best["rows"]:
                     _jid = str(_r.get("job_id", ""))
                     if _jid.upper() == "RETURN_HOME":
-                        _dedup_rows2.append(_r)
                         continue
                     _base = normalize_base_job_id(_jid)
                     _is_split = bool(re.search(r"\(PART\s+\d+/\d+\)", _jid))
@@ -3621,6 +3631,13 @@ def render_page_2():
                     if _key not in _dedup_seen2:
                         _dedup_seen2.add(_key)
                         _dedup_rows2.append(_r)
+                _active_dt2 = set(
+                    (_r.get("date",""), _r.get("technicien","")) for _r in _dedup_rows2
+                )
+                for _r in best["rows"]:
+                    if str(_r.get("job_id","")).upper() == "RETURN_HOME":
+                        if (_r.get("date",""), _r.get("technicien","")) in _active_dt2:
+                            _dedup_rows2.append(_r)
                 best["rows"] = _dedup_rows2
             st.session_state["planning_month_rows"] = best["rows"] if best else []
             st.session_state["planning_month_success"] = best["success"] if best else False
