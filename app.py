@@ -1939,6 +1939,23 @@ def render_page_2():
             jobs_count = {t: 0 for t in tech_names}
             lock_tech = {t: False for t in tech_names}
 
+            # Reconstruire solo_jobs depuis la source en excluant ce qui est déjà planifié
+            solo_jobs = remaining_all[remaining_all["techs_needed"] <= 1].copy()
+            solo_jobs = solo_jobs[
+                ~solo_jobs["job_id"].apply(normalize_base_job_id).isin(planned_base_ids)
+            ].reset_index(drop=True)
+            try:
+                solo_jobs["_n_techs_compat"] = solo_jobs.apply(_count_compatible_techs, axis=1)
+                solo_jobs = solo_jobs.sort_values(["_n_techs_compat", "job_id"], kind="mergesort")
+                solo_jobs = solo_jobs.drop(columns=["_n_techs_compat"])
+            except Exception:
+                solo_jobs = solo_jobs.sort_values(["job_id"], kind="mergesort")
+
+            duo_jobs = remaining_all[remaining_all["techs_needed"] == 2].copy() if allow_duo else remaining_all.iloc[0:0].copy()
+            duo_jobs = duo_jobs[
+                ~duo_jobs["job_id"].apply(normalize_base_job_id).isin(planned_base_ids)
+            ].reset_index(drop=True)
+
             for t in tech_names:
                 if t in carryover_by_tech:
                     _book_split_part_for_tech(day, t, used, cur_loc, jobs_count, lock_tech, carryover_by_tech[t])
