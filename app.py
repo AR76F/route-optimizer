@@ -231,7 +231,19 @@ def reverse_geocode(lat: float, lon: float) -> str:
 # (remplace _norm_base ET _normalize_base_job_id dupliquées)
 # ────────────────────────────────────────────────────────────────
 def normalize_base_job_id(jid: str) -> str:
-    return re.sub(r"\s*\(PART\s+\d+/\d+\)\s*$", "", str(jid)).strip()
+    """Normalise un job_id: enlève PART X/Y et convertit float→int (ex: '347745.0' → '347745')"""
+    s = str(jid).strip()
+    # Convertir float string en int string: "347745.0" → "347745"
+    try:
+        if s.endswith('.0') and s[:-2].isdigit():
+            s = s[:-2]
+        elif '.' in s:
+            f = float(s.split('(')[0].strip())
+            if f == int(f):
+                s = str(int(f)) + (s[s.index('('):] if '(' in s else '')
+    except Exception:
+        pass
+    return re.sub(r"\s*\(PART\s+\d+/\d+\)\s*$", "", s).strip()
 
 # ────────────────────────────────────────────────────────────────
 # [FAIBLE-3] _choose_onsite_no_crumbs — une seule fonction au niveau module
@@ -1137,7 +1149,8 @@ def render_page_2():
     st.sidebar.caption("À utiliser si vous changez la logique des zones ou après une mise à jour.")
     if st.sidebar.button("\U0001f504 Recalculer zones géo (techs + jobs)", key="p2_reset_geo_cache"):
         st.session_state.pop("p2_ll_cache", None)
-        compute_tech_maps.clear()
+        # compute_tech_maps est défini plus bas - vider via session_state flag
+        st.session_state["p2_reset_tech_maps"] = True
         st.success("\u2705 Cache zones vidé — secteurs recalculés au prochain run.")
         st.rerun()
 
@@ -1530,6 +1543,13 @@ def render_page_2():
     home_map = {t: tech_df.loc[tech_df["tech_name"] == t, "home_address"].iloc[0] for t in tech_names_all}
 
     # [ÉLEVÉ-2] Coordonnées des techs cachées — recalculées uniquement si TECH_HOME change
+    # Vider le cache si demandé via le bouton sidebar
+    if st.session_state.pop("p2_reset_tech_maps", False):
+        try:
+            compute_tech_maps.clear()
+        except Exception:
+            pass
+
     @st.cache_data(show_spinner=False)
     def compute_tech_maps(home_map_items: tuple) -> Tuple[Dict, Dict]:
         """
@@ -3400,6 +3420,22 @@ def render_page_2():
                     timeout_msg = " ⏱️ timeout" if rep_stats.get("timeout") else ""
                     st.sidebar.caption(f"Repair: moves={rep_stats['moves']} | attempts={rep_stats['attempts']} | improved={rep_stats['improved']}{timeout_msg}")
 
+                # ── Déduplication finale: un job = une seule ligne (sauf RETURN_HOME et splits légitimes)
+                _dedup_seen: set = set()
+                _dedup_rows = []
+                for _r in result["rows"]:
+                    _jid = str(_r.get("job_id", ""))
+                    if _jid.upper() == "RETURN_HOME":
+                        _dedup_rows.append(_r)
+                        continue
+                    _base = normalize_base_job_id(_jid)
+                    _is_split = bool(re.search(r"\(PART\s+\d+/\d+\)", _jid))
+                    _key = (_r.get("date",""), _r.get("technicien",""), _base) if _is_split else _base
+                    if _key not in _dedup_seen:
+                        _dedup_seen.add(_key)
+                        _dedup_rows.append(_r)
+                result["rows"] = _dedup_rows
+
                 st.session_state["planning_month_rows"] = result["rows"]
                 st.session_state["planning_month_success"] = result["success"]
                 st.session_state["planning_month_mode"] = "fixed"
@@ -3570,6 +3606,22 @@ def render_page_2():
                     f"**Total post: {timing.get('total_post_s','?')}s**"
                 )
 
+            # ── Déduplication finale mode auto
+            if best and best.get("rows"):
+                _dedup_seen2: set = set()
+                _dedup_rows2 = []
+                for _r in best["rows"]:
+                    _jid = str(_r.get("job_id", ""))
+                    if _jid.upper() == "RETURN_HOME":
+                        _dedup_rows2.append(_r)
+                        continue
+                    _base = normalize_base_job_id(_jid)
+                    _is_split = bool(re.search(r"\(PART\s+\d+/\d+\)", _jid))
+                    _key = (_r.get("date",""), _r.get("technicien",""), _base) if _is_split else _base
+                    if _key not in _dedup_seen2:
+                        _dedup_seen2.add(_key)
+                        _dedup_rows2.append(_r)
+                best["rows"] = _dedup_rows2
             st.session_state["planning_month_rows"] = best["rows"] if best else []
             st.session_state["planning_month_success"] = best["success"] if best else False
             st.session_state["planning_month_mode"] = "auto"
