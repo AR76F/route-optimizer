@@ -1933,6 +1933,9 @@ def render_page_2():
                     sample = duo_jobs.head(int(duo_pool)) if len(duo_jobs) > int(duo_pool) else duo_jobs
 
                     for jidx, job in sample.iterrows():
+                        # Déduplication inter-jours DUO
+                        if normalize_base_job_id(str(job["job_id"])) in planned_base_ids:
+                            continue
                         addr = job["address"]
                         job_min_total = int(job["job_minutes"])
                         job_min_each = int(math.ceil(job_min_total / 2.0))
@@ -2056,6 +2059,9 @@ def render_page_2():
                         sample = get_job_pool_for_tech(solo_jobs, t, int(solo_pool))
 
                         for idx, job in sample.iterrows():
+                            # Déduplication inter-jours : skip si déjà planifié
+                            if normalize_base_job_id(str(job["job_id"])) in planned_base_ids:
+                                continue
                             jlat, jlon, jsec = ensure_job_ll_master(jobs, idx) if idx in jobs.index else (*get_ll_for_address(job.get("address","")), classify_sector(*get_ll_for_address(job.get("address",""))))
                             if not sector_compatible(_tech_sector.get(t, "UNK"), jsec):
                                 continue
@@ -2108,6 +2114,8 @@ def render_page_2():
                             best_ot_tmin = None
 
                             for idx, job in sample.iterrows():
+                                if normalize_base_job_id(str(job["job_id"])) in planned_base_ids:
+                                    continue
                                 jlat, jlon, jsec = ensure_job_ll_master(jobs, idx) if idx in jobs.index else (*get_ll_for_address(job.get("address","")), classify_sector(*get_ll_for_address(job.get("address",""))))
                                 if not sector_compatible(_tech_sector.get(t, "UNK"), jsec):
                                     continue
@@ -2162,6 +2170,8 @@ def render_page_2():
                             if jm <= int(daily_onsite_cap):
                                 continue
                             if t in carryover_by_tech:
+                                continue
+                            if normalize_base_job_id(str(job["job_id"])) in planned_base_ids:
                                 continue
                             jlat, jlon, jsec = ensure_job_ll_master(jobs, idx) if idx in jobs.index else (*get_ll_for_address(job.get("address","")), classify_sector(*get_ll_for_address(job.get("address",""))))
                             if not sector_compatible(_tech_sector.get(t, "UNK"), jsec):
