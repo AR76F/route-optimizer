@@ -2152,6 +2152,15 @@ def render_page_2():
                             cur_loc[t] = job["address"]
                             booked_ids.add(job["job_id"])
                             made_progress = True
+                            # Prioritize same-customer jobs next iteration
+                            _booked_cust = str(job.get("cust", ""))
+                            if _booked_cust and not solo_jobs.empty and "cust" in solo_jobs.columns:
+                                _same_cust = solo_jobs["cust"].astype(str) == _booked_cust
+                                if _same_cust.any():
+                                    solo_jobs = pd.concat([
+                                        solo_jobs[_same_cust],
+                                        solo_jobs[~_same_cust]
+                                    ])
                             continue
 
                         # OT single-job day
@@ -3093,6 +3102,166 @@ def render_page_2():
         return final_rows, stats
 
     # [MOYEN-3] Integrity check — sets stockés dans session_state, pas recalculés
+
+    def build_export_excel(df: pd.DataFrame) -> bytes:
+        """
+        Builds a styled Excel file from the planning DataFrame.
+        Splits last_inspection into 3 columns and applies date-based color coding.
+        """
+        import openpyxl
+        from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+        from openpyxl import Workbook
+        from datetime import datetime, date
+        import re as _re
+
+        today = date.today()
+
+        def parse_last_insp(val):
+            """'Z8-343964 // FULL SERVICE // 05-JAN-2026' → (wo, svc, date_str)"""
+            s = str(val or "").strip()
+            if not s or s == "nan":
+                return "", "", ""
+            parts = [p.strip() for p in s.split("//")]
+            wo  = parts[0] if len(parts) > 0 else ""
+            svc = parts[1] if len(parts) > 1 else ""
+            dt  = parts[2] if len(parts) > 2 else ""
+            return wo, svc, dt
+
+        def date_color(date_str):
+            """Returns (bg_hex, font_hex) based on date distance from today."""
+            s = str(date_str or "").strip()
+            if not s:
+                return None, None
+            for fmt in ("%d-%b-%Y", "%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"):
+                try:
+                    dt = datetime.strptime(s, fmt).date()
+                    diff = (dt - today).days
+                    if diff < -180:          # > 6 months ago → brown + white text
+                        return "7B4A2D", "FFFFFF"
+                    elif diff < 120:         # < 4 months from now → grey
+                        return "CCCCCC", "000000"
+                    elif diff < 150:         # 4-5 months → pink
+                        return "FFB6C1", "000000"
+                    elif diff < 180:         # 5-6 months → orange
+                        return "FFA500", "000000"
+                    else:
+                        return None, None
+                except ValueError:
+                    continue
+            return None, None
+
+        # Build output columns — replace last_inspection with 3 cols
+        out_df = df.copy()
+        if "last_inspection" in out_df.columns:
+            parsed = out_df["last_inspection"].apply(parse_last_insp)
+            out_df.insert(out_df.columns.get_loc("last_inspection"),     "insp_wo",   parsed.apply(lambda x: x[0]))
+            out_df.insert(out_df.columns.get_loc("last_inspection") + 1, "insp_type", parsed.apply(lambda x: x[1]))
+            out_df.insert(out_df.columns.get_loc("last_inspection") + 2, "insp_date", parsed.apply(lambda x: x[2]))
+            out_df = out_df.drop(columns=["last_inspection"])
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Planning"
+
+        # Header row
+        header_fill = PatternFill("solid", fgColor="2C3E50")
+        header_font = Font(bold=True, color="FFFFFF", size=10)
+        header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        thin = Side(style="thin", color="CCCCCC")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+        # Rename columns for display
+        col_labels = {
+            "date": "Date", "technicien": "Technicien", "sequence": "Seq",
+            "job_id": "Job ID", "cust": "Client", "duo": "DUO", "ot": "OT",
+            "debut": "Début", "fin": "Fin", "adresse": "Adresse",
+            "travel_min": "Trajet (min)", "job_min": "Job (min)", "buffer_min": "Buffer (min)",
+            "techs_needed": "Techs", "unit": "Unité", "serial_number": "Série",
+            "difference": "Différence", "description": "Description",
+            "insp_wo": "Insp. WO#", "insp_type": "Insp. Type", "insp_date": "Insp. Date",
+        }
+
+        cols = list(out_df.columns)
+        for ci, col in enumerate(cols, 1):
+            cell = ws.cell(row=1, column=ci, value=col_labels.get(col, col))
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = header_align
+            cell.border = border
+
+        ws.row_dimensions[1].height = 30
+
+        # Data rows
+        insp_date_col_idx = cols.index("insp_date") + 1 if "insp_date" in cols else None
+        ot_col_idx = cols.index("ot") + 1 if "ot" in cols else None
+        duo_col_idx = cols.index("duo") + 1 if "duo" in cols else None
+        rh_col_idx = cols.index("job_id") + 1 if "job_id" in cols else None
+
+        for ri, (_, row) in enumerate(out_df.iterrows(), 2):
+            is_return_home = str(row.get("job_id", "")).upper() == "RETURN_HOME"
+            is_ot = bool(str(row.get("ot", "")).strip())
+            is_duo = bool(str(row.get("duo", "")).strip())
+
+            # Row base color
+            if is_return_home:
+                row_bg = "F0F0F0"
+                row_font_color = "888888"
+            elif is_ot:
+                row_bg = "F8D7DA"
+                row_font_color = "000000"
+            elif is_duo:
+                row_bg = "D4EDDA"
+                row_font_color = "000000"
+            elif ri % 2 == 0:
+                row_bg = "FAFAFA"
+                row_font_color = "000000"
+            else:
+                row_bg = "FFFFFF"
+                row_font_color = "000000"
+
+            row_fill = PatternFill("solid", fgColor=row_bg)
+            row_font = Font(color=row_font_color, size=9)
+
+            for ci, col in enumerate(cols, 1):
+                val = row[col]
+                if hasattr(val, "item"):
+                    val = val.item()
+                cell = ws.cell(row=ri, column=ci, value=val if str(val) != "nan" else "")
+                cell.border = border
+                cell.alignment = Alignment(vertical="center", wrap_text=(col == "description"))
+
+                # insp_date special color
+                if ci == insp_date_col_idx and not is_return_home:
+                    bg, fg = date_color(val)
+                    if bg:
+                        cell.fill = PatternFill("solid", fgColor=bg)
+                        cell.font = Font(color=fg, size=9, bold=True)
+                    else:
+                        cell.fill = row_fill
+                        cell.font = row_font
+                else:
+                    cell.fill = row_fill
+                    cell.font = row_font
+
+        # Column widths
+        col_widths = {
+            "date": 12, "technicien": 22, "sequence": 5, "job_id": 14,
+            "cust": 10, "duo": 6, "ot": 6, "debut": 8, "fin": 8,
+            "adresse": 35, "travel_min": 10, "job_min": 10, "buffer_min": 10,
+            "techs_needed": 7, "unit": 10, "serial_number": 14, "difference": 12,
+            "description": 40, "insp_wo": 14, "insp_type": 18, "insp_date": 14,
+        }
+        for ci, col in enumerate(cols, 1):
+            ws.column_dimensions[openpyxl.utils.get_column_letter(ci)].width = col_widths.get(col, 14)
+
+        # Freeze panes (header + date + tech)
+        ws.freeze_panes = "D2"
+
+        from io import BytesIO as _BytesIO
+        buf = _BytesIO()
+        wb.save(buf)
+        return buf.getvalue()
+
     def render_integrity_check_bookable(initial_ids_set: set):
         # Recalcul uniquement si les rows ont changé (via longueur comme proxy rapide)
         cache_key = "integrity_cache"
@@ -3549,6 +3718,18 @@ def render_page_2():
                     if duo_left > 0:
                         st.warning(f"⚠️ Jobs DUO restants (techs_needed=2): {duo_left}")
 
+            # ── Excel Export ──
+            st.subheader("📥 Exporter en Excel")
+            _ts = pd.Timestamp.now().strftime("%Y-%m-%dT%H-%M")
+            _excel_bytes = build_export_excel(month_df)
+            st.download_button(
+                label="⬇️ Télécharger le planning (.xlsx)",
+                data=_excel_bytes,
+                file_name=f"{_ts}_planning.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_fixed"
+            )
+
             render_integrity_check_bookable(initial_bookable_job_ids)
 
     # ════════════════════════════════════════════════════════════════
@@ -3730,6 +3911,18 @@ def render_page_2():
                     duo_left = int((unplanned_df["techs_needed"].astype(int) == 2).sum())
                     if duo_left > 0:
                         st.warning(f"⚠️ Jobs DUO restants (techs_needed=2): {duo_left}")
+
+            # ── Excel Export ──
+            st.subheader("📥 Exporter en Excel")
+            _ts2 = pd.Timestamp.now().strftime("%Y-%m-%dT%H-%M")
+            _excel_bytes2 = build_export_excel(month_df)
+            st.download_button(
+                label="⬇️ Télécharger le planning (.xlsx)",
+                data=_excel_bytes2,
+                file_name=f"{_ts2}_planning.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_auto"
+            )
 
             render_integrity_check_bookable(initial_bookable_job_ids)
 
