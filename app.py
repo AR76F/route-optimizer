@@ -1169,6 +1169,44 @@ def render_page_2():
     if "p2_cache_hits" not in st.session_state:
         st.session_state["p2_cache_hits"] = 0
 
+    def travel_min_estimate(origin_addr: str, dest_addr: str,
+                            origin_lat=None, origin_lon=None,
+                            dest_lat=None, dest_lon=None) -> int:
+        """
+        Estimation rapide du temps de trajet via haversine × 1.5 (facteur urbain).
+        ZÉRO appel API. Utilisé pendant l'évaluation des candidats dans le greedy.
+        L'API réelle est appelée seulement au moment du booking final.
+        Retourne 9999 si coordonnées inconnues.
+        """
+        try:
+            # Essayer d'abord depuis le cache SQLite sans appel API
+            k = _key(origin_addr, dest_addr, use_traffic)
+            now = int(time.time())
+            min_ts = now - int(cache_days) * 86400
+            conn = _get_db()
+            row = conn.cursor().execute(
+                "SELECT minutes FROM travel WHERE k=? AND ts>=?", (k, min_ts)
+            ).fetchone()
+            if row:
+                return int(row[0])
+        except Exception:
+            pass
+
+        # Pas en cache → haversine
+        try:
+            if origin_lat is None or origin_lon is None:
+                origin_lat, origin_lon = get_ll_for_address(origin_addr)
+            if dest_lat is None or dest_lon is None:
+                dest_lat, dest_lon = get_ll_for_address(dest_addr)
+            if origin_lat and dest_lat:
+                km = haversine_km(float(origin_lat), float(origin_lon),
+                                  float(dest_lat), float(dest_lon))
+                # Facteur 1.5 pour routes urbaines, minimum 5 min
+                return max(5, int(km * 1.5))
+        except Exception:
+            pass
+        return 60  # fallback raisonnable (1h) plutôt que 9999
+
     def travel_min_cached(origin: str, dest: str) -> int:
         """
         Retourne le temps de trajet en minutes entre origin et dest.
@@ -1524,10 +1562,13 @@ def render_page_2():
 
     # Matrice de compatibilité tech_zone → job_zone autorisés
     _SECTOR_COMPAT: Dict[str, set] = {
+        # Règle fondamentale: personne au sud du fleuve ne traverse vers le nord
+        # RIVE_NORD/ZONE_NORD (Tremblant, Saint-Jérôme, Lachute…) réservés
+        # aux techs qui habitent déjà au nord du fleuve.
         "RIVE_NORD":      {"RIVE_NORD", "MTL_ILE", "RIVE_SUD_OUEST", "ZONE_NORD", "UNK"},
-        "MTL_ILE":        {"RIVE_NORD", "MTL_ILE", "RIVE_SUD", "RIVE_SUD_OUEST", "ZONE_EST", "ZONE_NORD", "UNK"},
-        "RIVE_SUD":       {"MTL_ILE", "RIVE_SUD", "RIVE_SUD_OUEST", "ZONE_EST", "ZONE_NORD", "UNK"},
-        "RIVE_SUD_OUEST": {"MTL_ILE", "RIVE_SUD", "RIVE_SUD_OUEST", "ZONE_EST", "ZONE_NORD", "UNK"},
+        "MTL_ILE":        {"MTL_ILE", "RIVE_SUD", "RIVE_SUD_OUEST", "ZONE_EST", "UNK"},
+        "RIVE_SUD":       {"MTL_ILE", "RIVE_SUD", "RIVE_SUD_OUEST", "ZONE_EST", "UNK"},
+        "RIVE_SUD_OUEST": {"MTL_ILE", "RIVE_SUD", "RIVE_SUD_OUEST", "ZONE_EST", "UNK"},
         "ZONE_EST":       {"MTL_ILE", "RIVE_SUD", "ZONE_EST", "UNK"},
         "ZONE_NORD":      {"RIVE_NORD", "MTL_ILE", "RIVE_SUD_OUEST", "ZONE_NORD", "UNK"},
         "UNK":            {"RIVE_NORD", "MTL_ILE", "RIVE_SUD", "RIVE_SUD_OUEST", "ZONE_EST", "ZONE_NORD", "UNK"},
@@ -2033,8 +2074,9 @@ def render_page_2():
 
                                 duo_is_overtime = False
                                 if int(job_min_each) > int(daily_onsite_cap):
-                                    _duo_tmin = travel_min_cached(cur_loc[t1], job["address"])
-                                    _duo_tback = travel_min_cached(job["address"], _home_map[t1])
+                                    _t1lat, _t1lon = tech_ll_map.get(t1, (None, None))
+                                    _duo_tmin = travel_min_estimate(cur_loc[t1], job["address"], _t1lat, _t1lon, jlat, jlon)
+                                    _duo_tback = travel_min_estimate(job["address"], _home_map[t1], jlat, jlon, _t1lat, _t1lon)
                                     _duo_need = _duo_tmin + int(job_min_each) + int(buffer_job) + _duo_tback
                                     if _duo_need <= int(OT_ACTIVE_CAP):
                                         if jobs_count[t1] != 0 or jobs_count[t2] != 0:
@@ -2043,13 +2085,15 @@ def render_page_2():
                                     else:
                                         continue
 
-                                t1_tr = travel_min_cached(cur_loc[t1], addr)
-                                t2_tr = travel_min_cached(cur_loc[t2], addr)
+                                _t1lat, _t1lon = tech_ll_map.get(t1, (None, None))
+                                _t2lat, _t2lon = tech_ll_map.get(t2, (None, None))
+                                t1_tr = travel_min_estimate(cur_loc[t1], addr, _t1lat, _t1lon, jlat, jlon)
+                                t2_tr = travel_min_estimate(cur_loc[t2], addr, _t2lat, _t2lon, jlat, jlon)
                                 start_m = max(used[t1] + int(t1_tr), used[t2] + int(t2_tr))
                                 end_m = start_m + int(need_block)
 
-                                t1_back = travel_min_cached(addr, _home_map[t1])
-                                t2_back = travel_min_cached(addr, _home_map[t2])
+                                t1_back = travel_min_estimate(addr, _home_map[t1], jlat, jlon, _t1lat, _t1lon)
+                                t2_back = travel_min_estimate(addr, _home_map[t2], jlat, jlon, _t2lat, _t2lon)
 
                                 if (end_m + int(t1_back) <= available) and (end_m + int(t2_back) <= available):
                                     score = (start_m, max(int(t1_tr), int(t2_tr)))
@@ -2065,8 +2109,15 @@ def render_page_2():
                     if best is None:
                         break
 
-                    _, jidx, t1, t2, start_m, end_m, t1_tr, t2_tr, duo_is_overtime, job_min_each = best
+                    _, jidx, t1, t2, start_m, end_m, t1_tr_est, t2_tr_est, duo_is_overtime, job_min_each = best
                     job = duo_jobs.loc[jidx]
+                    # Recalculer trajets réels pour le booking final
+                    t1_tr = travel_min_cached(cur_loc[t1], job["address"])
+                    t2_tr = travel_min_cached(cur_loc[t2], job["address"])
+                    if t1_tr >= 9999: t1_tr = t1_tr_est
+                    if t2_tr >= 9999: t2_tr = t2_tr_est
+                    start_m = max(used[t1] + int(t1_tr), used[t2] + int(t2_tr))
+                    end_m = start_m + int(job_min_each) + int(buffer_job)
 
                     for tname, trv in [(t1, t1_tr), (t2, t2_tr)]:
                         jobs_count[tname] += 1
@@ -2144,14 +2195,9 @@ def render_page_2():
                             jlat, jlon, jsec = ensure_job_ll_master(jobs, idx) if idx in jobs.index else (*get_ll_for_address(job.get("address","")), classify_sector(*get_ll_for_address(job.get("address",""))))
                             if not sector_compatible(_tech_sector.get(t, "UNK"), jsec):
                                 continue
-                            tmin = travel_min_cached(cur_loc[t], job["address"])
-                            tback = travel_min_cached(job["address"], _home_map[t])
-                            # Fallback haversine si trajet non-caché (9999)
                             tlat_f, tlon_f = tech_ll_map.get(t, (None, None))
-                            if tmin >= 9999 and tlat_f and jlat:
-                                tmin = min(int(haversine_km(tlat_f, tlon_f, jlat, jlon) * 1.4), 120)
-                            if tback >= 9999 and tlat_f and jlat:
-                                tback = min(int(haversine_km(jlat, jlon, tlat_f, tlon_f) * 1.4), 120)
+                            tmin = travel_min_estimate(cur_loc[t], job["address"], tlat_f, tlon_f, jlat, jlon)
+                            tback = travel_min_estimate(job["address"], _home_map[t], jlat, jlon, tlat_f, tlon_f)
                             need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
                             if need <= 0:
                                 continue
@@ -2164,7 +2210,11 @@ def render_page_2():
                         if best_idx is not None:
                             job = jobs.loc[best_idx] if best_idx in jobs.index else solo_jobs.loc[best_idx]
                             jobs_count[t] += 1
-                            start_m = used[t] + int(best_tmin)
+                            # Recalculer avec API pour avoir l'heure précise dans le planning
+                            best_tmin_real = travel_min_cached(cur_loc[t], job["address"])
+                            if best_tmin_real >= 9999:
+                                best_tmin_real = best_tmin  # fallback haversine
+                            start_m = used[t] + int(best_tmin_real)
                             end_m = start_m + int(job["job_minutes"]) + int(buffer_job)
 
                             planned_rows.append({
@@ -2178,7 +2228,7 @@ def render_page_2():
                                 "debut": mm_to_hhmm(int(start_m)),
                                 "fin": mm_to_hhmm(int(end_m)),
                                 "adresse": job["address"],
-                                "travel_min": int(best_tmin),
+                                "travel_min": int(best_tmin_real),
                                 "job_min": int(job["job_minutes"]),
                                 "buffer_min": int(buffer_job),
                                 "techs_needed": int(job["techs_needed"]),
@@ -2213,13 +2263,9 @@ def render_page_2():
                                 jlat, jlon, jsec = ensure_job_ll_master(jobs, idx) if idx in jobs.index else (*get_ll_for_address(job.get("address","")), classify_sector(*get_ll_for_address(job.get("address",""))))
                                 if not sector_compatible(_tech_sector.get(t, "UNK"), jsec):
                                     continue
-                                tmin = travel_min_cached(cur_loc[t], job["address"])
-                                tback = travel_min_cached(job["address"], _home_map[t])
                                 tlat_f, tlon_f = tech_ll_map.get(t, (None, None))
-                                if tmin >= 9999 and tlat_f and jlat:
-                                    tmin = min(int(haversine_km(tlat_f, tlon_f, jlat, jlon) * 1.4), 120)
-                                if tback >= 9999 and tlat_f and jlat:
-                                    tback = min(int(haversine_km(jlat, jlon, tlat_f, tlon_f) * 1.4), 120)
+                                tmin = travel_min_estimate(cur_loc[t], job["address"], tlat_f, tlon_f, jlat, jlon)
+                                tback = travel_min_estimate(job["address"], _home_map[t], jlat, jlon, tlat_f, tlon_f)
                                 need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
                                 if need <= OT_ACTIVE_CAP:
                                     if best_ot_cost is None or int(tmin) < best_ot_cost:
@@ -2277,13 +2323,9 @@ def render_page_2():
                                 continue
 
                             addr = job["address"]
-                            tmin = travel_min_cached(cur_loc[t], addr)
-                            tback = travel_min_cached(addr, _home_map[t])
                             tlat_f, tlon_f = tech_ll_map.get(t, (None, None))
-                            if tmin >= 9999 and tlat_f and jlat:
-                                tmin = min(int(haversine_km(tlat_f, tlon_f, jlat, jlon) * 1.4), 120)
-                            if tback >= 9999 and tlat_f and jlat:
-                                tback = min(int(haversine_km(jlat, jlon, tlat_f, tlon_f) * 1.4), 120)
+                            tmin = travel_min_estimate(cur_loc[t], addr, tlat_f, tlon_f, jlat, jlon)
+                            tback = travel_min_estimate(addr, _home_map[t], jlat, jlon, tlat_f, tlon_f)
 
                             # Décision OT-en-une-journée vs split :
                             # Si trajet + job + buffer + retour <= 14h → OT en une journée
@@ -2592,10 +2634,13 @@ def render_page_2():
                         if cur_count >= int(max_jobs_per_day):
                             continue
 
-                        # Utiliser domicile comme point de départ — toujours en cache
-                        # (légèrement conservateur mais évite tout appel API)
-                        tmin = travel_min_cached(home_addr, addr)
-                        tback = travel_min_cached(addr, home_addr)
+                        # Utiliser estimate pour l'évaluation backfill (0 appel API)
+                        # travel_min_cached est appelé uniquement au booking final
+                        _t_blat, _t_blon = tech_ll_map.get(t, (None, None))
+                        _j_blat = jobs.at[jidx, "job_lat"] if jidx in jobs.index and "job_lat" in jobs.columns else None
+                        _j_blon = jobs.at[jidx, "job_lon"] if jidx in jobs.index and "job_lon" in jobs.columns else None
+                        tmin = travel_min_estimate(home_addr, addr, _t_blat, _t_blon, _j_blat, _j_blon)
+                        tback = travel_min_estimate(addr, home_addr, _j_blat, _j_blon, _t_blat, _t_blon)
                         need = int(tmin) + int(jm) + int(buffer_job) + int(tback)
 
                         # Rentre dans la journée normale?
@@ -2607,7 +2652,12 @@ def render_page_2():
                             continue
 
                         # Booker ce job
-                        start_m = cur_used + int(tmin)
+                        # Recalculer avec API pour l'heure précise au booking
+                        tmin_real = travel_min_cached(home_addr, addr)
+                        if tmin_real >= 9999: tmin_real = tmin
+                        tback_real = travel_min_cached(addr, home_addr)
+                        if tback_real >= 9999: tback_real = tback
+                        start_m = cur_used + int(tmin_real)
                         end_m = start_m + int(jm) + int(buffer_job)
                         ot_flag = "🟥 OT" if fits_ot and not fits_normal else ""
 
@@ -2745,13 +2795,22 @@ def render_page_2():
         # Construire la matrice depuis SQLite (tout doit être en cache)
         matrix = []
         has_missing = False
+        # Coordonnées pour haversine dans la matrice OR-Tools
+        _locs_ll = []
+        for _loc in all_locs:
+            _ll = get_ll_for_address(_loc) if _loc else (None, None)
+            _locs_ll.append(_ll)
+
         for i in range(n):
             row_m = []
             for j in range(n):
                 if i == j:
                     row_m.append(0)
                 else:
-                    v = travel_min_cached(all_locs[i], all_locs[j])
+                    # Vérifier le cache SQLite d'abord, puis haversine
+                    _ilat, _ilon = _locs_ll[i]
+                    _jlat, _jlon = _locs_ll[j]
+                    v = travel_min_estimate(all_locs[i], all_locs[j], _ilat, _ilon, _jlat, _jlon)
                     if v >= 9999:
                         has_missing = True
                     row_m.append(int(v))
@@ -2813,7 +2872,7 @@ def render_page_2():
         cur = home_addr
         used = 0
         seq = 0
-        _tfn = _travel_fn if _travel_fn is not None else travel_min_cached
+        _tfn = _travel_fn if _travel_fn is not None else travel_min_estimate
         # OR-Tools : seulement si appelé directement (pas depuis repair)
         # Dans repair, _travel_fn est fourni — on skip OR-Tools pour éviter
         # de reconstruire une matrice complète à chaque rebuild testé
@@ -2896,7 +2955,7 @@ def render_page_2():
         used = 0
         seq = 0
         out = []
-        _tfn2 = _travel_fn if _travel_fn is not None else travel_min_cached
+        _tfn2 = _travel_fn if _travel_fn is not None else travel_min_estimate
 
         if len(jobs_list) > int(max_jobs_per_day):
             return None
@@ -2957,7 +3016,9 @@ def render_page_2():
         def _travel(a: str, b: str) -> int:
             k = (a, b)
             if k not in _travel_local:
-                _travel_local[k] = travel_min_cached(a, b)
+                # Utiliser estimate pour le repair (évite appels API massifs)
+                # Le repair évalue des dizaines de swaps → estimation suffit
+                _travel_local[k] = travel_min_estimate(a, b)
             return _travel_local[k]
 
         locked, movable = [], []
@@ -3234,7 +3295,7 @@ def render_page_2():
         header_font = Font(bold=True, color="FFFFFF", size=10)
         header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-        def write_sheet(ws, data_df, is_planning=True):
+        def write_sheet(ws, data_df, is_planning=True, row_offset=0):
             out = data_df.copy()
 
             # Split last_inspection
@@ -3255,15 +3316,15 @@ def render_page_2():
 
             # Header
             for ci, col in enumerate(cols, 1):
-                cell = ws.cell(row=1, column=ci, value=col_labels.get(col, col.replace("_", " ").title()))
+                cell = ws.cell(row=1 + row_offset, column=ci, value=col_labels.get(col, col.replace("_", " ").title()))
                 cell.fill = header_fill
                 cell.font = header_font
                 cell.alignment = header_align
                 cell.border = border
-            ws.row_dimensions[1].height = 30
+            ws.row_dimensions[1 + row_offset].height = 30
 
             # Data rows
-            for ri, (_, row) in enumerate(out.iterrows(), 2):
+            for ri, (_, row) in enumerate(out.iterrows(), 2 + row_offset):
                 is_return_home = is_planning and str(row.get("job_id", "")).upper() == "RETURN_HOME"
                 is_ot  = is_planning and bool(str(row.get("ot", "")).strip())
                 is_duo = is_planning and bool(str(row.get("duo", "")).strip())
@@ -3314,7 +3375,8 @@ def render_page_2():
                 ws.column_dimensions[get_column_letter(ci)].width = col_widths.get(col, 14)
 
             # Freeze header + first 3 cols for planning
-            ws.freeze_panes = "D2" if is_planning else "B2"
+            freeze_row = 2 + row_offset
+            ws.freeze_panes = f"D{freeze_row}" if is_planning else f"B{freeze_row}"
 
         wb = Workbook()
 
@@ -3331,24 +3393,8 @@ def render_page_2():
             ws2.cell(row=1, column=1).font = Font(bold=True, size=12, color="C0392B")
             ws2.merge_cells(start_row=1, start_column=1, end_row=1, end_column=min(6, len(unplanned_df.columns)))
 
-            # Shift data down by 1 for the title
-            tmp_wb = Workbook()
-            tmp_ws = tmp_wb.active
-            write_sheet(tmp_ws, unplanned_df.copy(), is_planning=False)
-
-            # Copy from tmp to ws2 starting at row 2
-            for row in tmp_ws.iter_rows():
-                for cell in row:
-                    new_cell = ws2.cell(row=cell.row + 1, column=cell.column, value=cell.value)
-                    if cell.has_style:
-                        new_cell.fill = cell.fill
-                        new_cell.font = cell.font
-                        new_cell.border = cell.border
-                        new_cell.alignment = cell.alignment
-
-            # Copy column widths
-            for col_letter, dim in tmp_ws.column_dimensions.items():
-                ws2.column_dimensions[col_letter].width = dim.width
+            # Écrire directement dans ws2 en décalant d'une ligne (ligne 1 = titre)
+            write_sheet(ws2, unplanned_df.copy(), is_planning=False, row_offset=1)
 
             ws2.row_dimensions[1].height = 22
             ws2.freeze_panes = "B3"
@@ -3490,8 +3536,11 @@ def render_page_2():
                     jlat, jlon, jsec = ensure_job_ll_master(jobs, idx) if idx in jobs.index else (*get_ll_for_address(job.get("address","")), classify_sector(*get_ll_for_address(job.get("address",""))))
                     if not sector_compatible(tsec, jsec):
                         continue
-                    tmin = travel_min_cached(cur_loc, job["address"])
-                    tback = travel_min_cached(job["address"], home_addr)
+                    tlat_ma, tlon_ma = tech_ll_map.get(chosen_tech, (None, None)) if "chosen_tech" in dir() else (None, None)
+                    jlat_ma = jobs.at[idx, "job_lat"] if idx in jobs.index and "job_lat" in jobs.columns else None
+                    jlon_ma = jobs.at[idx, "job_lon"] if idx in jobs.index and "job_lon" in jobs.columns else None
+                    tmin = travel_min_estimate(cur_loc, job["address"], tlat_ma, tlon_ma, jlat_ma, jlon_ma)
+                    tback = travel_min_estimate(job["address"], home_addr, jlat_ma, jlon_ma, tlat_ma, tlon_ma)
                     need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
                     if need <= 0:
                         continue
@@ -3533,8 +3582,9 @@ def render_page_2():
                         jlat, jlon, jsec = ensure_job_ll_master(jobs, idx) if idx in jobs.index else (*get_ll_for_address(job.get("address","")), classify_sector(*get_ll_for_address(job.get("address",""))))
                         if not sector_compatible(tsec, jsec):
                             continue
-                        tmin = travel_min_cached(cur_loc, job["address"])
-                        tback = travel_min_cached(job["address"], home_addr)
+                        _tlat_a, _tlon_a = tech_ll_map.get(chosen_tech, (None, None))
+                        tmin = travel_min_estimate(cur_loc, job["address"], _tlat_a, _tlon_a, jlat, jlon)
+                        tback = travel_min_estimate(job["address"], home_addr, jlat, jlon, _tlat_a, _tlon_a)
                         need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
                         if need <= OT_ACTIVE_CAP:
                             if best_ot_cost is None or int(tmin) < best_ot_cost:
@@ -3570,8 +3620,11 @@ def render_page_2():
                     jlat, jlon, jsec = ensure_job_ll_master(jobs, idx) if idx in jobs.index else (*get_ll_for_address(job.get("address","")), classify_sector(*get_ll_for_address(job.get("address",""))))
                     if not sector_compatible(tsec, jsec):
                         continue
-                    tmin = travel_min_cached(cur_loc, job["address"])
-                    tback = travel_min_cached(job["address"], home_addr)
+                    tlat_ma, tlon_ma = tech_ll_map.get(chosen_tech, (None, None)) if "chosen_tech" in dir() else (None, None)
+                    jlat_ma = jobs.at[idx, "job_lat"] if idx in jobs.index and "job_lat" in jobs.columns else None
+                    jlon_ma = jobs.at[idx, "job_lon"] if idx in jobs.index and "job_lon" in jobs.columns else None
+                    tmin = travel_min_estimate(cur_loc, job["address"], tlat_ma, tlon_ma, jlat_ma, jlon_ma)
+                    tback = travel_min_estimate(job["address"], home_addr, jlat_ma, jlon_ma, tlat_ma, tlon_ma)
                     max_onsite_today = int(available) - int(used) - int(tmin) - int(buffer_job) - int(tback)
                     if max_onsite_today <= 0:
                         continue
