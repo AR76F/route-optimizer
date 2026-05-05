@@ -42,6 +42,8 @@ from streamlit_folium import st_folium
 import pandas as pd
 import requests
 
+from timesheet import show_timesheet
+
 from zoneinfo import ZoneInfo
 TZ_LOCAL = ZoneInfo("America/Montreal")
 
@@ -4085,5 +4087,7 @@ def render_page_2():
 # ────────────────────────────────────────────────────────────────
 if page == "🏠 Route Optimizer":
     render_page_1()
-else:
+elif page == "📅 Planning (Page 2)":
     render_page_2()
+elif page == "⏱ Feuille de temps":
+    show_timesheet()
