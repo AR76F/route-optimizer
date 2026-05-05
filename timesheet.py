@@ -997,36 +997,31 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
             _render_time_timeline(d, ti, to_, meal)
         return  # no editable fields
 
-    # ── Editable fields ───────────────────────────────────────────
-    c1, c2, c3, c4 = st.columns([1.5, 1.5, 1, 1])
+    # ── Compact single-row layout ─────────────────────────────────
+    # All fields on one line: In | Out | Absence | Job Type | Order Ref | Commentaire | BMS
+    c1, c2, c3, c4, c5, c6, c7 = st.columns([0.8, 0.8, 1.0, 1.0, 1.5, 1.5, 0.5])
 
     with c1:
         time_in_str = st.text_input(
-            "Time In (ex: 8.0)",
-            value="" if row["time_in"] is None else str(row["time_in"]),
-            key=f"ti_{idx}",
-            placeholder="8.0",
+            "⏰ In", value="" if row["time_in"] is None else str(row["time_in"]),
+            key=f"ti_{idx}", placeholder="8.0",
             help="Heure décimale : 8.0 = 8h00, 13.5 = 13h30"
         )
     with c2:
         time_out_str = st.text_input(
-            "Time Out (ex: 17.0)",
-            value="" if row["time_out"] is None else str(row["time_out"]),
-            key=f"to_{idx}",
-            placeholder="17.0",
+            "⏰ Out", value="" if row["time_out"] is None else str(row["time_out"]),
+            key=f"to_{idx}", placeholder="17.0",
         )
     with c3:
-        cat_options = [""] + list(PAY_CODES.keys())
+        absence_options = ["—", "Vacances", "Maladie"]
         current_cat = row.get("category", "")
-        try:
-            cat_idx = cat_options.index(current_cat)
-        except ValueError:
-            cat_idx = 0
-        cat = st.selectbox("Catégorie", cat_options, index=cat_idx, key=f"cat_{idx}")
-    with c4:
-        deja = st.checkbox("Déjà BMS", value=row.get("deja_bms", False), key=f"bms_{idx}")
+        absence_idx = absence_options.index(current_cat) if current_cat in ("Vacances", "Maladie") else 0
+        absence_sel = st.selectbox(
+            "Absence", absence_options, index=absence_idx, key=f"cat_{idx}",
+            help="RT/OT/DT calculés automatiquement"
+        )
 
-    # Parse time inputs
+    # Parse times first so we can set job_type default
     def _parse_time(s):
         s = s.strip().replace(",", ".")
         if not s:
@@ -1036,20 +1031,83 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         except ValueError:
             return None
 
-    ti = _parse_time(time_in_str)
+    ti  = _parse_time(time_in_str)
     to_ = _parse_time(time_out_str)
-
-    # Auto meal
     meal = auto_meal(ti, to_) if (ti is not None and to_ is not None) else 0.0
+
+    if absence_sel in ("Vacances", "Maladie"):
+        cat = absence_sel
+    elif ti is not None and to_ is not None:
+        cat = infer_category(d, ti, to_)
+    else:
+        cat = infer_category(d, None, None)
+
+    hrs = compute_hours(ti, to_, meal)
+    is_absence = cat in ("Vacances", "Maladie")
+
+    job_type       = row.get("job_type", "Job Client")
+    trans_type     = row.get("trans_type", "WO")
+    order_ref      = row.get("order_ref", "")
+    wo_interne_sel = row.get("wo_interne", "")
+
+    with c4:
+        if not is_absence:
+            job_type = st.selectbox(
+                "Type", ["Job Client", "WO Interne", "PM"],
+                index=["Job Client", "WO Interne", "PM"].index(job_type)
+                      if job_type in ["Job Client", "WO Interne", "PM"] else 0,
+                key=f"jt_{idx}",
+            )
+            trans_type = "PM" if job_type == "PM" else "WO"
+        else:
+            st.markdown("<div style='padding-top:28px;font-size:0.75rem;color:#888;'>🏖️ Absence</div>",
+                        unsafe_allow_html=True)
+
+    with c5:
+        if not is_absence:
+            if job_type == "WO Interne":
+                try:
+                    wo_idx = wo_labels.index(wo_interne_sel) + 1
+                except ValueError:
+                    wo_idx = 0
+                wo_sel = st.selectbox("WO Interne", ["— choisir —"] + wo_labels,
+                                      index=wo_idx, key=f"wo_{idx}")
+                order_ref      = wo_by_label.get(wo_sel, "") if wo_sel != "— choisir —" else ""
+                wo_interne_sel = wo_sel if wo_sel != "— choisir —" else ""
+            else:
+                order_ref = st.text_input("Order Ref", value=order_ref,
+                                          key=f"or_{idx}", placeholder="Ex: 345924")
+                wo_interne_sel = ""
+        else:
+            order_ref = ""
+            wo_interne_sel = ""
+
+    with c6:
+        commentaire = st.text_input("Commentaire", value=row.get("commentaire", ""),
+                                    key=f"cm_{idx}", placeholder="Optionnel")
+
+    with c7:
+        deja = st.checkbox("BMS", value=row.get("deja_bms", False), key=f"bms_{idx}",
+                           help="Déjà entré dans BMS")
+
+    # ── Auto-computed info bar ────────────────────────────────────
+    if ti is not None and to_ is not None:
+        pay_id, pay_type = PAY_CODES.get(cat, ("RT", "RT"))
+        badge_map = {
+            "Regular Time": "🟢 RT", "Overtime": "🟡 OT",
+            "Double Time":  "🔴 DT", "Vacances": "🔵 VP", "Maladie": "⚪ SP",
+        }
+        badge = badge_map.get(cat, cat)
+        meal_txt = f"  |  🍽️ {meal:.1f}h repas" if meal > 0 else ""
+        st.markdown(
+            f'<div style="font-size:0.78rem;color:#7eb8d4;padding:2px 0 6px 2px;">'
+            f'<b>{badge}</b> &nbsp;·&nbsp; {hrs:.2f} h &nbsp;·&nbsp; '
+            f'Pay: {pay_id}/{pay_type}{meal_txt}</div>',
+            unsafe_allow_html=True
+        )
 
     # ── Detect mixed RT/OT/DT zones in the shift ─────────────────
     def _compute_zone_split(d: date, ti: float, to_: float) -> list[dict]:
-        """
-        Splits a shift into segments by RT/OT/DT zone.
-        Returns list of {time_in, time_out, category, hours} dicts.
-        Each weekday zone boundary: 6, 8, 17, 23, 24
-        Saturday: all OT. Sunday: all DT.
-        """
         wd = d.weekday()
         if wd == 6:
             boundaries = [(0, 24, "Double Time")]
@@ -1063,33 +1121,19 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                 (17, 23, "Overtime"),
                 (23, 24, "Double Time"),
             ]
-
         segments = []
         for zstart, zend, zcat in boundaries:
             overlap_start = max(ti, zstart)
             overlap_end   = min(to_, zend)
             if overlap_end > overlap_start:
-                h = round(overlap_end - overlap_start, 4)
                 segments.append({
                     "time_in":  overlap_start,
                     "time_out": overlap_end,
                     "category": zcat,
-                    "hours":    h,
+                    "hours":    round(overlap_end - overlap_start, 4),
                 })
         return segments
 
-    # Auto category from time if not manually set
-    if not cat and ti is not None and to_ is not None:
-        cat = infer_category(d, ti, to_)
-    elif not cat:
-        cat = infer_category(d, None, None)
-
-    hrs = compute_hours(ti, to_, meal)
-
-    # Absence categories — no WO needed
-    is_absence = cat in ("Vacances", "Maladie")
-
-    # ── Mixed-zone detection & client request prompt ──────────────
     split_triggered = False
     if ti is not None and to_ is not None and not is_absence and d.weekday() < 5:
         segments = _compute_zone_split(d, ti, to_)
@@ -1134,62 +1178,9 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
             row["_split_segments"] = None
             row["_client_requis"]  = False
 
-    if ti is not None and to_ is not None:
-        pay_id, pay_type = PAY_CODES.get(cat, ("RT", "RT"))
-        cols_info = st.columns([1, 1, 1, 1])
-        cols_info[0].metric("Heures", f"{hrs:.2f} h")
-        cols_info[1].metric("Pay ID", pay_id)
-        cols_info[2].metric("Pay Type", pay_type)
-        if meal > 0:
-            cols_info[3].metric("Repas", f"{meal:.1f} h")
-
-    # ── Visual RT/OT/DT timeline ──────────────────────────────────
+    # ── Visual RT/OT/DT timeline (compact, shown below the row) ──
     if ti is not None and to_ is not None and not is_absence:
         _render_time_timeline(d, ti, to_, meal)
-
-    # ── WO / Trans Type — hidden for absences ─────────────────────
-    job_type   = row.get("job_type", "Job Client")
-    trans_type = row.get("trans_type", "WO")
-    order_ref  = row.get("order_ref", "")
-    wo_interne_sel = row.get("wo_interne", "")
-
-    if not is_absence:
-        c5, c6, c7 = st.columns([1, 1, 2])
-        with c5:
-            job_type = st.selectbox(
-                "Type de job",
-                ["Job Client", "WO Interne", "PM"],
-                index=["Job Client", "WO Interne", "PM"].index(job_type)
-                      if job_type in ["Job Client", "WO Interne", "PM"] else 0,
-                key=f"jt_{idx}",
-            )
-        with c6:
-            trans_options = ["WO", "PM"]
-            t_idx = 1 if job_type == "PM" else 0
-            trans_type = st.selectbox("Trans Type", trans_options, index=t_idx, key=f"tt_{idx}")
-
-        with c7:
-            if job_type == "WO Interne":
-                current_wo_label = wo_interne_sel
-                try:
-                    wo_idx = wo_labels.index(current_wo_label) + 1
-                except ValueError:
-                    wo_idx = 0
-                wo_sel = st.selectbox("Order Ref (WO Interne)", ["— choisir —"] + wo_labels, index=wo_idx, key=f"wo_{idx}")
-                order_ref = wo_by_label.get(wo_sel, "") if wo_sel != "— choisir —" else ""
-                wo_interne_sel = wo_sel if wo_sel != "— choisir —" else ""
-            else:
-                order_ref = st.text_input("Order Ref", value=order_ref, key=f"or_{idx}", placeholder="Ex: 345924")
-                wo_interne_sel = ""
-    else:
-        # Absence — reset WO fields silently
-        job_type = "Job Client"
-        trans_type = "WO"
-        order_ref = ""
-        wo_interne_sel = ""
-        st.caption("🏖️ Absence — aucun Order Ref requis")
-
-    commentaire = st.text_input("Commentaire", value=row.get("commentaire", ""), key=f"cm_{idx}", placeholder="Optionnel")
 
     # Mutate row dict in place
     row["time_in"]     = ti
