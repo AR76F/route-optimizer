@@ -11,9 +11,6 @@ import googlemaps
 import streamlit as st
 st.set_page_config(page_title="Planning", layout="wide")
 
-st.error("✅ TU ES SUR LA PAGE 2 (Planning)")
-st.stop()
-
 st.set_page_config(page_title="Planning mensuel", layout="wide")
 st.title("📅 Planning mensuel – Journées techniciens")
 
