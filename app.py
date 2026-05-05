@@ -75,7 +75,6 @@ if "page" not in st.session_state:
     st.session_state.page = "🏠 Route Optimizer"
 
 st.sidebar.title("Menu")
-st.sidebar.title("Menu")
 st.session_state.page = st.sidebar.radio(
     "Navigation",
     ["🏠 Route Optimizer", "📅 Planning (Page 2)", "⏱ Feuille de temps"],
