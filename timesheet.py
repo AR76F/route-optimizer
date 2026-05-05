@@ -805,7 +805,7 @@ def show_timesheet():
                         unsafe_allow_html=True
                     )
 
-                _render_row(idx, row, wo_labels, wo_by_label, d)
+                _render_row(idx, row, wo_labels, wo_by_label, d, emp_num)
 
                 # Add / Remove buttons for each line
                 c1, c2 = st.columns([1, 1])
@@ -1002,8 +1002,12 @@ def _render_time_timeline(d: date, time_in: float, time_out: float, meal_hrs: fl
     st.markdown(svg, unsafe_allow_html=True)
 
 
-def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date):
+def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date, emp_num: str = ""):
     """Render all inputs for a single time-entry row, mutating `row` in place."""
+
+    # Louis Lauzon (FW688) is part-time — no automatic daily OT cap
+    DAILY_OT_EXEMPT = {"FW688"}
+    apply_daily_cap = emp_num not in DAILY_OT_EXEMPT
 
     # Use stable uid so widget state survives row insertions/deletions
     uid = row.get("uid", str(idx))
@@ -1194,6 +1198,8 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                 (17, 23, "Overtime"),
                 (23, 24, "Double Time"),
             ]
+
+        # Build raw segments by time zone
         segments = []
         for zstart, zend, zcat in boundaries:
             overlap_start = max(ti, zstart)
@@ -1205,6 +1211,42 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                     "category": zcat,
                     "hours":    round(overlap_end - overlap_start, 4),
                 })
+
+        # Apply daily 8h cap — hours beyond 8h total become OT
+        # (only on weekdays, and only for non-exempt employees)
+        if apply_daily_cap and wd < 5:
+            DAILY_RT_CAP = 8.0
+            rt_consumed = 0.0
+            capped = []
+            for seg in segments:
+                if seg["category"] != "Regular Time":
+                    capped.append(seg)
+                    continue
+                remaining_rt = max(0.0, DAILY_RT_CAP - rt_consumed)
+                if remaining_rt <= 0:
+                    # All RT becomes OT
+                    capped.append({**seg, "category": "Overtime"})
+                elif seg["hours"] > remaining_rt:
+                    # Split: first part RT, rest OT
+                    split_point = seg["time_in"] + remaining_rt
+                    capped.append({
+                        "time_in":  seg["time_in"],
+                        "time_out": split_point,
+                        "category": "Regular Time",
+                        "hours":    round(remaining_rt, 4),
+                    })
+                    capped.append({
+                        "time_in":  split_point,
+                        "time_out": seg["time_out"],
+                        "category": "Overtime",
+                        "hours":    round(seg["hours"] - remaining_rt, 4),
+                    })
+                    rt_consumed += remaining_rt
+                else:
+                    capped.append(seg)
+                    rt_consumed += seg["hours"]
+            segments = capped
+
         return segments
 
     split_triggered = False
@@ -1219,34 +1261,50 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         if has_mixed and outside_hrs > 0:
             def _fmt_h(h): return f"{h:.2f}h".rstrip("0").rstrip(".")
 
-            st.warning(
-                f"⚠️ Ce shift contient **{_fmt_h(outside_hrs)}** en dehors des heures "
-                f"régulières (08:00–17:00). **Le client a-t-il demandé de travailler "
-                f"en dehors des heures normales ?**"
+            # Check if it's purely a daily cap OT (within normal hours)
+            daily_cap_ot = apply_daily_cap and any(
+                s["category"] == "Overtime" and 8 <= s["time_in"] < 17
+                for s in segments
             )
-            col_oui, col_non = st.columns([1, 1])
-            with col_oui:
-                if st.button("✅ Oui — Requis client", key=f"split_oui_{uid}"):
-                    st.session_state[f"split_confirm_{uid}"] = "oui"
-                    st.rerun()
-            with col_non:
-                if st.button("❌ Non — Garder une seule ligne", key=f"split_non_{uid}"):
-                    st.session_state[f"split_confirm_{uid}"] = "non"
-                    st.rerun()
 
-            confirmed = st.session_state.get(f"split_confirm_{uid}")
-            if confirmed == "oui":
-                st.success(
-                    f"✅ Requis client confirmé — {len(segments)} ligne(s) seront créées "
-                    f"automatiquement à la soumission."
+            if daily_cap_ot:
+                rt_hrs = sum(s["hours"] for s in segments if s["category"] == "Regular Time")
+                st.info(
+                    f"ℹ️ Cap quotidien 8h atteint — **{_fmt_h(rt_hrs)}h RT** + "
+                    f"**{_fmt_h(outside_hrs)}h OT** seront créés automatiquement."
                 )
                 row["_split_segments"] = segments
                 row["_client_requis"]  = True
                 split_triggered = True
-            elif confirmed == "non":
-                st.info("Une seule ligne sera soumise en OT.")
-                row["_split_segments"] = None
-                row["_client_requis"]  = False
+            else:
+                st.warning(
+                    f"⚠️ Ce shift contient **{_fmt_h(outside_hrs)}** en dehors des heures "
+                    f"régulières (08:00–17:00). **Le client a-t-il demandé de travailler "
+                    f"en dehors des heures normales ?**"
+                )
+                col_oui, col_non = st.columns([1, 1])
+                with col_oui:
+                    if st.button("✅ Oui — Requis client", key=f"split_oui_{uid}"):
+                        st.session_state[f"split_confirm_{uid}"] = "oui"
+                        st.rerun()
+                with col_non:
+                    if st.button("❌ Non — Garder une seule ligne", key=f"split_non_{uid}"):
+                        st.session_state[f"split_confirm_{uid}"] = "non"
+                        st.rerun()
+
+                confirmed = st.session_state.get(f"split_confirm_{uid}")
+                if confirmed == "oui":
+                    st.success(
+                        f"✅ Requis client confirmé — {len(segments)} ligne(s) seront créées "
+                        f"automatiquement à la soumission."
+                    )
+                    row["_split_segments"] = segments
+                    row["_client_requis"]  = True
+                    split_triggered = True
+                elif confirmed == "non":
+                    st.info("Une seule ligne sera soumise en OT.")
+                    row["_split_segments"] = None
+                    row["_client_requis"]  = False
         else:
             row["_split_segments"] = None
             row["_client_requis"]  = False
