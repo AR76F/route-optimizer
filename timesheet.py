@@ -764,7 +764,8 @@ def show_timesheet():
         for _, row in day_rows:
             ti  = row.get("time_in")
             to_ = row.get("time_out")
-            meal = row.get("meal_hrs", 0.0) or 0.0
+            cat = row.get("category", "")
+            meal = 0.0
             h = compute_hours(ti, to_, meal)
             day_total += h
             total_hours += h
@@ -1104,10 +1105,11 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
 
     if absence_sel in ("Vacances", "Maladie"):
         cat  = absence_sel
-        meal = 0.0   # pas de repas pour les absences
+        meal = 0.0
+        row["meal_hrs"] = 0.0
     elif ti is not None and to_ is not None:
         cat  = infer_category(d, ti, to_)
-        meal = auto_meal(ti, to_)
+        meal = 0.0   # pas de repas automatique
     else:
         cat  = infer_category(d, None, None)
         meal = 0.0
