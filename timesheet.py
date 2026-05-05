@@ -1123,7 +1123,10 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         row["meal_hrs"] = 0.0
     elif ti is not None and to_ is not None:
         cat  = infer_category(d, ti, to_)
-        meal = 0.0   # pas de repas automatique
+        meal = 0.0
+        # Override to OT if daily cap already reached by previous lines
+        if apply_daily_cap and rt_already >= 8.0 and cat == "Regular Time":
+            cat = "Overtime"
     else:
         cat  = infer_category(d, None, None)
         meal = 0.0
@@ -1268,21 +1271,26 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         dt_hrs = sum(s["hours"] for s in segments if s["category"] == "Double Time")
         outside_hrs = round(ot_hrs + dt_hrs, 2)
 
-        if has_mixed and outside_hrs > 0:
+        # Also trigger if daily cap was applied (rt_already >= 8h, whole line becomes OT)
+        daily_cap_full = apply_daily_cap and rt_already >= 8.0 and not has_mixed
+
+        if (has_mixed and outside_hrs > 0) or daily_cap_full:
             def _fmt_h(h): return f"{h:.2f}h".rstrip("0").rstrip(".")
 
             # Check if it's purely a daily cap OT (within normal hours)
-            daily_cap_ot = apply_daily_cap and any(
+            daily_cap_ot = daily_cap_full or (apply_daily_cap and any(
                 s["category"] == "Overtime" and 8 <= s["time_in"] < 17
                 for s in segments
-            )
+            ))
 
             if daily_cap_ot:
                 rt_hrs = sum(s["hours"] for s in segments if s["category"] == "Regular Time")
-                st.info(
-                    f"ℹ️ Cap quotidien 8h atteint — **{_fmt_h(rt_hrs)}h RT** + "
-                    f"**{_fmt_h(outside_hrs)}h OT** seront créés automatiquement."
-                )
+                ot_only = round(sum(s["hours"] for s in segments if s["category"] == "Overtime"), 2)
+                if rt_hrs > 0:
+                    msg = f"ℹ️ Cap quotidien 8h atteint — **{_fmt_h(rt_hrs)}h RT** + **{_fmt_h(ot_only)}h OT** seront créés automatiquement."
+                else:
+                    msg = f"ℹ️ Cap quotidien 8h déjà atteint — cette ligne (**{_fmt_h(ot_only)}h**) sera en **OT** automatiquement."
+                st.info(msg)
                 row["_split_segments"] = segments
                 row["_client_requis"]  = True
                 split_triggered = True
