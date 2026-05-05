@@ -758,17 +758,25 @@ def show_timesheet():
         hrs  = compute_hours(ti, to_, meal)
         total_hours += hrs
 
-        badge_html = ""
+        # Plain text badge — no HTML in expander title
         cat = row.get("category", "")
-        if cat == "Regular Time":  badge_html = '<span class="badge-rt">RT</span>'
-        elif cat == "Overtime":    badge_html = '<span class="badge-ot">OT</span>'
-        elif cat == "Double Time": badge_html = '<span class="badge-dt">DT</span>'
-        elif cat == "Vacances":    badge_html = '<span class="badge-vp">VP</span>'
-        elif cat == "Maladie":     badge_html = '<span class="badge-sp">SP</span>'
+        badge_txt = ""
+        if cat == "Regular Time":  badge_txt = "🟢 RT"
+        elif cat == "Overtime":    badge_txt = "🟡 OT"
+        elif cat == "Double Time": badge_txt = "🔴 DT"
+        elif cat == "Vacances":    badge_txt = "🔵 VP"
+        elif cat == "Maladie":     badge_txt = "⚪ SP"
 
         hrs_str = f"{hrs:.2f}h" if hrs > 0 else "—"
 
-        with st.expander(f"{day_str}   {badge_html}   {hrs_str}", expanded=(hrs == 0 and wd < 5)):
+        # Keep expander open if user has interacted with it — don't recalculate
+        exp_key = f"exp_{state_key}_{idx}"
+        if exp_key not in st.session_state:
+            # Default: open if no hours yet (weekday only)
+            st.session_state[exp_key] = (hrs == 0 and wd < 5)
+
+        with st.expander(f"{day_str}   {badge_txt}   {hrs_str}",
+                         expanded=st.session_state[exp_key]):
             # Allow multiple rows per day (extra job lines)
             _render_row(idx, row, wo_labels, wo_by_label, d)
 
