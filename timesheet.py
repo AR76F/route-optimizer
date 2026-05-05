@@ -265,16 +265,18 @@ def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[d
     try:
         ws = _get_sheet("Soumissions")
         if ws:
+            # Use the JSON-transformed rows (HH:MM format, proper heures)
+            json_rows = _build_json_rows(rows)
             new_rows = []
-            for r in rows:
+            for r in json_rows:
                 new_rows.append([
                     r.get("date", ""),
                     emp_num,
                     emp_nom,
                     periode_str,
                     soumis_le,
-                    r.get("time_in", ""),
-                    r.get("time_out", ""),
+                    r.get("time_in", ""),    # already HH:MM
+                    r.get("time_out", ""),   # already HH:MM
                     r.get("heures", ""),
                     r.get("pay_id", ""),
                     r.get("pay_type", ""),
@@ -349,7 +351,14 @@ def load_week_from_gsheet(emp_num: str, p_start: date, p_end: date) -> list[dict
 
         def _to_float(v) -> float | None:
             try:
-                return float(str(v).replace(",", ".")) if str(v).strip() else None
+                s = str(v).strip()
+                if not s or s == "None":
+                    return None
+                if ":" in s:
+                    # HH:MM format → decimal
+                    h, m = s.split(":")
+                    return int(h) + int(m) / 60.0
+                return float(s.replace(",", "."))
             except Exception:
                 return None
 
@@ -730,7 +739,7 @@ def show_timesheet():
     with col_info:
         if st.session_state.get(f"loaded_{state_key}"):
             nb_deja = sum(1 for r in rows if r.get("deja_bms"))
-            st.info(f"✅ {nb_deja} ligne(s) chargée(s) depuis OneDrive — affichées en grisé.")
+            st.info(f"✅ {nb_deja} ligne(s) chargée(s) depuis Google Sheets — affichées en grisé.")
 
     # ═══════════════════════════════════════════════════════
     #  Row editor — one expander per day
@@ -994,25 +1003,55 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         ti  = row.get("time_in")
         to_ = row.get("time_out")
         meal = row.get("meal_hrs", 0.0) or 0.0
-        hrs  = compute_hours(ti, to_, meal)
+
+        # Convert to float if stored as string (from Google Sheets)
+        def _to_float(v):
+            if v is None: return None
+            try:
+                s = str(v).strip()
+                if ":" in s:
+                    h, m = s.split(":")
+                    return int(h) + int(m) / 60.0
+                return float(s) if s else None
+            except Exception:
+                return None
+
+        ti  = _to_float(ti)
+        to_ = _to_float(to_)
+
+        hrs  = compute_hours(ti, to_, float(meal))
         cat  = row.get("category", "")
         pay_id, pay_type = PAY_CODES.get(cat, ("RT", "RT"))
 
-        def _fmt(h): return f"{int(h):02d}:{int(round((h%1)*60)):02d}" if h is not None else "—"
+        badge_map = {
+            "Regular Time": "🟢 RT", "Overtime": "🟡 OT",
+            "Double Time":  "🔴 DT", "Vacances": "🔵 VP", "Maladie": "⚪ SP",
+        }
+        badge = badge_map.get(cat, cat or "—")
+
+        def _fmt(h):
+            if h is None: return "—"
+            return f"{int(h):02d}:{int(round((h % 1) * 60)):02d}"
+
+        meal_txt = f" | 🍽️ {float(meal):.1f}h" if float(meal) > 0 else ""
+        wo_txt   = row.get('order_ref', '') or row.get('wo_interne', '') or '—'
+        comm_txt = row.get('commentaire', '') or ''
 
         st.markdown(f"""
-        <div style="background:#f0f4ff;border-left:3px solid #2d6be4;border-radius:6px;
-                    padding:8px 12px;font-size:0.85rem;color:#334;">
-            🔒 <b>Déjà soumis</b> &nbsp;|&nbsp;
-            {_fmt(ti)} → {_fmt(to_)} &nbsp;|&nbsp;
-            <b>{hrs:.2f} h</b> &nbsp;|&nbsp;
-            {cat} ({pay_type}) &nbsp;|&nbsp;
-            WO: {row.get('order_ref', '—') or '—'} &nbsp;|&nbsp;
-            {row.get('commentaire', '') or ''}
+        <div style="background:#1a2a4a;border-left:3px solid #2d6be4;border-radius:6px;
+                    padding:8px 14px;font-size:0.85rem;color:#c8d8f0;
+                    display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+            🔒&nbsp;<b style="color:#7eb8d4;">Déjà soumis</b>
+            &nbsp;|&nbsp; <b>{_fmt(ti)} → {_fmt(to_)}</b>
+            &nbsp;|&nbsp; <b style="color:#fff;">{hrs:.2f} h</b>
+            &nbsp;|&nbsp; {badge}
+            &nbsp;|&nbsp; WO: <b>{wo_txt}</b>
+            {f"&nbsp;|&nbsp; {comm_txt}" if comm_txt else ""}
+            {f"&nbsp;|&nbsp; {meal_txt}" if meal_txt else ""}
         </div>
         """, unsafe_allow_html=True)
         if ti is not None and to_ is not None:
-            _render_time_timeline(d, ti, to_, meal)
+            _render_time_timeline(d, ti, to_, float(meal))
         return  # no editable fields
 
     # ── Compact single-row layout ─────────────────────────────────
