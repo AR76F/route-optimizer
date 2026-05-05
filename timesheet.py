@@ -808,12 +808,14 @@ def show_timesheet():
 
                 _render_row(idx, row, wo_labels, wo_by_label, d, emp_num, rt_already=rt_accumulated)
 
-                # Update accumulated RT for next line
-                if row.get("category") not in ("Vacances", "Maladie", "Overtime", "Double Time"):
-                    ti_ = row.get("time_in")
-                    to__ = row.get("time_out")
-                    if ti_ is not None and to__ is not None:
-                        rt_accumulated += compute_hours(ti_, to__, 0.0)
+                # Update accumulated RT for next line using raw hours
+                # (category not reliable yet during render — use time delta)
+                ti_ = row.get("time_in")
+                to__ = row.get("time_out")
+                absence = row.get("category", "") in ("Vacances", "Maladie")
+                if ti_ is not None and to__ is not None and not absence:
+                    raw_hrs = max(0.0, float(to__) - float(ti_))
+                    rt_accumulated = min(8.0, rt_accumulated + raw_hrs)
 
                 # Add / Remove buttons for each line
                 c1, c2 = st.columns([1, 1])
