@@ -776,8 +776,9 @@ def show_timesheet():
             c1, c2 = st.columns([1, 1])
             with c1:
                 if st.button("➕ Ajouter une ligne", key=f"add_{idx}"):
-                    # Insert duplicate row for same date
                     new_row = _blank_row(d)
+                    if row.get("time_out") is not None:
+                        new_row["time_in"] = row["time_out"]
                     rows.insert(idx + 1, new_row)
                     st.rerun()
             with c2:
@@ -1041,17 +1042,97 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
     # Auto meal
     meal = auto_meal(ti, to_) if (ti is not None and to_ is not None) else 0.0
 
+    # ── Detect mixed RT/OT/DT zones in the shift ─────────────────
+    def _compute_zone_split(d: date, ti: float, to_: float) -> list[dict]:
+        """
+        Splits a shift into segments by RT/OT/DT zone.
+        Returns list of {time_in, time_out, category, hours} dicts.
+        Each weekday zone boundary: 6, 8, 17, 23, 24
+        Saturday: all OT. Sunday: all DT.
+        """
+        wd = d.weekday()
+        if wd == 6:
+            boundaries = [(0, 24, "Double Time")]
+        elif wd == 5:
+            boundaries = [(0, 24, "Overtime")]
+        else:
+            boundaries = [
+                (0,  6,  "Double Time"),
+                (6,  8,  "Overtime"),
+                (8,  17, "Regular Time"),
+                (17, 23, "Overtime"),
+                (23, 24, "Double Time"),
+            ]
+
+        segments = []
+        for zstart, zend, zcat in boundaries:
+            overlap_start = max(ti, zstart)
+            overlap_end   = min(to_, zend)
+            if overlap_end > overlap_start:
+                h = round(overlap_end - overlap_start, 4)
+                segments.append({
+                    "time_in":  overlap_start,
+                    "time_out": overlap_end,
+                    "category": zcat,
+                    "hours":    h,
+                })
+        return segments
+
     # Auto category from time if not manually set
     if not cat and ti is not None and to_ is not None:
         cat = infer_category(d, ti, to_)
     elif not cat:
-        # Default from weekday
         cat = infer_category(d, None, None)
 
     hrs = compute_hours(ti, to_, meal)
 
     # Absence categories — no WO needed
     is_absence = cat in ("Vacances", "Maladie")
+
+    # ── Mixed-zone detection & client request prompt ──────────────
+    split_triggered = False
+    if ti is not None and to_ is not None and not is_absence and d.weekday() < 5:
+        segments = _compute_zone_split(d, ti, to_)
+        cats_in_shift = {s["category"] for s in segments}
+        has_mixed = len(cats_in_shift) > 1
+        ot_hrs = sum(s["hours"] for s in segments if s["category"] == "Overtime")
+        dt_hrs = sum(s["hours"] for s in segments if s["category"] == "Double Time")
+        outside_hrs = round(ot_hrs + dt_hrs, 2)
+
+        if has_mixed and outside_hrs > 0:
+            def _fmt_h(h): return f"{h:.2f}h".rstrip("0").rstrip(".")
+
+            st.warning(
+                f"⚠️ Ce shift contient **{_fmt_h(outside_hrs)}** en dehors des heures "
+                f"régulières (08:00–17:00). **Le client a-t-il demandé de travailler "
+                f"en dehors des heures normales ?**"
+            )
+            col_oui, col_non = st.columns([1, 1])
+            with col_oui:
+                if st.button("✅ Oui — Requis client", key=f"split_oui_{idx}"):
+                    st.session_state[f"split_confirm_{idx}"] = "oui"
+                    st.rerun()
+            with col_non:
+                if st.button("❌ Non — Garder une seule ligne", key=f"split_non_{idx}"):
+                    st.session_state[f"split_confirm_{idx}"] = "non"
+                    st.rerun()
+
+            confirmed = st.session_state.get(f"split_confirm_{idx}")
+            if confirmed == "oui":
+                st.success(
+                    f"✅ Requis client confirmé — {len(segments)} ligne(s) seront créées "
+                    f"automatiquement à la soumission."
+                )
+                row["_split_segments"] = segments
+                row["_client_requis"]  = True
+                split_triggered = True
+            elif confirmed == "non":
+                st.info("Une seule ligne sera soumise en OT.")
+                row["_split_segments"] = None
+                row["_client_requis"]  = False
+        else:
+            row["_split_segments"] = None
+            row["_client_requis"]  = False
 
     if ti is not None and to_ is not None:
         pay_id, pay_type = PAY_CODES.get(cat, ("RT", "RT"))
@@ -1124,7 +1205,9 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
 
 
 def _build_json_rows(rows: list[dict]) -> list[dict]:
-    """Convert internal row dicts to the JSON format bms_watcher.py expects."""
+    """Convert internal row dicts to the JSON format bms_watcher.py expects.
+    If a row has _split_segments (client-requested OT), expands into multiple lines.
+    """
     MOIS_EN_U = {1:"JAN",2:"FEB",3:"MAR",4:"APR",5:"MAY",6:"JUN",
                  7:"JUL",8:"AUG",9:"SEP",10:"OCT",11:"NOV",12:"DEC"}
     out = []
@@ -1134,23 +1217,49 @@ def _build_json_rows(rows: list[dict]) -> list[dict]:
         to_ = row.get("time_out")
         if ti is None or to_ is None:
             continue
-        meal = row.get("meal_hrs", 0.0) or 0.0
-        hrs  = compute_hours(ti, to_, meal)
-        cat  = row.get("category", "Regular Time") or "Regular Time"
-        pay_id, pay_type = PAY_CODES.get(cat, ("RT", "RT"))
-        out.append({
-            "date":        f"{d.day:02d}-{MOIS_EN_U[d.month]}-{d.year}",
-            "heures":      hrs,
-            "time_in":     decimal_to_hhmm(ti),
-            "time_out":    decimal_to_hhmm(to_),
-            "pay_id":      pay_id,
-            "pay_type":    pay_type,
-            "trans_type":  row.get("trans_type", "WO"),
-            "order_ref":   row.get("order_ref", ""),
-            "meal_hrs":    meal,
-            "commentaire": row.get("commentaire", ""),
-            "deja_bms":    row.get("deja_bms", False),
-        })
+
+        segments = row.get("_split_segments")
+        client_requis = row.get("_client_requis", False)
+
+        if segments and client_requis:
+            # Expand into one line per zone segment
+            for seg in segments:
+                cat = seg["category"]
+                pay_id, pay_type = PAY_CODES.get(cat, ("RT", "RT"))
+                out.append({
+                    "date":           f"{d.day:02d}-{MOIS_EN_U[d.month]}-{d.year}",
+                    "heures":         round(seg["hours"], 2),
+                    "time_in":        decimal_to_hhmm(seg["time_in"]),
+                    "time_out":       decimal_to_hhmm(seg["time_out"]),
+                    "pay_id":         pay_id,
+                    "pay_type":       pay_type,
+                    "trans_type":     row.get("trans_type", "WO"),
+                    "order_ref":      row.get("order_ref", ""),
+                    "meal_hrs":       0.0,
+                    "commentaire":    row.get("commentaire", ""),
+                    "client_requis":  cat in ("Overtime", "Double Time"),
+                    "deja_bms":       row.get("deja_bms", False),
+                })
+        else:
+            # Single line as before
+            meal = row.get("meal_hrs", 0.0) or 0.0
+            hrs  = compute_hours(ti, to_, meal)
+            cat  = row.get("category", "Regular Time") or "Regular Time"
+            pay_id, pay_type = PAY_CODES.get(cat, ("RT", "RT"))
+            out.append({
+                "date":          f"{d.day:02d}-{MOIS_EN_U[d.month]}-{d.year}",
+                "heures":        hrs,
+                "time_in":       decimal_to_hhmm(ti),
+                "time_out":      decimal_to_hhmm(to_),
+                "pay_id":        pay_id,
+                "pay_type":      pay_type,
+                "trans_type":    row.get("trans_type", "WO"),
+                "order_ref":     row.get("order_ref", ""),
+                "meal_hrs":      meal,
+                "commentaire":   row.get("commentaire", ""),
+                "client_requis": False,
+                "deja_bms":      row.get("deja_bms", False),
+            })
     return out
 
 
