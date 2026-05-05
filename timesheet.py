@@ -576,6 +576,89 @@ def show_timesheet():
 
 # ─────────────────────────── Row renderer ────────────────────────────────────
 
+def _render_time_timeline(d: date, time_in: float, time_out: float, meal_hrs: float):
+    """
+    Renders a compact visual 24h timeline showing when the shift falls,
+    color-coded by RT / OT / DT zone. Read-only, purely informational.
+    """
+    wd = d.weekday()  # Mon=0 … Sun=6
+
+    # Build color zones for this day type
+    # Each zone: (start_h, end_h, color, label)
+    if wd == 6:  # Sunday — all DT
+        zones = [(0, 24, "#d63031", "DT")]
+    elif wd == 5:  # Saturday — all OT
+        zones = [(0, 24, "#e07b00", "OT")]
+    else:  # Weekday
+        zones = [
+            (0,  6,  "#d63031", "DT"),
+            (6,  8,  "#e07b00", "OT"),
+            (8,  17, "#27ae60", "RT"),
+            (17, 23, "#e07b00", "OT"),
+            (23, 24, "#d63031", "DT"),
+        ]
+
+    # Build SVG bar — 24h = 480px wide, 28px tall
+    W, H = 480, 28
+    bars_svg = ""
+    labels_svg = ""
+
+    for (zh, zend, color, zlabel) in zones:
+        x = zh / 24 * W
+        w = (zend - zh) / 24 * W
+        bars_svg += f'<rect x="{x:.1f}" y="0" width="{w:.1f}" height="{H}" fill="{color}" opacity="0.25"/>'
+
+    # Hour tick marks every 6h
+    for h in [0, 6, 8, 12, 17, 23, 24]:
+        x = h / 24 * W
+        label = f"{h:02d}h"
+        bars_svg += f'<line x1="{x:.1f}" y1="0" x2="{x:.1f}" y2="{H}" stroke="#555" stroke-width="0.7" stroke-dasharray="3,2"/>'
+        if h < 24:
+            bars_svg += f'<text x="{x+2:.1f}" y="10" font-size="7" fill="#555">{label}</text>'
+
+    # Shift overlay
+    ti_x  = time_in  / 24 * W
+    to_x  = time_out / 24 * W
+    shift_w = max(to_x - ti_x, 2)
+
+    bars_svg += (
+        f'<rect x="{ti_x:.1f}" y="4" width="{shift_w:.1f}" height="{H-8}" '
+        f'rx="3" fill="#2d6be4" opacity="0.85"/>'
+    )
+
+    # Meal break marker
+    if meal_hrs > 0:
+        mid = (time_in + time_out) / 2
+        mx = mid / 24 * W
+        bars_svg += (
+            f'<rect x="{mx-2:.1f}" y="4" width="4" height="{H-8}" '
+            f'rx="1" fill="white" opacity="0.7"/>'
+        )
+
+    # In/Out labels on the bar
+    in_label  = f"{int(time_in):02d}:{int(round((time_in  % 1)*60)):02d}"
+    out_label = f"{int(time_out):02d}:{int(round((time_out % 1)*60)):02d}"
+    bars_svg += (
+        f'<text x="{ti_x+3:.1f}" y="{H//2+4}" font-size="8" font-weight="bold" fill="white">{in_label}</text>'
+        f'<text x="{to_x-28:.1f}" y="{H//2+4}" font-size="8" font-weight="bold" fill="white">{out_label}</text>'
+    )
+
+    svg = f"""
+    <svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg"
+         style="width:100%;max-width:{W}px;height:{H}px;border-radius:4px;
+                background:#1e2533;display:block;margin:4px 0 8px 0;">
+      {bars_svg}
+    </svg>
+    <div style="display:flex;gap:12px;font-size:0.7rem;color:#888;margin-bottom:6px;">
+      <span><span style="display:inline-block;width:10px;height:10px;background:#27ae60;opacity:0.7;border-radius:2px;"></span> RT 08–17h</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#e07b00;opacity:0.7;border-radius:2px;"></span> OT 06–08h / 17–23h</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#d63031;opacity:0.7;border-radius:2px;"></span> DT nuit / dim.</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#2d6be4;opacity:0.9;border-radius:2px;"></span> Shift</span>
+    </div>
+    """
+    st.markdown(svg, unsafe_allow_html=True)
+
+
 def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date):
     """Render all inputs for a single time-entry row, mutating `row` in place."""
 
@@ -632,6 +715,9 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
 
     hrs = compute_hours(ti, to_, meal)
 
+    # Absence categories — no WO needed
+    is_absence = cat in ("Vacances", "Maladie")
+
     if ti is not None and to_ is not None:
         pay_id, pay_type = PAY_CODES.get(cat, ("RT", "RT"))
         cols_info = st.columns([1, 1, 1, 1])
@@ -641,34 +727,51 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         if meal > 0:
             cols_info[3].metric("Repas", f"{meal:.1f} h")
 
-    c5, c6, c7 = st.columns([1, 1, 2])
-    with c5:
-        job_type = st.selectbox(
-            "Type de job",
-            ["Job Client", "WO Interne", "PM"],
-            index=["Job Client", "WO Interne", "PM"].index(row.get("job_type", "Job Client")),
-            key=f"jt_{idx}",
-        )
-    with c6:
-        trans_options = ["WO", "PM"]
-        t_idx = 1 if job_type == "PM" else 0
-        trans_type = st.selectbox("Trans Type", trans_options, index=t_idx, key=f"tt_{idx}")
+    # ── Visual RT/OT/DT timeline ──────────────────────────────────
+    if ti is not None and to_ is not None and not is_absence:
+        _render_time_timeline(d, ti, to_, meal)
 
-    with c7:
-        if job_type == "WO Interne":
-            # Dropdown from WO Interne list
-            current_wo_label = row.get("wo_interne", "")
-            try:
-                wo_idx = wo_labels.index(current_wo_label) + 1
-            except ValueError:
-                wo_idx = 0
-            wo_sel = st.selectbox("Order Ref (WO Interne)", ["— choisir —"] + wo_labels, index=wo_idx, key=f"wo_{idx}")
-            order_ref = wo_by_label.get(wo_sel, "") if wo_sel != "— choisir —" else ""
-            wo_interne_sel = wo_sel if wo_sel != "— choisir —" else ""
-        else:
-            # Free text for client WO or PM
-            order_ref = st.text_input("Order Ref", value=row.get("order_ref", ""), key=f"or_{idx}", placeholder="Ex: 345924")
-            wo_interne_sel = ""
+    # ── WO / Trans Type — hidden for absences ─────────────────────
+    job_type   = row.get("job_type", "Job Client")
+    trans_type = row.get("trans_type", "WO")
+    order_ref  = row.get("order_ref", "")
+    wo_interne_sel = row.get("wo_interne", "")
+
+    if not is_absence:
+        c5, c6, c7 = st.columns([1, 1, 2])
+        with c5:
+            job_type = st.selectbox(
+                "Type de job",
+                ["Job Client", "WO Interne", "PM"],
+                index=["Job Client", "WO Interne", "PM"].index(job_type)
+                      if job_type in ["Job Client", "WO Interne", "PM"] else 0,
+                key=f"jt_{idx}",
+            )
+        with c6:
+            trans_options = ["WO", "PM"]
+            t_idx = 1 if job_type == "PM" else 0
+            trans_type = st.selectbox("Trans Type", trans_options, index=t_idx, key=f"tt_{idx}")
+
+        with c7:
+            if job_type == "WO Interne":
+                current_wo_label = wo_interne_sel
+                try:
+                    wo_idx = wo_labels.index(current_wo_label) + 1
+                except ValueError:
+                    wo_idx = 0
+                wo_sel = st.selectbox("Order Ref (WO Interne)", ["— choisir —"] + wo_labels, index=wo_idx, key=f"wo_{idx}")
+                order_ref = wo_by_label.get(wo_sel, "") if wo_sel != "— choisir —" else ""
+                wo_interne_sel = wo_sel if wo_sel != "— choisir —" else ""
+            else:
+                order_ref = st.text_input("Order Ref", value=order_ref, key=f"or_{idx}", placeholder="Ex: 345924")
+                wo_interne_sel = ""
+    else:
+        # Absence — reset WO fields silently
+        job_type = "Job Client"
+        trans_type = "WO"
+        order_ref = ""
+        wo_interne_sel = ""
+        st.caption("🏖️ Absence — aucun Order Ref requis")
 
     commentaire = st.text_input("Commentaire", value=row.get("commentaire", ""), key=f"cm_{idx}", placeholder="Optionnel")
 
