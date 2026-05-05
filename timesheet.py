@@ -212,34 +212,190 @@ def load_wo_interne() -> list[tuple[str, str]]:
             pass
     return HARDCODED_WO
 
-# ─────────────────────────── JSON / OneDrive writer ──────────────────────────
+# ─────────────────────────── Google Sheets connection ────────────────────────
+
+def _get_gsheet_client():
+    """Returns an authorized gspread client using the service account from Streamlit secrets."""
+    try:
+        import gspread
+        from google.oauth2.service_account import Credentials
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive",
+        ]
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        return gspread.authorize(creds)
+    except Exception as e:
+        return None
+
+def _get_sheet(sheet_name: str = "Soumissions"):
+    """Returns the requested worksheet."""
+    try:
+        client = _get_gsheet_client()
+        if not client:
+            return None
+        gsheet_id = st.secrets.get("GSHEET_ID", "")
+        if not gsheet_id:
+            return None
+        spreadsheet = client.open_by_key(gsheet_id)
+        return spreadsheet.worksheet(sheet_name)
+    except Exception:
+        return None
+
+# ─────────────────────────── Submit — Google Sheets + OneDrive JSON ──────────
 
 def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[dict]) -> tuple[bool, str]:
-    """Write the JSON file to OneDrive exactly as bms_watcher.py expects."""
+    """
+    Write to Google Sheets (primary — works from anywhere including iPad)
+    AND write JSON to OneDrive (for bms_watcher.py compatibility).
+    """
     if not rows:
         return False, "Aucune ligne à soumettre."
 
     periode_str = fmt_period(periode_fin)
-    payload = {
-        "employe_num":  emp_num,
-        "employe_nom":  emp_nom,
-        "periode_fin":  periode_str,
-        "soumis_le":    datetime.now(TZ).isoformat(),
-        "lignes":       rows,
-    }
+    soumis_le   = datetime.now(TZ).isoformat()
+    errors      = []
 
+    # ── 1) Google Sheets ──────────────────────────────────────────
     try:
-        base = Path(ONEDRIVE_FOLDER)
-        folder = base / periode_str / f"{emp_num}"
+        ws = _get_sheet("Soumissions")
+        if ws:
+            new_rows = []
+            for r in rows:
+                new_rows.append([
+                    r.get("date", ""),
+                    emp_num,
+                    emp_nom,
+                    periode_str,
+                    soumis_le,
+                    r.get("time_in", ""),
+                    r.get("time_out", ""),
+                    r.get("heures", ""),
+                    r.get("pay_id", ""),
+                    r.get("pay_type", ""),
+                    r.get("trans_type", ""),
+                    r.get("order_ref", ""),
+                    r.get("meal_hrs", ""),
+                    r.get("commentaire", ""),
+                    r.get("pay_type", ""),   # categorie
+                ])
+            ws.append_rows(new_rows, value_input_option="USER_ENTERED")
+        else:
+            errors.append("Google Sheets non disponible")
+    except Exception as e:
+        errors.append(f"Google Sheets: {e}")
+
+    # ── 2) OneDrive JSON (for bms_watcher.py) ─────────────────────
+    try:
+        payload = {
+            "employe_num": emp_num,
+            "employe_nom": emp_nom,
+            "periode_fin": periode_str,
+            "soumis_le":   soumis_le,
+            "lignes":      rows,
+        }
+        base   = Path(ONEDRIVE_FOLDER)
+        folder = base / periode_str / emp_num
         folder.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        fname = f"{emp_num}_{periode_str}_{ts}.json"
-        fpath = folder / fname
+        ts    = datetime.now().strftime("%Y%m%d_%H%M%S")
+        fpath = folder / f"{emp_num}_{periode_str}_{ts}.json"
         with open(fpath, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
-        return True, str(fpath)
     except Exception as e:
-        return False, str(e)
+        errors.append(f"OneDrive: {e}")
+
+    if len(errors) == 2:
+        return False, " | ".join(errors)
+    elif len(errors) == 1:
+        return True, f"Soumis avec avertissement : {errors[0]}"
+    return True, f"{emp_num}_{periode_str}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+
+
+# ─────────────────────────── Load week from Google Sheets ────────────────────
+
+def load_week_from_gsheet(emp_num: str, p_start: date, p_end: date) -> list[dict] | None:
+    """
+    Reads all submitted rows for this employee/period from Google Sheets.
+    Returns a full week grid with submitted days as read-only.
+    """
+    try:
+        ws = _get_sheet("Soumissions")
+        if not ws:
+            return None
+
+        all_records = ws.get_all_records()
+        if not all_records:
+            return None
+
+        periode_str = fmt_period(p_end)
+
+        MOIS_NUM_R = {
+            "JAN":1,"FEB":2,"MAR":3,"APR":4,"MAY":5,"JUN":6,
+            "JUL":7,"AUG":8,"SEP":9,"OCT":10,"NOV":11,"DEC":12,
+        }
+
+        def _parse_date_bms(s: str) -> date | None:
+            try:
+                parts = str(s).strip().upper().split("-")
+                return date(int(parts[2]), MOIS_NUM_R[parts[1]], int(parts[0]))
+            except Exception:
+                return None
+
+        def _to_float(v) -> float | None:
+            try:
+                return float(str(v).replace(",", ".")) if str(v).strip() else None
+            except Exception:
+                return None
+
+        cat_map = {
+            "RT": "Regular Time", "OT": "Overtime", "DT": "Double Time",
+            "VP": "Vacances",     "SP": "Maladie",
+        }
+
+        from collections import defaultdict
+        lignes_by_date: dict = defaultdict(list)
+
+        for rec in all_records:
+            if str(rec.get("employe_num", "")).strip() != emp_num:
+                continue
+            if str(rec.get("periode_fin", "")).strip() != periode_str:
+                continue
+            d = _parse_date_bms(str(rec.get("date", "")))
+            if d is None or not (p_start <= d <= p_end):
+                continue
+
+            pay_type = str(rec.get("pay_type", "RT")).strip()
+            lignes_by_date[d].append({
+                "date":        d,
+                "time_in":     _to_float(rec.get("time_in")),
+                "time_out":    _to_float(rec.get("time_out")),
+                "category":    cat_map.get(pay_type, "Regular Time"),
+                "job_type":    "Job Client",
+                "trans_type":  str(rec.get("trans_type", "WO")).strip(),
+                "order_ref":   str(rec.get("order_ref", "")).strip(),
+                "wo_interne":  "",
+                "commentaire": str(rec.get("commentaire", "")).strip(),
+                "deja_bms":    True,
+                "meal_hrs":    float(rec.get("meal_hrs", 0) or 0),
+            })
+
+        if not lignes_by_date:
+            return None
+
+        result = []
+        d = p_start
+        while d <= p_end:
+            if d in lignes_by_date:
+                result.extend(lignes_by_date[d])
+            else:
+                result.append(_blank_row(d))
+            d += timedelta(days=1)
+        return result
+
+    except Exception:
+        return None
 
 # ─────────────────────────── Row state helpers ───────────────────────────────
 
@@ -458,6 +614,117 @@ def show_timesheet():
         st.session_state[state_key] = default_rows(p_start, p_end)
 
     rows: list[dict] = st.session_state[state_key]
+
+    # ═══════════════════════════════════════════════════════
+    #  Charger la semaine depuis OneDrive
+    # ═══════════════════════════════════════════════════════
+
+    def _charger_semaine_onedrive(emp_num: str, p_end: date) -> list[dict] | None:
+        """
+        Lit tous les JSON soumis pour cet employé/période depuis OneDrive
+        et retourne les lignes fusionnées, prêtes à remplir la grille.
+        Retourne None si rien trouvé.
+        """
+        periode_str = fmt_period(p_end)
+        folder = Path(ONEDRIVE_FOLDER) / periode_str / emp_num
+        if not folder.exists():
+            return None
+
+        # Lire tous les JSON (y compris dans traites/)
+        all_files = list(folder.glob("*.json"))
+        traites_folder = folder / "traites"
+        if traites_folder.exists():
+            all_files += list(traites_folder.glob("*.json"))
+
+        if not all_files:
+            return None
+
+        # Regrouper toutes les lignes par date (date → liste de lignes)
+        from collections import defaultdict
+        MOIS_NUM_R = {
+            "JAN":1,"FEB":2,"MAR":3,"APR":4,"MAY":5,"JUN":6,
+            "JUL":7,"AUG":8,"SEP":9,"OCT":10,"NOV":11,"DEC":12,
+        }
+
+        def _parse_date_bms(s: str) -> date | None:
+            try:
+                parts = str(s).strip().upper().split("-")
+                return date(int(parts[2]), MOIS_NUM_R[parts[1]], int(parts[0]))
+            except Exception:
+                return None
+
+        def _hhmm_to_decimal(s: str) -> float | None:
+            try:
+                h, m = str(s).strip().split(":")
+                return int(h) + int(m) / 60.0
+            except Exception:
+                return None
+
+        lignes_by_date: dict = defaultdict(list)
+
+        for f in sorted(all_files):
+            try:
+                with open(f, encoding="utf-8-sig") as fp:
+                    data = json.load(fp)
+                for ligne in data.get("lignes", []):
+                    d = _parse_date_bms(ligne.get("date", ""))
+                    if d is None:
+                        continue
+                    ti = _hhmm_to_decimal(ligne.get("time_in", ""))
+                    to_ = _hhmm_to_decimal(ligne.get("time_out", ""))
+                    pay_type = ligne.get("pay_type", "RT")
+                    # Reverse-map pay_type → category
+                    cat_map = {"RT": "Regular Time", "OT": "Overtime", "DT": "Double Time",
+                               "VP": "Vacances", "SP": "Maladie"}
+                    cat = cat_map.get(pay_type, "Regular Time")
+                    lignes_by_date[d].append({
+                        "date":        d,
+                        "time_in":     ti,
+                        "time_out":    to_,
+                        "category":    cat,
+                        "job_type":    "WO Interne" if ligne.get("trans_type") == "WO"
+                                       and not ligne.get("order_ref", "").isdigit()
+                                       else "Job Client",
+                        "trans_type":  ligne.get("trans_type", "WO"),
+                        "order_ref":   ligne.get("order_ref", ""),
+                        "wo_interne":  "",
+                        "commentaire": ligne.get("commentaire", ""),
+                        "deja_bms":    True,   # déjà soumis = lecture seule
+                        "meal_hrs":    ligne.get("meal_hrs", 0.0),
+                    })
+            except Exception:
+                continue
+
+        if not lignes_by_date:
+            return None
+
+        # Rebuilder la grille complète de la semaine en fusionnant
+        result = []
+        d = p_start
+        while d <= p_end:
+            if d in lignes_by_date:
+                result.extend(lignes_by_date[d])
+            else:
+                result.append(_blank_row(d))
+            d += timedelta(days=1)
+        return result
+
+    # Bouton charger + indicateur
+    col_load, col_info = st.columns([1, 3])
+    with col_load:
+        if st.button("📂 Charger ma semaine", key="load_week_btn",
+                     help="Relit les temps déjà soumis depuis Google Sheets"):
+            loaded = load_week_from_gsheet(emp_num, p_start, p_end)
+            if loaded:
+                st.session_state[state_key] = loaded
+                st.session_state[f"loaded_{state_key}"] = True
+                st.rerun()
+            else:
+                st.warning("Aucune soumission trouvée pour cette période.")
+    with col_info:
+        if st.session_state.get(f"loaded_{state_key}"):
+            nb_deja = sum(1 for r in rows if r.get("deja_bms"))
+            st.info(f"✅ {nb_deja} ligne(s) chargée(s) depuis OneDrive — affichées en grisé.")
 
     # ═══════════════════════════════════════════════════════
     #  Row editor — one expander per day
@@ -701,11 +968,40 @@ def _render_time_timeline(d: date, time_in: float, time_out: float, meal_hrs: fl
 def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date):
     """Render all inputs for a single time-entry row, mutating `row` in place."""
 
+    is_readonly = row.get("deja_bms", False)
+
+    # ── Read-only view for already-submitted rows ─────────────────
+    if is_readonly:
+        ti  = row.get("time_in")
+        to_ = row.get("time_out")
+        meal = row.get("meal_hrs", 0.0) or 0.0
+        hrs  = compute_hours(ti, to_, meal)
+        cat  = row.get("category", "")
+        pay_id, pay_type = PAY_CODES.get(cat, ("RT", "RT"))
+
+        def _fmt(h): return f"{int(h):02d}:{int(round((h%1)*60)):02d}" if h is not None else "—"
+
+        st.markdown(f"""
+        <div style="background:#f0f4ff;border-left:3px solid #2d6be4;border-radius:6px;
+                    padding:8px 12px;font-size:0.85rem;color:#334;">
+            🔒 <b>Déjà soumis</b> &nbsp;|&nbsp;
+            {_fmt(ti)} → {_fmt(to_)} &nbsp;|&nbsp;
+            <b>{hrs:.2f} h</b> &nbsp;|&nbsp;
+            {cat} ({pay_type}) &nbsp;|&nbsp;
+            WO: {row.get('order_ref', '—') or '—'} &nbsp;|&nbsp;
+            {row.get('commentaire', '') or ''}
+        </div>
+        """, unsafe_allow_html=True)
+        if ti is not None and to_ is not None:
+            _render_time_timeline(d, ti, to_, meal)
+        return  # no editable fields
+
+    # ── Editable fields ───────────────────────────────────────────
     c1, c2, c3, c4 = st.columns([1.5, 1.5, 1, 1])
 
     with c1:
         time_in_str = st.text_input(
-            "Time In (ex: 8.0)", 
+            "Time In (ex: 8.0)",
             value="" if row["time_in"] is None else str(row["time_in"]),
             key=f"ti_{idx}",
             placeholder="8.0",
@@ -713,7 +1009,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         )
     with c2:
         time_out_str = st.text_input(
-            "Time Out (ex: 17.0)", 
+            "Time Out (ex: 17.0)",
             value="" if row["time_out"] is None else str(row["time_out"]),
             key=f"to_{idx}",
             placeholder="17.0",
