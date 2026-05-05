@@ -400,15 +400,17 @@ def load_week_from_gsheet(emp_num: str, p_start: date, p_end: date) -> list[dict
 # ─────────────────────────── Row state helpers ───────────────────────────────
 
 def _blank_row(d: date) -> dict:
+    import uuid
     return {
         "date":        d,
+        "uid":         str(uuid.uuid4())[:8],  # stable key across reruns
         "time_in":     None,
         "time_out":    None,
-        "category":    "",       # auto when time_in/out set
+        "category":    "",
         "job_type":    "Job Client",
         "trans_type":  "WO",
         "order_ref":   "",
-        "wo_interne":  "",       # selected WO label
+        "wo_interne":  "",
         "commentaire": "",
         "deja_bms":    False,
     }
@@ -785,6 +787,7 @@ def show_timesheet():
             with c1:
                 if st.button("➕ Ajouter une ligne", key=f"add_{idx}"):
                     new_row = _blank_row(d)
+                    # time_in of new line = time_out of current line
                     if row.get("time_out") is not None:
                         new_row["time_in"] = row["time_out"]
                     rows.insert(idx + 1, new_row)
@@ -977,6 +980,8 @@ def _render_time_timeline(d: date, time_in: float, time_out: float, meal_hrs: fl
 def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date):
     """Render all inputs for a single time-entry row, mutating `row` in place."""
 
+    # Use stable uid so widget state survives row insertions/deletions
+    uid = row.get("uid", str(idx))
     is_readonly = row.get("deja_bms", False)
 
     # ── Read-only view for already-submitted rows ─────────────────
@@ -1010,22 +1015,23 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
     c1, c2, c3, c4, c5, c6, c7 = st.columns([0.8, 0.8, 1.0, 1.0, 1.5, 1.5, 0.5])
 
     with c1:
+        ti_default = "" if row["time_in"] is None else str(row["time_in"])
         time_in_str = st.text_input(
-            "⏰ In", value="" if row["time_in"] is None else str(row["time_in"]),
-            key=f"ti_{idx}", placeholder="8.0",
+            "⏰ In", value=ti_default,
+            key=f"ti_{uid}", placeholder="8.0",
             help="Heure décimale : 8.0 = 8h00, 13.5 = 13h30"
         )
     with c2:
         time_out_str = st.text_input(
             "⏰ Out", value="" if row["time_out"] is None else str(row["time_out"]),
-            key=f"to_{idx}", placeholder="17.0",
+            key=f"to_{uid}", placeholder="17.0",
         )
     with c3:
         absence_options = ["—", "Vacances", "Maladie"]
         current_cat = row.get("category", "")
         absence_idx = absence_options.index(current_cat) if current_cat in ("Vacances", "Maladie") else 0
         absence_sel = st.selectbox(
-            "Absence", absence_options, index=absence_idx, key=f"cat_{idx}",
+            "Absence", absence_options, index=absence_idx, key=f"cat_{uid}",
             help="RT/OT/DT calculés automatiquement"
         )
 
@@ -1064,7 +1070,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                 "Type", ["Job Client", "WO Interne", "PM"],
                 index=["Job Client", "WO Interne", "PM"].index(job_type)
                       if job_type in ["Job Client", "WO Interne", "PM"] else 0,
-                key=f"jt_{idx}",
+                key=f"jt_{uid}",
             )
             trans_type = "PM" if job_type == "PM" else "WO"
         else:
@@ -1079,12 +1085,12 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                 except ValueError:
                     wo_idx = 0
                 wo_sel = st.selectbox("WO Interne", ["— choisir —"] + wo_labels,
-                                      index=wo_idx, key=f"wo_{idx}")
+                                      index=wo_idx, key=f"wo_{uid}")
                 order_ref      = wo_by_label.get(wo_sel, "") if wo_sel != "— choisir —" else ""
                 wo_interne_sel = wo_sel if wo_sel != "— choisir —" else ""
             else:
                 order_ref = st.text_input("Order Ref", value=order_ref,
-                                          key=f"or_{idx}", placeholder="Ex: 345924")
+                                          key=f"or_{uid}", placeholder="Ex: 345924")
                 wo_interne_sel = ""
         else:
             order_ref = ""
@@ -1092,11 +1098,11 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
 
     with c6:
         commentaire = st.text_input("Commentaire", value=row.get("commentaire", ""),
-                                    key=f"cm_{idx}", placeholder="Optionnel")
+                                    key=f"cm_{uid}", placeholder="Optionnel")
 
     with c7:
         st.markdown("<div style='font-size:0.72rem;color:#888;margin-bottom:4px;'>BMS</div>", unsafe_allow_html=True)
-        deja = st.checkbox("✓", value=row.get("deja_bms", False), key=f"bms_{idx}",
+        deja = st.checkbox("✓", value=row.get("deja_bms", False), key=f"bms_{uid}",
                            help="Déjà entré dans BMS")
 
     # ── Auto-computed info bar ────────────────────────────────────
@@ -1162,15 +1168,15 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
             )
             col_oui, col_non = st.columns([1, 1])
             with col_oui:
-                if st.button("✅ Oui — Requis client", key=f"split_oui_{idx}"):
-                    st.session_state[f"split_confirm_{idx}"] = "oui"
+                if st.button("✅ Oui — Requis client", key=f"split_oui_{uid}"):
+                    st.session_state[f"split_confirm_{uid}"] = "oui"
                     st.rerun()
             with col_non:
-                if st.button("❌ Non — Garder une seule ligne", key=f"split_non_{idx}"):
-                    st.session_state[f"split_confirm_{idx}"] = "non"
+                if st.button("❌ Non — Garder une seule ligne", key=f"split_non_{uid}"):
+                    st.session_state[f"split_confirm_{uid}"] = "non"
                     st.rerun()
 
-            confirmed = st.session_state.get(f"split_confirm_{idx}")
+            confirmed = st.session_state.get(f"split_confirm_{uid}")
             if confirmed == "oui":
                 st.success(
                     f"✅ Requis client confirmé — {len(segments)} ligne(s) seront créées "
