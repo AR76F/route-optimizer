@@ -527,15 +527,54 @@ def show_timesheet():
     # ═══════════════════════════════════════════════════════
     #  Summary + Submit
     # ═══════════════════════════════════════════════════════
+
+    # Build breakdown by category
+    from collections import defaultdict
+    breakdown: dict = defaultdict(float)
+    for row in rows:
+        ti  = row.get("time_in")
+        to_ = row.get("time_out")
+        if ti is None or to_ is None:
+            continue
+        meal = row.get("meal_hrs", 0.0) or 0.0
+        hrs  = compute_hours(ti, to_, meal)
+        if hrs <= 0:
+            continue
+        cat = row.get("category", "") or ""
+        if not cat:
+            cat = infer_category(row["date"], ti, to_)
+        breakdown[cat] += hrs
+
+    # Config: label, badge CSS class, icon
+    CAT_DISPLAY = {
+        "Regular Time": ("Régulier (RT)",  "badge-rt",  "🟢"),
+        "Overtime":     ("Supplémentaire (OT)", "badge-ot", "🟡"),
+        "Double Time":  ("Double (DT)",    "badge-dt",  "🔴"),
+        "Vacances":     ("Vacances (VP)",  "badge-vp",  "🔵"),
+        "Maladie":      ("Maladie (SP)",   "badge-sp",  "⚪"),
+    }
+
+    # Build breakdown HTML rows
+    breakdown_rows_html = ""
+    for cat, hrs in sorted(breakdown.items(), key=lambda x: list(PAY_CODES.keys()).index(x[0]) if x[0] in PAY_CODES else 99):
+        label, badge_cls, icon = CAT_DISPLAY.get(cat, (cat, "badge-rt", "•"))
+        breakdown_rows_html += f"""
+        <div style="display:flex;justify-content:space-between;align-items:center;
+                    padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.5);
+                    margin-bottom:4px;">
+            <span style="font-size:0.85rem;color:#334;">{icon} {label}</span>
+            <span class="hours-display" style="font-size:1rem;">{hrs:.2f} h</span>
+        </div>"""
+
     st.markdown("---")
     st.markdown(f"""
     <div class="submit-section">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
-            <span style="font-size:1rem; font-weight:600; color:#1a3a5c;">
-                Total semaine
-            </span>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+            <span style="font-size:1rem; font-weight:600; color:#1a3a5c;">Total semaine</span>
             <span class="hours-display">{total_hours:.2f} h</span>
         </div>
+        {breakdown_rows_html}
+        <div style="height:6px;"></div>
     """, unsafe_allow_html=True)
 
     # JSON preview (collapsible)
