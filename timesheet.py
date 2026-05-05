@@ -228,6 +228,7 @@ def _get_gsheet_client():
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         return gspread.authorize(creds)
     except Exception as e:
+        st.session_state["_gsheet_error"] = f"Client: {type(e).__name__}: {e}"
         return None
 
 def _get_sheet(sheet_name: str = "Soumissions"):
@@ -238,10 +239,12 @@ def _get_sheet(sheet_name: str = "Soumissions"):
             return None
         gsheet_id = st.secrets.get("GSHEET_ID", "")
         if not gsheet_id:
+            st.session_state["_gsheet_error"] = "GSHEET_ID manquant dans les secrets"
             return None
         spreadsheet = client.open_by_key(gsheet_id)
         return spreadsheet.worksheet(sheet_name)
-    except Exception:
+    except Exception as e:
+        st.session_state["_gsheet_error"] = f"Sheet: {type(e).__name__}: {e}"
         return None
 
 # ─────────────────────────── Submit — Google Sheets + OneDrive JSON ──────────
@@ -283,7 +286,8 @@ def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[d
                 ])
             ws.append_rows(new_rows, value_input_option="USER_ENTERED")
         else:
-            errors.append("Google Sheets non disponible")
+            detail = st.session_state.get("_gsheet_error", "raison inconnue")
+            errors.append(f"Google Sheets non disponible — {detail}")
     except Exception as e:
         errors.append(f"Google Sheets: {e}")
 
