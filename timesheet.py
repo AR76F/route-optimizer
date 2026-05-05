@@ -742,73 +742,83 @@ def show_timesheet():
             st.info(f"✅ {nb_deja} ligne(s) chargée(s) depuis Google Sheets — affichées en grisé.")
 
     # ═══════════════════════════════════════════════════════
-    #  Row editor — one expander per day
+    #  Row editor — one expander per DAY, all lines inside
     # ═══════════════════════════════════════════════════════
     st.markdown(f"**Saisie des heures — {emp_nom}**")
 
     total_hours = 0.0
     rows_to_delete = []
 
-    for idx, row in enumerate(rows):
-        d: date = row["date"]
+    # Group rows by date to render all lines of a day inside one expander
+    from itertools import groupby
+    rows_by_day = []
+    for d_key, group in groupby(enumerate(rows), key=lambda x: x[1]["date"]):
+        rows_by_day.append((d_key, list(group)))  # (date, [(idx, row), ...])
+
+    for d, day_rows in rows_by_day:
         wd = d.weekday()
 
-        day_class = "day-card"
-        label_class = "day-label"
-        if wd == 5:
-            day_class += " weekend-sat"
-            label_class += " sat"
-        elif wd == 6:
-            day_class += " weekend-sun"
-            label_class += " sun"
-        if row.get("deja_bms"):
-            day_class += " deja-bms"
+        # Compute total hours for this day (all lines combined)
+        day_total = 0.0
+        day_cats = []
+        for _, row in day_rows:
+            ti  = row.get("time_in")
+            to_ = row.get("time_out")
+            meal = row.get("meal_hrs", 0.0) or 0.0
+            h = compute_hours(ti, to_, meal)
+            day_total += h
+            total_hours += h
+            cat = row.get("category", "")
+            if cat and cat not in day_cats:
+                day_cats.append(cat)
 
-        day_str = fmt_date_fr(d)
+        # Badge — show first category, or mixed
+        badge_map = {
+            "Regular Time": "🟢 RT", "Overtime": "🟡 OT",
+            "Double Time":  "🔴 DT", "Vacances": "🔵 VP", "Maladie": "⚪ SP",
+        }
+        if len(day_cats) == 1:
+            badge_txt = badge_map.get(day_cats[0], "")
+        elif len(day_cats) > 1:
+            badge_txt = " · ".join(badge_map.get(c, c) for c in day_cats[:2])
+        else:
+            badge_txt = ""
 
-        # Compute live hours for display
-        ti = row.get("time_in")
-        to_ = row.get("time_out")
-        meal = row.get("meal_hrs", 0.0) or 0.0
-        hrs  = compute_hours(ti, to_, meal)
-        total_hours += hrs
+        day_str  = fmt_date_fr(d)
+        hrs_str  = f"{day_total:.2f}h" if day_total > 0 else "—"
+        n_lines  = len(day_rows)
 
-        # Plain text badge — no HTML in expander title
-        cat = row.get("category", "")
-        badge_txt = ""
-        if cat == "Regular Time":  badge_txt = "🟢 RT"
-        elif cat == "Overtime":    badge_txt = "🟡 OT"
-        elif cat == "Double Time": badge_txt = "🔴 DT"
-        elif cat == "Vacances":    badge_txt = "🔵 VP"
-        elif cat == "Maladie":     badge_txt = "⚪ SP"
-
-        hrs_str = f"{hrs:.2f}h" if hrs > 0 else "—"
-
-        # Keep expander open if user has interacted with it — don't recalculate
-        exp_key = f"exp_{state_key}_{idx}"
+        exp_key = f"exp_{state_key}_{d.isoformat()}"
         if exp_key not in st.session_state:
-            # Default: open if no hours yet (weekday only)
-            st.session_state[exp_key] = (hrs == 0 and wd < 5)
+            st.session_state[exp_key] = (day_total == 0 and wd < 5)
 
-        with st.expander(f"{day_str}   {badge_txt}   {hrs_str}",
+        line_label = f"  ({n_lines} lignes)" if n_lines > 1 else ""
+        with st.expander(f"{day_str}   {badge_txt}   {hrs_str}{line_label}",
                          expanded=st.session_state[exp_key]):
-            # Allow multiple rows per day (extra job lines)
-            _render_row(idx, row, wo_labels, wo_by_label, d)
 
-            # Add / Remove line buttons
-            c1, c2 = st.columns([1, 1])
-            with c1:
-                if st.button("➕ Ajouter une ligne", key=f"add_{idx}"):
-                    new_row = _blank_row(d)
-                    # time_in of new line = time_out of current line
-                    if row.get("time_out") is not None:
-                        new_row["time_in"] = row["time_out"]
-                    rows.insert(idx + 1, new_row)
-                    st.rerun()
-            with c2:
-                if len([r for r in rows if r["date"] == d]) > 1:
-                    if st.button("✕ Enlever", key=f"del_{idx}"):
-                        rows_to_delete.append(idx)
+            for idx, row in day_rows:
+                # Separator between lines within the same day
+                if idx != day_rows[0][0]:
+                    st.markdown(
+                        "<hr style='margin:4px 0;border:none;border-top:1px solid #2d3a4a;'>",
+                        unsafe_allow_html=True
+                    )
+
+                _render_row(idx, row, wo_labels, wo_by_label, d)
+
+                # Add / Remove buttons for each line
+                c1, c2 = st.columns([1, 1])
+                with c1:
+                    if st.button("➕ Ajouter une ligne", key=f"add_{idx}"):
+                        new_row = _blank_row(d)
+                        if row.get("time_out") is not None:
+                            new_row["time_in"] = row["time_out"]
+                        rows.insert(idx + 1, new_row)
+                        st.rerun()
+                with c2:
+                    if n_lines > 1:
+                        if st.button("✕ Enlever", key=f"del_{idx}"):
+                            rows_to_delete.append(idx)
 
     # Apply deletions
     if rows_to_delete:
@@ -1091,14 +1101,16 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
 
     ti  = _parse_time(time_in_str)
     to_ = _parse_time(time_out_str)
-    meal = auto_meal(ti, to_) if (ti is not None and to_ is not None) else 0.0
 
     if absence_sel in ("Vacances", "Maladie"):
-        cat = absence_sel
+        cat  = absence_sel
+        meal = 0.0   # pas de repas pour les absences
     elif ti is not None and to_ is not None:
-        cat = infer_category(d, ti, to_)
+        cat  = infer_category(d, ti, to_)
+        meal = auto_meal(ti, to_)
     else:
-        cat = infer_category(d, None, None)
+        cat  = infer_category(d, None, None)
+        meal = 0.0
 
     hrs = compute_hours(ti, to_, meal)
     is_absence = cat in ("Vacances", "Maladie")
