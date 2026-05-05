@@ -265,16 +265,18 @@ def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[d
     try:
         ws = _get_sheet("Soumissions")
         if ws:
+            # Use the JSON-transformed rows (HH:MM format, proper heures)
+            json_rows = _build_json_rows(rows)
             new_rows = []
-            for r in rows:
+            for r in json_rows:
                 new_rows.append([
                     r.get("date", ""),
                     emp_num,
                     emp_nom,
                     periode_str,
                     soumis_le,
-                    r.get("time_in", ""),
-                    r.get("time_out", ""),
+                    r.get("time_in", ""),    # already HH:MM
+                    r.get("time_out", ""),   # already HH:MM
                     r.get("heures", ""),
                     r.get("pay_id", ""),
                     r.get("pay_type", ""),
@@ -349,7 +351,14 @@ def load_week_from_gsheet(emp_num: str, p_start: date, p_end: date) -> list[dict
 
         def _to_float(v) -> float | None:
             try:
-                return float(str(v).replace(",", ".")) if str(v).strip() else None
+                s = str(v).strip()
+                if not s or s == "None":
+                    return None
+                if ":" in s:
+                    # HH:MM format → decimal
+                    h, m = s.split(":")
+                    return int(h) + int(m) / 60.0
+                return float(s.replace(",", "."))
             except Exception:
                 return None
 
