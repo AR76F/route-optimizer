@@ -797,6 +797,7 @@ def show_timesheet():
         with st.expander(f"{day_str}   {badge_txt}   {hrs_str}{line_label}",
                          expanded=st.session_state[exp_key]):
 
+            rt_accumulated = 0.0  # RT hours consumed so far in this day
             for idx, row in day_rows:
                 # Separator between lines within the same day
                 if idx != day_rows[0][0]:
@@ -805,7 +806,14 @@ def show_timesheet():
                         unsafe_allow_html=True
                     )
 
-                _render_row(idx, row, wo_labels, wo_by_label, d, emp_num)
+                _render_row(idx, row, wo_labels, wo_by_label, d, emp_num, rt_already=rt_accumulated)
+
+                # Update accumulated RT for next line
+                if row.get("category") not in ("Vacances", "Maladie", "Overtime", "Double Time"):
+                    ti_ = row.get("time_in")
+                    to__ = row.get("time_out")
+                    if ti_ is not None and to__ is not None:
+                        rt_accumulated += compute_hours(ti_, to__, 0.0)
 
                 # Add / Remove buttons for each line
                 c1, c2 = st.columns([1, 1])
@@ -1002,7 +1010,7 @@ def _render_time_timeline(d: date, time_in: float, time_out: float, meal_hrs: fl
     st.markdown(svg, unsafe_allow_html=True)
 
 
-def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date, emp_num: str = ""):
+def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date, emp_num: str = "", rt_already: float = 0.0):
     """Render all inputs for a single time-entry row, mutating `row` in place."""
 
     # Louis Lauzon (FW688) is part-time — no automatic daily OT cap
@@ -1216,7 +1224,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         # (only on weekdays, and only for non-exempt employees)
         if apply_daily_cap and wd < 5:
             DAILY_RT_CAP = 8.0
-            rt_consumed = 0.0
+            rt_consumed = rt_already  # ← account for previous lines in same day
             capped = []
             for seg in segments:
                 if seg["category"] != "Regular Time":
