@@ -773,28 +773,41 @@ def show_timesheet():
             if cat and cat not in day_cats:
                 day_cats.append(cat)
 
-        # Badge — show first category, or mixed
+        # Build title — show hours per category instead of total
+        from collections import defaultdict
+        hrs_by_cat = defaultdict(float)
+        for _, row in day_rows:
+            ti  = row.get("time_in")
+            to_ = row.get("time_out")
+            cat = row.get("category", "")
+            if ti is not None and to_ is not None and cat:
+                hrs_by_cat[cat] += compute_hours(ti, to_, 0.0)
+
         badge_map = {
-            "Regular Time": "🟢 RT", "Overtime": "🟡 OT",
-            "Double Time":  "🔴 DT", "Vacances": "🔵 VP", "Maladie": "⚪ SP",
+            "Regular Time": ("🟢", "RT"), "Overtime": ("🟡", "OT"),
+            "Double Time":  ("🔴", "DT"), "Vacances": ("🔵", "VP"), "Maladie": ("⚪", "SP"),
         }
-        if len(day_cats) == 1:
-            badge_txt = badge_map.get(day_cats[0], "")
-        elif len(day_cats) > 1:
-            badge_txt = " · ".join(badge_map.get(c, c) for c in day_cats[:2])
+        cat_order = ["Regular Time", "Overtime", "Double Time", "Vacances", "Maladie"]
+
+        if hrs_by_cat:
+            parts = []
+            for cat in cat_order:
+                if cat in hrs_by_cat:
+                    icon, label = badge_map.get(cat, ("•", cat))
+                    parts.append(f"{icon} {hrs_by_cat[cat]:.2f}h {label}")
+            title_hrs = "  ·  ".join(parts)
         else:
-            badge_txt = ""
+            title_hrs = "—"
 
         day_str  = fmt_date_fr(d)
-        hrs_str  = f"{day_total:.2f}h" if day_total > 0 else "—"
         n_lines  = len(day_rows)
+        line_label = f"  ({n_lines} lignes)" if n_lines > 1 else ""
 
         exp_key = f"exp_{state_key}_{d.isoformat()}"
         if exp_key not in st.session_state:
             st.session_state[exp_key] = (day_total == 0 and wd < 5)
 
-        line_label = f"  ({n_lines} lignes)" if n_lines > 1 else ""
-        with st.expander(f"{day_str}   {badge_txt}   {hrs_str}{line_label}",
+        with st.expander(f"{day_str}   {title_hrs}{line_label}",
                          expanded=st.session_state[exp_key]):
 
             rt_accumulated = 0.0  # RT hours consumed so far in this day
