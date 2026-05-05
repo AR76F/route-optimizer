@@ -846,15 +846,18 @@ def show_timesheet():
         </div>"""
 
     st.markdown("---")
-    st.markdown(f"""
-    <div class="submit-section">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
-            <span style="font-size:1rem; font-weight:600; color:#1a3a5c;">Total semaine</span>
-            <span class="hours-display">{total_hours:.2f} h</span>
+
+    # Summary box
+    with st.container():
+        st.markdown(f"""
+        <div class="submit-section">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;">
+                <span style="font-size:1rem;font-weight:600;color:#1a3a5c;">Total semaine</span>
+                <span class="hours-display">{total_hours:.2f} h</span>
+            </div>
+            {breakdown_rows_html}
         </div>
-        {breakdown_rows_html}
-        <div style="height:6px;"></div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
     # JSON preview (collapsible)
     with st.expander("🔍 Aperçu JSON (bms_watcher)"):
@@ -888,8 +891,6 @@ def show_timesheet():
         if st.button("🔄 Réinitialiser", key="reset_btn"):
             st.session_state[state_key] = default_rows(p_start, p_end)
             st.rerun()
-
-    st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ─────────────────────────── Row renderer ────────────────────────────────────
