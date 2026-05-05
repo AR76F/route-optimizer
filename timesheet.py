@@ -1087,7 +1087,8 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                                     key=f"cm_{idx}", placeholder="Optionnel")
 
     with c7:
-        deja = st.checkbox("BMS", value=row.get("deja_bms", False), key=f"bms_{idx}",
+        st.markdown("<div style='font-size:0.72rem;color:#888;margin-bottom:4px;'>BMS</div>", unsafe_allow_html=True)
+        deja = st.checkbox("✓", value=row.get("deja_bms", False), key=f"bms_{idx}",
                            help="Déjà entré dans BMS")
 
     # ── Auto-computed info bar ────────────────────────────────────
