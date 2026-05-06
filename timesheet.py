@@ -177,10 +177,17 @@ def infer_category(d: date, time_in: float, time_out: float) -> str:
         return "Overtime"
     return "Regular Time"
 
-def compute_hours(time_in: float, time_out: float, meal_hrs: float = 0.0) -> float:
+def compute_hours(time_in, time_out, meal_hrs: float = 0.0) -> float:
     if time_in is None or time_out is None:
         return 0.0
-    h = time_out - time_in - meal_hrs
+    try:
+        ti = float(str(time_in).replace(",", ".")) if ":" not in str(time_in) else \
+             int(str(time_in).split(":")[0]) + int(str(time_in).split(":")[1]) / 60.0
+        to = float(str(time_out).replace(",", ".")) if ":" not in str(time_out) else \
+             int(str(time_out).split(":")[0]) + int(str(time_out).split(":")[1]) / 60.0
+    except Exception:
+        return 0.0
+    h = to - ti - meal_hrs
     return max(round(h, 2), 0.0)
 
 def auto_meal(time_in: float, time_out: float) -> float:
@@ -1363,11 +1370,31 @@ def _build_json_rows(rows: list[dict]) -> list[dict]:
     """
     MOIS_EN_U = {1:"JAN",2:"FEB",3:"MAR",4:"APR",5:"MAY",6:"JUN",
                  7:"JUL",8:"AUG",9:"SEP",10:"OCT",11:"NOV",12:"DEC"}
+
+    def _to_float(v) -> float | None:
+        if v is None: return None
+        try:
+            s = str(v).strip()
+            if ":" in s:
+                h, m = s.split(":")
+                return int(h) + int(m) / 60.0
+            return float(s.replace(",", ".")) if s else None
+        except Exception:
+            return None
+
     out = []
     for row in rows:
-        d: date = row["date"]
-        ti  = row.get("time_in")
-        to_ = row.get("time_out")
+        raw_date = row["date"]
+        # Convert string date to date object if needed
+        if isinstance(raw_date, str):
+            try:
+                from datetime import date as date_type
+                raw_date = date_type.fromisoformat(raw_date)
+            except Exception:
+                continue
+        d: date = raw_date
+        ti  = _to_float(row.get("time_in"))
+        to_ = _to_float(row.get("time_out"))
         if ti is None or to_ is None:
             continue
 
@@ -1375,7 +1402,6 @@ def _build_json_rows(rows: list[dict]) -> list[dict]:
         client_requis = row.get("_client_requis", False)
 
         if segments and client_requis:
-            # Expand into one line per zone segment
             for seg in segments:
                 cat = seg["category"]
                 pay_id, pay_type = PAY_CODES.get(cat, ("RT", "RT"))
@@ -1394,9 +1420,7 @@ def _build_json_rows(rows: list[dict]) -> list[dict]:
                     "deja_bms":       row.get("deja_bms", False),
                 })
         else:
-            # Single line as before
-            meal = row.get("meal_hrs", 0.0) or 0.0
-            hrs  = compute_hours(ti, to_, meal)
+            hrs  = compute_hours(ti, to_, 0.0)
             cat  = row.get("category", "Regular Time") or "Regular Time"
             pay_id, pay_type = PAY_CODES.get(cat, ("RT", "RT"))
             out.append({
@@ -1408,7 +1432,7 @@ def _build_json_rows(rows: list[dict]) -> list[dict]:
                 "pay_type":      pay_type,
                 "trans_type":    row.get("trans_type", "WO"),
                 "order_ref":     row.get("order_ref", ""),
-                "meal_hrs":      meal,
+                "meal_hrs":      0.0,
                 "commentaire":   row.get("commentaire", ""),
                 "client_requis": False,
                 "deja_bms":      row.get("deja_bms", False),
