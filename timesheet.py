@@ -153,16 +153,28 @@ def current_period(ref: date = None):
     end = ref + timedelta(days=delta)
     return end - timedelta(days=6), end
 
-def fmt_period(d: date):
+def _coerce_date(v) -> date:
+    """Convert string or date to date object safely."""
+    if isinstance(v, date):
+        return v
+    try:
+        return date.fromisoformat(str(v))
+    except Exception:
+        return date.today()
+
+def fmt_period(d):
+    d = _coerce_date(d)
     return f"{d.day:02d}-{MOIS_EN[d.month]}-{d.year}"
 
-def fmt_date_fr(d: date):
+def fmt_date_fr(d):
+    d = _coerce_date(d)
     return f"{DAY_FR[d.weekday()]} {d.day} {MOIS_FR[d.month]}"
 
 # ─────────────────────────── RT/OT/DT rules ──────────────────────────────────
 
-def infer_category(d: date, time_in: float, time_out: float) -> str:
+def infer_category(d, time_in: float, time_out: float) -> str:
     """Return 'Regular Time', 'Overtime', or 'Double Time' from day + hours."""
+    d = _coerce_date(d)
     wd = d.weekday()  # Mon=0 … Sun=6
     if wd == 6:
         return "Double Time"
@@ -759,8 +771,8 @@ def show_timesheet():
     # Group rows by date to render all lines of a day inside one expander
     from itertools import groupby
     rows_by_day = []
-    for d_key, group in groupby(enumerate(rows), key=lambda x: x[1]["date"]):
-        rows_by_day.append((d_key, list(group)))  # (date, [(idx, row), ...])
+    for d_key, group in groupby(enumerate(rows), key=lambda x: _coerce_date(x[1]["date"])):
+        rows_by_day.append((_coerce_date(d_key), list(group)))
 
     for d, day_rows in rows_by_day:
         wd = d.weekday()
@@ -1384,15 +1396,7 @@ def _build_json_rows(rows: list[dict]) -> list[dict]:
 
     out = []
     for row in rows:
-        raw_date = row["date"]
-        # Convert string date to date object if needed
-        if isinstance(raw_date, str):
-            try:
-                from datetime import date as date_type
-                raw_date = date_type.fromisoformat(raw_date)
-            except Exception:
-                continue
-        d: date = raw_date
+        d: date = _coerce_date(row["date"])
         ti  = _to_float(row.get("time_in"))
         to_ = _to_float(row.get("time_out"))
         if ti is None or to_ is None:
