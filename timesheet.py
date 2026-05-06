@@ -310,7 +310,8 @@ def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[d
             detail = st.session_state.get("_gsheet_error", "raison inconnue")
             errors.append(f"Google Sheets non disponible — {detail}")
     except Exception as e:
-        errors.append(f"Google Sheets: {e}")
+        import traceback
+        errors.append(f"Google Sheets: {traceback.format_exc()}")
 
     # ── 2) OneDrive JSON (for bms_watcher.py) ─────────────────────
     try:
