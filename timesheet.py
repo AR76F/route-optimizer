@@ -282,6 +282,13 @@ def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[d
 
     # ── 1) Google Sheets ──────────────────────────────────────────
     try:
+        import traceback as _tb
+        # Debug: inspect rows before building
+        for i, r in enumerate(rows):
+            d_val = r.get("date")
+            if not isinstance(d_val, date):
+                r["date"] = _coerce_date(d_val)
+
         ws = _get_sheet("Soumissions")
         if ws:
             # Use the JSON-transformed rows (HH:MM format, proper heures)
