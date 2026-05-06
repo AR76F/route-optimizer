@@ -276,33 +276,25 @@ def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[d
     if not rows:
         return False, "Aucune ligne à soumettre."
 
-    periode_str = fmt_period(periode_fin)
+    periode_str = fmt_period(periode_fin) if hasattr(periode_fin, 'day') else str(periode_fin)
     soumis_le   = datetime.now(TZ).isoformat()
     errors      = []
 
     # ── 1) Google Sheets ──────────────────────────────────────────
     try:
-        import traceback as _tb
-        # Debug: inspect rows before building
-        for i, r in enumerate(rows):
-            d_val = r.get("date")
-            if not isinstance(d_val, date):
-                r["date"] = _coerce_date(d_val)
-
         ws = _get_sheet("Soumissions")
         if ws:
-            # Use the JSON-transformed rows (HH:MM format, proper heures)
-            json_rows = _build_json_rows(rows)
+            # rows are already JSON-transformed (from _build_json_rows call before submit)
             new_rows = []
-            for r in json_rows:
+            for r in rows:
                 new_rows.append([
                     r.get("date", ""),
                     emp_num,
                     emp_nom,
                     periode_str,
                     soumis_le,
-                    r.get("time_in", ""),    # already HH:MM
-                    r.get("time_out", ""),   # already HH:MM
+                    r.get("time_in", ""),
+                    r.get("time_out", ""),
                     r.get("heures", ""),
                     r.get("pay_id", ""),
                     r.get("pay_type", ""),
@@ -310,7 +302,7 @@ def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[d
                     r.get("order_ref", ""),
                     r.get("meal_hrs", ""),
                     r.get("commentaire", ""),
-                    r.get("pay_type", ""),   # categorie
+                    r.get("pay_type", ""),
                 ])
             ws.append_rows(new_rows, value_input_option="USER_ENTERED")
         else:
