@@ -282,12 +282,6 @@ def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[d
 
     # ── 1) Google Sheets ──────────────────────────────────────────
     try:
-        import traceback as _tb
-        _debug = []
-        _debug.append(f"rows count={len(rows)}")
-        for i, r in enumerate(rows):
-            _debug.append(f"row[{i}]: date={r.get('date')} ({type(r.get('date')).__name__}), ti={r.get('time_in')} ({type(r.get('time_in')).__name__})")
-        st.session_state["_gsheet_submit_error"] = "\n".join(_debug)
         ws = _get_sheet("Soumissions")
         if ws:
             new_rows = []
@@ -966,10 +960,6 @@ def show_timesheet():
                 ok, msg = submit_timesheet(emp_num, emp_nom, p_end, valid)
                 if ok:
                     st.success(f"✅ Soumis ! ({len(valid)} ligne(s)) → {msg}")
-                    if st.session_state.get("_gsheet_submit_error"):
-                        st.error("Traceback Google Sheets:")
-                        st.code(st.session_state.pop("_gsheet_submit_error"))
-                    # Mark all submitted rows as deja_bms
                     for r in rows:
                         if r.get("time_in") and r.get("time_out"):
                             r["deja_bms"] = True
