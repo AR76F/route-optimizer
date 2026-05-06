@@ -945,9 +945,10 @@ def show_timesheet():
         </div>
         """, unsafe_allow_html=True)
 
-    # JSON preview (collapsible)
+    # JSON preview (collapsible) — only show new rows
     with st.expander("🔍 Aperçu JSON (bms_watcher)"):
-        preview_rows = _build_json_rows(rows)
+        new_only = [r for r in rows if not r.get("deja_bms")]
+        preview_rows = _build_json_rows(new_only)
         st.json({
             "employe_num": emp_num,
             "employe_nom": emp_nom,
@@ -958,15 +959,21 @@ def show_timesheet():
     col_sub, col_rst = st.columns([2, 1])
     with col_sub:
         if st.button("📤 Soumettre à BMS Watcher", type="primary", key="submit_btn"):
-            json_rows = _build_json_rows(rows)
+            # Only submit rows NOT already submitted (deja_bms=False)
+            new_rows_only = [r for r in rows if not r.get("deja_bms")]
+            json_rows = _build_json_rows(new_rows_only)
             valid = [r for r in json_rows if r.get("heures", 0) > 0]
             if not valid:
-                st.warning("⚠️ Aucune ligne avec des heures à soumettre.")
+                if not new_rows_only:
+                    st.warning("⚠️ Toutes les journées sont déjà soumises.")
+                else:
+                    st.warning("⚠️ Aucune ligne avec des heures à soumettre.")
             else:
                 ok, msg = submit_timesheet(emp_num, emp_nom, p_end, valid)
                 if ok:
                     st.success(f"✅ Soumis ! ({len(valid)} ligne(s)) → {msg}")
-                    for r in rows:
+                    # Mark only the newly submitted rows as deja_bms
+                    for r in new_rows_only:
                         if r.get("time_in") and r.get("time_out"):
                             r["deja_bms"] = True
                 else:
