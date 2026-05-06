@@ -953,8 +953,9 @@ def show_timesheet():
                 ok, msg = submit_timesheet(emp_num, emp_nom, p_end, valid)
                 if ok:
                     st.success(f"✅ Soumis ! ({len(valid)} ligne(s)) → {msg}")
-                    if "_gsheet_submit_error" in st.session_state:
-                        st.code(st.session_state["_gsheet_submit_error"])
+                    if st.session_state.get("_gsheet_submit_error"):
+                        st.error("Traceback Google Sheets:")
+                        st.code(st.session_state.pop("_gsheet_submit_error"))
                     # Mark all submitted rows as deja_bms
                     for r in rows:
                         if r.get("time_in") and r.get("time_out"):
