@@ -284,27 +284,27 @@ def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[d
     try:
         ws = _get_sheet("Soumissions")
         if ws:
-            # rows are already JSON-transformed (from _build_json_rows call before submit)
             new_rows = []
             for r in rows:
+                def _s(v): return str(v) if v is not None else ""
                 new_rows.append([
-                    r.get("date", ""),
-                    emp_num,
-                    emp_nom,
-                    periode_str,
-                    soumis_le,
-                    r.get("time_in", ""),
-                    r.get("time_out", ""),
-                    r.get("heures", ""),
-                    r.get("pay_id", ""),
-                    r.get("pay_type", ""),
-                    r.get("trans_type", ""),
-                    r.get("order_ref", ""),
-                    r.get("meal_hrs", ""),
-                    r.get("commentaire", ""),
-                    r.get("pay_type", ""),
+                    _s(r.get("date")),
+                    _s(emp_num),
+                    _s(emp_nom),
+                    _s(periode_str),
+                    _s(soumis_le),
+                    _s(r.get("time_in")),
+                    _s(r.get("time_out")),
+                    _s(r.get("heures")),
+                    _s(r.get("pay_id")),
+                    _s(r.get("pay_type")),
+                    _s(r.get("trans_type")),
+                    _s(r.get("order_ref")),
+                    _s(r.get("meal_hrs")),
+                    _s(r.get("commentaire")),
+                    _s(r.get("pay_type")),
                 ])
-            ws.append_rows(new_rows, value_input_option="USER_ENTERED")
+            ws.append_rows(new_rows, value_input_option="RAW")
         else:
             detail = st.session_state.get("_gsheet_error", "raison inconnue")
             errors.append(f"Google Sheets non disponible — {detail}")
@@ -316,6 +316,11 @@ def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[d
 
     # ── 2) OneDrive JSON (for bms_watcher.py) ─────────────────────
     try:
+        def _json_serial(obj):
+            if isinstance(obj, (date, datetime)):
+                return obj.isoformat()
+            raise TypeError(f"Type {type(obj)} not serializable")
+
         payload = {
             "employe_num": emp_num,
             "employe_nom": emp_nom,
@@ -329,7 +334,7 @@ def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[d
         ts    = datetime.now().strftime("%Y%m%d_%H%M%S")
         fpath = folder / f"{emp_num}_{periode_str}_{ts}.json"
         with open(fpath, "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
+            json.dump(payload, f, ensure_ascii=False, indent=2, default=_json_serial)
     except Exception as e:
         errors.append(f"OneDrive: {e}")
 
