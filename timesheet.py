@@ -311,7 +311,9 @@ def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[d
             errors.append(f"Google Sheets non disponible — {detail}")
     except Exception as e:
         import traceback
-        errors.append(f"Google Sheets: {traceback.format_exc()}")
+        tb = traceback.format_exc()
+        st.session_state["_gsheet_submit_error"] = tb
+        errors.append(f"Google Sheets: {e}")
 
     # ── 2) OneDrive JSON (for bms_watcher.py) ─────────────────────
     try:
@@ -946,7 +948,9 @@ def show_timesheet():
             else:
                 ok, msg = submit_timesheet(emp_num, emp_nom, p_end, valid)
                 if ok:
-                    st.success(f"✅ Soumis ! ({len(valid)} ligne(s)) → {Path(msg).name}")
+                    st.success(f"✅ Soumis ! ({len(valid)} ligne(s)) → {msg}")
+                    if "_gsheet_submit_error" in st.session_state:
+                        st.code(st.session_state["_gsheet_submit_error"])
                     # Mark all submitted rows as deja_bms
                     for r in rows:
                         if r.get("time_in") and r.get("time_out"):
