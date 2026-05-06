@@ -284,7 +284,6 @@ def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[d
     try:
         ws = _get_sheet("Soumissions")
         if ws:
-            # Build rows as pure strings
             new_rows = []
             for r in rows:
                 new_rows.append([
@@ -304,11 +303,15 @@ def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[d
                     str(r.get("commentaire", "")),
                     str(r.get("pay_type", "")),
                 ])
-            # Use batch_update instead of append_rows to avoid gspread date parsing
-            next_row = len(ws.get_all_values()) + 1
-            if new_rows:
-                range_str = f"A{next_row}:O{next_row + len(new_rows) - 1}"
-                ws.update(range_str, new_rows, value_input_option="RAW")
+            # Use spreadsheet API directly to avoid gspread date parsing bug
+            body = {
+                "values": new_rows
+            }
+            ws.spreadsheet.values_append(
+                f"Soumissions",
+                params={"valueInputOption": "RAW", "insertDataOption": "INSERT_ROWS"},
+                body=body
+            )
         else:
             detail = st.session_state.get("_gsheet_error", "raison inconnue")
             errors.append(f"Google Sheets non disponible — {detail}")
