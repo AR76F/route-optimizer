@@ -284,27 +284,31 @@ def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[d
     try:
         ws = _get_sheet("Soumissions")
         if ws:
+            # Build rows as pure strings
             new_rows = []
             for r in rows:
-                def _s(v): return str(v) if v is not None else ""
                 new_rows.append([
-                    _s(r.get("date")),
-                    _s(emp_num),
-                    _s(emp_nom),
-                    _s(periode_str),
-                    _s(soumis_le),
-                    _s(r.get("time_in")),
-                    _s(r.get("time_out")),
-                    _s(r.get("heures")),
-                    _s(r.get("pay_id")),
-                    _s(r.get("pay_type")),
-                    _s(r.get("trans_type")),
-                    _s(r.get("order_ref")),
-                    _s(r.get("meal_hrs")),
-                    _s(r.get("commentaire")),
-                    _s(r.get("pay_type")),
+                    str(r.get("date", "")),
+                    str(emp_num),
+                    str(emp_nom),
+                    str(periode_str),
+                    str(soumis_le),
+                    str(r.get("time_in", "")),
+                    str(r.get("time_out", "")),
+                    str(r.get("heures", "")),
+                    str(r.get("pay_id", "")),
+                    str(r.get("pay_type", "")),
+                    str(r.get("trans_type", "")),
+                    str(r.get("order_ref", "")),
+                    str(r.get("meal_hrs", "")),
+                    str(r.get("commentaire", "")),
+                    str(r.get("pay_type", "")),
                 ])
-            ws.append_rows(new_rows, value_input_option="RAW")
+            # Use batch_update instead of append_rows to avoid gspread date parsing
+            next_row = len(ws.get_all_values()) + 1
+            if new_rows:
+                range_str = f"A{next_row}:O{next_row + len(new_rows) - 1}"
+                ws.update(range_str, new_rows, value_input_option="RAW")
         else:
             detail = st.session_state.get("_gsheet_error", "raison inconnue")
             errors.append(f"Google Sheets non disponible — {detail}")
