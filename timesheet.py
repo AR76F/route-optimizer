@@ -659,7 +659,13 @@ def show_timesheet():
     state_key = f"rows_{emp_num}_{p_end.isoformat()}"
 
     if state_key not in st.session_state:
-        st.session_state[state_key] = default_rows(p_start, p_end)
+        # Auto-load from Google Sheets first, fall back to blank rows
+        loaded = load_week_from_gsheet(emp_num, p_start, p_end)
+        if loaded:
+            st.session_state[state_key] = loaded
+            st.session_state[f"loaded_{state_key}"] = True
+        else:
+            st.session_state[state_key] = default_rows(p_start, p_end)
 
     rows: list[dict] = st.session_state[state_key]
 
@@ -760,8 +766,8 @@ def show_timesheet():
     # Bouton charger + indicateur
     col_load, col_info = st.columns([1, 3])
     with col_load:
-        if st.button("📂 Charger ma semaine", key="load_week_btn",
-                     help="Relit les temps déjà soumis depuis Google Sheets"):
+        if st.button("🔄 Rafraîchir", key="load_week_btn",
+                     help="Recharger les données depuis Google Sheets"):
             loaded = load_week_from_gsheet(emp_num, p_start, p_end)
             if loaded:
                 st.session_state[state_key] = loaded
