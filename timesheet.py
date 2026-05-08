@@ -1163,17 +1163,77 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         )
 
     # Parse times first so we can set job_type default
-    def _parse_time(s):
-        s = s.strip().replace(",", ".")
-        if not s:
-            return None
-        try:
-            return float(s)
-        except ValueError:
-            return None
+    def _parse_time(s) -> tuple[float | None, str | None]:
+        """
+        Parse a time string into a decimal hour value.
+        Returns (value, warning_message) where warning_message is None if OK.
 
-    ti  = _parse_time(time_in_str)
-    to_ = _parse_time(time_out_str)
+        Accepted formats:
+          8       → 8.0
+          8.5     → 8.5
+          8h      → 8.0
+          8h15    → 8.25
+          8h30    → 8.5
+          8:15    → 8.25
+          8:30    → 8.5
+          8,5     → 8.5
+
+        Always rounded to nearest quarter hour (0, .25, .5, .75).
+        """
+        import re
+        if not s or not str(s).strip():
+            return None, None
+        s = str(s).strip().lower().replace(",", ".")
+
+        val = None
+        warn = None
+
+        # Format: 8h15, 8h30, 8h, 8H
+        m = re.match(r'^(\d{1,2})h(\d{0,2})$', s)
+        if m:
+            h = int(m.group(1))
+            mins = int(m.group(2)) if m.group(2) else 0
+            val = h + mins / 60.0
+        # Format: 8:15, 8:30
+        elif re.match(r'^\d{1,2}:\d{2}$', s):
+            h, mins = s.split(":")
+            val = int(h) + int(mins) / 60.0
+        # Format: 8.0, 8.5, 8.25
+        else:
+            try:
+                val = float(s)
+            except ValueError:
+                return None, f"Format non reconnu : «{s}». Essayez 8, 8.5, 8h30 ou 8:30."
+
+        if val is None:
+            return None, None
+
+        # Validate range
+        if val < 0 or val > 24:
+            return None, f"Heure invalide : {val:.2f}. Doit être entre 0 et 24."
+
+        # Round to 1 decimal place (BMS accepts only X.X format)
+        rounded = round(val, 1)
+        if abs(rounded - val) > 0.01:
+            warn = f"Arrondi à {rounded:.1f}h (BMS accepte seulement 1 chiffre après la virgule)"
+
+        return rounded, warn
+
+    ti_val, ti_warn = _parse_time(time_in_str)
+    to_val, to_warn = _parse_time(time_out_str)
+
+    # Show warnings inline
+    if ti_warn:
+        st.warning(f"⏰ In : {ti_warn}")
+    if to_warn:
+        st.warning(f"⏰ Out : {to_warn}")
+    if time_in_str.strip() and ti_val is None:
+        st.error(f"⏰ In invalide : «{time_in_str}»")
+    if time_out_str.strip() and to_val is None:
+        st.error(f"⏰ Out invalide : «{time_out_str}»")
+
+    ti  = ti_val
+    to_ = to_val
 
     if absence_sel in ("Vacances", "Maladie"):
         cat  = absence_sel
