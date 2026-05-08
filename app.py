@@ -72,7 +72,10 @@ st.set_page_config(page_title="Route Optimizer", layout="wide", initial_sidebar_
 # Navigation persisted
 # ────────────────────────────────────────────────────────────────
 if "page" not in st.session_state:
-    st.session_state.page = "🏠 Route Optimizer"
+    if st.query_params.get("emp"):
+        st.session_state.page = "⏱ Feuille de temps"
+    else:
+        st.session_state.page = "🏠 Route Optimizer"
 
 st.sidebar.title("Menu")
 st.session_state.page = st.sidebar.radio(
