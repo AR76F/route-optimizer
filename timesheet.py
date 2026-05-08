@@ -608,7 +608,17 @@ def show_timesheet():
     with st.sidebar:
         st.markdown("### 👤 Employé")
         tech_labels = [f"{nom}  ({num})" for nom, num in TECHNICIANS]
-        sel_tech = st.selectbox("Nom", tech_labels, key="sel_tech")
+
+        # Auto-select from URL parameter ?emp=GW636
+        url_emp = st.query_params.get("emp", "").strip().upper()
+        default_idx = 0
+        if url_emp:
+            for i, (nom, num) in enumerate(TECHNICIANS):
+                if num.upper() == url_emp:
+                    default_idx = i
+                    break
+
+        sel_tech = st.selectbox("Nom", tech_labels, index=default_idx, key="sel_tech")
         emp_nom, emp_num = sel_tech.rsplit("  (", 1)
         emp_num = emp_num.rstrip(")")
 
