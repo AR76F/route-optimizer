@@ -829,13 +829,19 @@ def show_timesheet():
         for _, row in day_rows:
             ti  = row.get("time_in")
             to_ = row.get("time_out")
+            uid = row.get("uid", "")
+            # Read current absence selection from session_state if available
+            absence_live = st.session_state.get(f"cat_{uid}", "")
             cat = row.get("category", "")
+            if absence_live in ("Vacances", "Maladie", "Férié"):
+                cat = absence_live
             if ti is not None and to_ is not None and cat:
                 hrs_by_cat[cat] += compute_hours(ti, to_, 0.0)
 
         badge_map = {
             "Regular Time": ("🟢", "RT"), "Overtime": ("🟡", "OT"),
-            "Double Time":  ("🔴", "DT"), "Vacances": ("🔵", "VP"), "Maladie": ("⚪", "SP"),
+            "Double Time":  ("🔴", "DT"), "Vacances": ("🔵", "VP"),
+            "Maladie":      ("⚪", "SP"), "Férié":    ("🟣", "HD"),
         }
         cat_order = ["Regular Time", "Overtime", "Double Time", "Vacances", "Maladie", "Férié"]
 
