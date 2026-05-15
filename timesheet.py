@@ -91,6 +91,7 @@ PAY_CODES = {
     "Double Time":   ("DT", "DT"),
     "Vacances":      ("RT", "VP"),
     "Maladie":       ("RT", "SP"),
+    "Férié":         ("RT", "HD"),
 }
 
 # Fallback WO Interne (used when WO_JSON_URL is empty / unreachable)
@@ -397,7 +398,7 @@ def load_week_from_gsheet(emp_num: str, p_start: date, p_end: date) -> list[dict
 
         cat_map = {
             "RT": "Regular Time", "OT": "Overtime", "DT": "Double Time",
-            "VP": "Vacances",     "SP": "Maladie",
+            "VP": "Vacances",     "SP": "Maladie",     "HD": "Férié",
         }
 
         from collections import defaultdict
@@ -739,7 +740,7 @@ def show_timesheet():
                     pay_type = ligne.get("pay_type", "RT")
                     # Reverse-map pay_type → category
                     cat_map = {"RT": "Regular Time", "OT": "Overtime", "DT": "Double Time",
-                               "VP": "Vacances", "SP": "Maladie"}
+                               "VP": "Vacances", "SP": "Maladie", "HD": "Férié"}
                     cat = cat_map.get(pay_type, "Regular Time")
                     lignes_by_date[d].append({
                         "date":        d,
@@ -836,7 +837,7 @@ def show_timesheet():
             "Regular Time": ("🟢", "RT"), "Overtime": ("🟡", "OT"),
             "Double Time":  ("🔴", "DT"), "Vacances": ("🔵", "VP"), "Maladie": ("⚪", "SP"),
         }
-        cat_order = ["Regular Time", "Overtime", "Double Time", "Vacances", "Maladie"]
+        cat_order = ["Regular Time", "Overtime", "Double Time", "Vacances", "Maladie", "Férié"]
 
         if hrs_by_cat:
             parts = []
@@ -874,7 +875,7 @@ def show_timesheet():
                 # (category not reliable yet during render — use time delta)
                 ti_ = row.get("time_in")
                 to__ = row.get("time_out")
-                absence = row.get("category", "") in ("Vacances", "Maladie")
+                absence = row.get("category", "") in ("Vacances", "Maladie", "Férié")
                 if ti_ is not None and to__ is not None and not absence:
                     raw_hrs = max(0.0, float(to__) - float(ti_))
                     rt_accumulated = min(8.0, rt_accumulated + raw_hrs)
@@ -927,6 +928,7 @@ def show_timesheet():
         "Double Time":  ("Double (DT)",    "badge-dt",  "🔴"),
         "Vacances":     ("Vacances (VP)",  "badge-vp",  "🔵"),
         "Maladie":      ("Maladie (SP)",   "badge-sp",  "⚪"),
+        "Férié":        ("Férié (HD)",     "badge-hd",  "🟣"),
     }
 
     # Build breakdown HTML rows
@@ -1118,7 +1120,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
 
         badge_map = {
             "Regular Time": "🟢 RT", "Overtime": "🟡 OT",
-            "Double Time":  "🔴 DT", "Vacances": "🔵 VP", "Maladie": "⚪ SP",
+            "Double Time":  "🔴 DT", "Vacances": "🔵 VP", "Maladie": "⚪ SP", "Férié": "🟣 HD",
         }
         badge = badge_map.get(cat, cat or "—")
 
@@ -1164,9 +1166,9 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
             key=f"to_{uid}", placeholder="17.0",
         )
     with c3:
-        absence_options = ["—", "Vacances", "Maladie"]
+        absence_options = ["—", "Vacances", "Maladie", "Férié"]
         current_cat = row.get("category", "")
-        absence_idx = absence_options.index(current_cat) if current_cat in ("Vacances", "Maladie") else 0
+        absence_idx = absence_options.index(current_cat) if current_cat in ("Vacances", "Maladie", "Férié") else 0
         absence_sel = st.selectbox(
             "Absence", absence_options, index=absence_idx, key=f"cat_{uid}",
             help="RT/OT/DT calculés automatiquement"
@@ -1245,7 +1247,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
     ti  = ti_val
     to_ = to_val
 
-    if absence_sel in ("Vacances", "Maladie"):
+    if absence_sel in ("Vacances", "Maladie", "Férié"):
         cat  = absence_sel
         meal = 0.0
         row["meal_hrs"] = 0.0
@@ -1260,7 +1262,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         meal = 0.0
 
     hrs = compute_hours(ti, to_, meal)
-    is_absence = cat in ("Vacances", "Maladie")
+    is_absence = cat in ("Vacances", "Maladie", "Férié")
 
     job_type       = row.get("job_type", "Job Client")
     trans_type     = row.get("trans_type", "WO")
@@ -1313,7 +1315,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         pay_id, pay_type = PAY_CODES.get(cat, ("RT", "RT"))
         badge_map = {
             "Regular Time": "🟢 RT", "Overtime": "🟡 OT",
-            "Double Time":  "🔴 DT", "Vacances": "🔵 VP", "Maladie": "⚪ SP",
+            "Double Time":  "🔴 DT", "Vacances": "🔵 VP", "Maladie": "⚪ SP", "Férié": "🟣 HD",
         }
         badge = badge_map.get(cat, cat)
         meal_txt = f"  |  🍽️ {meal:.1f}h repas" if meal > 0 else ""
