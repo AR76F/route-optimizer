@@ -1316,21 +1316,8 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         deja = st.checkbox("✓", value=row.get("deja_bms", False), key=f"bms_{uid}",
                            help="Déjà entré dans BMS")
 
-    # ── Auto-computed info bar ────────────────────────────────────
-    if ti is not None and to_ is not None:
-        pay_id, pay_type = PAY_CODES.get(cat, ("RT", "RT"))
-        badge_map = {
-            "Regular Time": "🟢 RT", "Overtime": "🟡 OT",
-            "Double Time":  "🔴 DT", "Vacances": "🔵 VP", "Maladie": "⚪ SP", "Férié": "🟣 HD",
-        }
-        badge = badge_map.get(cat, cat)
-        meal_txt = f"  |  🍽️ {meal:.1f}h repas" if meal > 0 else ""
-        st.markdown(
-            f'<div style="font-size:0.78rem;color:#7eb8d4;padding:2px 0 6px 2px;">'
-            f'<b>{badge}</b> &nbsp;·&nbsp; {hrs:.2f} h &nbsp;·&nbsp; '
-            f'Pay: {pay_id}/{pay_type}{meal_txt}</div>',
-            unsafe_allow_html=True
-        )
+    # ── Info bar displayed AFTER split detection (uses final cat value) ──
+    # (moved below _compute_zone_split block)
 
     # ── Detect mixed RT/OT/DT zones in the shift ─────────────────
     def _compute_zone_split(d: date, ti: float, to_: float) -> list[dict]:
@@ -1459,9 +1446,26 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                     row["_split_segments"] = None
                     row["_client_requis"]  = False
                     cat = "Regular Time"
+                    row["category"] = "Regular Time"
         else:
             row["_split_segments"] = None
             row["_client_requis"]  = False
+
+    # ── Auto-computed info bar (uses final cat after all logic) ──────
+    if ti is not None and to_ is not None:
+        pay_id, pay_type = PAY_CODES.get(cat, ("RT", "RT"))
+        badge_map = {
+            "Regular Time": "🟢 RT", "Overtime": "🟡 OT",
+            "Double Time":  "🔴 DT", "Vacances": "🔵 VP", "Maladie": "⚪ SP", "Férié": "🟣 HD",
+        }
+        badge = badge_map.get(cat, cat)
+        meal_txt = f"  |  🍽️ {meal:.1f}h repas" if meal > 0 else ""
+        st.markdown(
+            f'<div style="font-size:0.78rem;color:#7eb8d4;padding:2px 0 6px 2px;">'
+            f'<b>{badge}</b> &nbsp;·&nbsp; {hrs:.2f} h &nbsp;·&nbsp; '
+            f'Pay: {pay_id}/{pay_type}{meal_txt}</div>',
+            unsafe_allow_html=True
+        )
 
     # ── Visual RT/OT/DT timeline (compact, shown below the row) ──
     if ti is not None and to_ is not None and not is_absence:
