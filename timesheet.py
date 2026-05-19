@@ -1431,35 +1431,33 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                 row["_client_requis"]  = True
                 split_triggered = True
             else:
-                st.warning(
-                    f"⚠️ Ce shift contient **{_fmt_h(outside_hrs)}** en dehors des heures "
-                    f"régulières (08:00–17:00). **Le client a-t-il demandé de travailler "
-                    f"en dehors des heures normales ?**"
-                )
-                col_oui, col_non = st.columns([1, 1])
-                with col_oui:
-                    if st.button("✅ Oui — Requis client (créer OT + RT)", key=f"split_oui_{uid}"):
-                        st.session_state[f"split_confirm_{uid}"] = "oui"
-                        st.rerun()
-                with col_non:
-                    if st.button("❌ Non — Garder en RT seulement", key=f"split_non_{uid}"):
-                        st.session_state[f"split_confirm_{uid}"] = "non"
-                        st.rerun()
-
                 confirmed = st.session_state.get(f"split_confirm_{uid}")
-                if confirmed == "oui":
-                    st.success(
-                        f"✅ Requis client confirmé — {len(segments)} ligne(s) seront créées "
-                        f"automatiquement à la soumission."
+
+                if confirmed is None:
+                    # Show warning and buttons only if no choice made yet
+                    st.warning(
+                        f"⚠️ Ce shift contient **{_fmt_h(outside_hrs)}** en dehors des heures "
+                        f"régulières (08:00–17:00). **Le client a-t-il demandé de travailler "
+                        f"en dehors des heures normales ?**"
                     )
+                    col_oui, col_non = st.columns([1, 1])
+                    with col_oui:
+                        if st.button("✅ Oui — Requis client (créer OT + RT)", key=f"split_oui_{uid}"):
+                            st.session_state[f"split_confirm_{uid}"] = "oui"
+                            st.rerun()
+                    with col_non:
+                        if st.button("❌ Non — Garder en RT seulement", key=f"split_non_{uid}"):
+                            st.session_state[f"split_confirm_{uid}"] = "non"
+                            st.rerun()
+
+                elif confirmed == "oui":
                     row["_split_segments"] = segments
                     row["_client_requis"]  = True
                     split_triggered = True
+
                 elif confirmed == "non":
-                    st.info("Une seule ligne sera soumise en RT — pas de supplément.")
                     row["_split_segments"] = None
                     row["_client_requis"]  = False
-                    # Force category to Regular Time when user says Non
                     cat = "Regular Time"
         else:
             row["_split_segments"] = None
