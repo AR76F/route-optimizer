@@ -829,47 +829,60 @@ def show_timesheet():
 
         from collections import defaultdict
         hrs_by_cat = defaultdict(float)
+
+        def _parse_time_raw(s) -> float | None:
+            """Parse brut depuis session_state widget (ex: '7', '8.5', '8h30', '8:30')."""
+            import re
+            if not s:
+                return None
+            s = str(s).strip().lower().replace(",", ".")
+            if not s:
+                return None
+            m = re.match(r'^(\d{1,2})h(\d{0,2})$', s)
+            if m:
+                h = int(m.group(1)); mins = int(m.group(2)) if m.group(2) else 0
+                return round(h + mins / 60.0, 1)
+            if re.match(r'^\d{1,2}:\d{2}$', s):
+                h, mins = s.split(":")
+                return round(int(h) + int(mins) / 60.0, 1)
+            try:
+                return round(float(s), 1)
+            except Exception:
+                return None
+
         for _, row in day_rows:
             uid = row.get("uid", "")
             absence_live = st.session_state.get(f"cat_{uid}", "")
 
-            # Lire time_in/time_out depuis session_state (parsés) ou row dict
-            def _ss_to_float(key):
-                v = st.session_state.get(key)
-                if v is None:
-                    return None
-                try:
-                    s = str(v).strip()
-                    if not s:
-                        return None
-                    if ":" in s:
-                        h, m = s.split(":")
-                        return int(h) + int(m) / 60.0
-                    return float(s.replace(",", "."))
-                except Exception:
-                    return None
+            # Lire time_in/time_out: session_state widget en priorité, sinon row dict
+            ti_raw = st.session_state.get(f"ti_{uid}", "")
+            to_raw = st.session_state.get(f"to_{uid}", "")
+            ti  = _parse_time_raw(ti_raw)  if ti_raw  else row.get("time_in")
+            to_ = _parse_time_raw(to_raw) if to_raw else row.get("time_out")
 
-            ti_raw  = st.session_state.get(f"ti_{uid}", "")
-            to_raw  = st.session_state.get(f"to_{uid}", "")
-            ti  = _ss_to_float(f"ti_{uid}") if ti_raw else row.get("time_in")
-            to_ = _ss_to_float(f"to_{uid}") if to_raw else row.get("time_out")
+            # Catégorie effective (absence en priorité)
+            is_abs_live = absence_live in ("Vacances", "Maladie", "Férié", "Heures en banque")
+            cat = absence_live if is_abs_live else (row.get("category", "") or "")
 
-            cat = row.get("category", "")
-            if absence_live in ("Vacances", "Maladie", "Férié"):
-                cat = absence_live
+            # Si absence → comptabiliser directement, sans split
+            if is_abs_live and ti is not None and to_ is not None:
+                hrs_by_cat[cat] += compute_hours(ti, to_, 0.0)
+                continue
 
-            # Lire les segments depuis session_state (disponibles dès le rerun suivant le clic)
+            # Si split confirmé client → comptabiliser par segment
             segs_ss   = st.session_state.get(f"split_segments_{uid}")
             requis_ss = st.session_state.get(f"split_client_requis_{uid}", False)
-            active_segs = segs_ss if segs_ss and requis_ss else row.get("_split_segments")
-            use_split = bool(active_segs) and (requis_ss or row.get("_client_requis", False))
+            active_segs = segs_ss if (segs_ss and requis_ss) else row.get("_split_segments")
+            use_split   = bool(active_segs) and (requis_ss or row.get("_client_requis", False))
+
             if use_split:
                 for seg in active_segs:
                     hrs_by_cat[seg["category"]] += seg["hours"]
             elif ti is not None and to_ is not None:
                 effective_cat = cat if cat else infer_category(row["date"], ti, to_)
-                if effective_cat:
-                    hrs_by_cat[effective_cat] += compute_hours(ti, to_, 0.0)
+                if not effective_cat:
+                    effective_cat = infer_category(row["date"], ti, to_)
+                hrs_by_cat[effective_cat] += compute_hours(ti, to_, 0.0)
 
         badge_map = {
             "Regular Time":     ("🟢", "RT"),
