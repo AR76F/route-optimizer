@@ -71,19 +71,26 @@ st.set_page_config(page_title="Route Optimizer", layout="wide", initial_sidebar_
 # ────────────────────────────────────────────────────────────────
 # Navigation persisted
 # ────────────────────────────────────────────────────────────────
+url_emp = st.query_params.get("emp", "").strip().upper()
+is_tech = bool(url_emp)
+
 if "page" not in st.session_state:
-    if st.query_params.get("emp"):
-        st.session_state.page = "⏱ Feuille de temps"
-    else:
-        st.session_state.page = "🏠 Route Optimizer"
+    st.session_state.page = "⏱ Feuille de temps" if is_tech else "🏠 Route Optimizer"
 
 st.sidebar.title("Menu")
-st.session_state.page = st.sidebar.radio(
-    "Navigation",
-    ["🏠 Route Optimizer", "📅 Planning (Page 2)", "⏱ Feuille de temps"],
-    index=["🏠 Route Optimizer", "📅 Planning (Page 2)", "⏱ Feuille de temps"].index(st.session_state.page),
-    key="page_radio",
-)
+
+if not is_tech:
+    # Superviseur — navigation complète
+    st.session_state.page = st.sidebar.radio(
+        "Navigation",
+        ["🏠 Route Optimizer", "📅 Planning (Page 2)", "⏱ Feuille de temps"],
+        index=["🏠 Route Optimizer", "📅 Planning (Page 2)", "⏱ Feuille de temps"].index(st.session_state.page),
+        key="page_radio",
+    )
+else:
+    # Tech — feuille de temps seulement, aucune navigation visible
+    st.session_state.page = "⏱ Feuille de temps"
+
 page = st.session_state.page
 # ────────────────────────────────────────────────────────────────
 # [FAIBLE-1] Header — logo path caché pour éviter 6x os.path.exists() par rerun
