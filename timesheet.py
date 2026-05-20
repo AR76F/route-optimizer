@@ -304,7 +304,6 @@ def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[d
                     str(r.get("commentaire", "")),
                     str(r.get("pay_type", "")),
                 ])
-            # Use spreadsheet API directly to avoid gspread date parsing bug
             body = {
                 "values": new_rows
             }
@@ -450,7 +449,7 @@ def _blank_row(d: date) -> dict:
     import uuid
     return {
         "date":        d,
-        "uid":         str(uuid.uuid4())[:8],  # stable key across reruns
+        "uid":         str(uuid.uuid4())[:8],
         "time_in":     None,
         "time_out":    None,
         "category":    "",
@@ -580,6 +579,22 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
     color: #334;
     margin-bottom: 1rem;
 }
+
+/* Compact remove button styling */
+.btn-remove > button {
+    background: transparent !important;
+    color: #e05555 !important;
+    border: 1px solid #e05555 !important;
+    border-radius: 6px !important;
+    padding: 0.3rem 0.5rem !important;
+    font-size: 0.8rem !important;
+    min-height: 0 !important;
+    line-height: 1 !important;
+}
+.btn-remove > button:hover {
+    background: #e05555 !important;
+    color: white !important;
+}
 </style>
 """
 
@@ -610,7 +625,6 @@ def show_timesheet():
         st.markdown("### 👤 Employé")
         tech_labels = [f"{nom}  ({num})" for nom, num in TECHNICIANS]
 
-        # Auto-select from URL parameter ?emp=GW636
         url_emp = st.query_params.get("emp", "").strip().upper()
         default_idx = 0
         if url_emp:
@@ -670,7 +684,6 @@ def show_timesheet():
     state_key = f"rows_{emp_num}_{p_end.isoformat()}"
 
     if state_key not in st.session_state:
-        # Auto-load from Google Sheets first, fall back to blank rows
         loaded = load_week_from_gsheet(emp_num, p_start, p_end)
         if loaded:
             st.session_state[state_key] = loaded
@@ -685,17 +698,11 @@ def show_timesheet():
     # ═══════════════════════════════════════════════════════
 
     def _charger_semaine_onedrive(emp_num: str, p_end: date) -> list[dict] | None:
-        """
-        Lit tous les JSON soumis pour cet employé/période depuis OneDrive
-        et retourne les lignes fusionnées, prêtes à remplir la grille.
-        Retourne None si rien trouvé.
-        """
         periode_str = fmt_period(p_end)
         folder = Path(ONEDRIVE_FOLDER) / periode_str / emp_num
         if not folder.exists():
             return None
 
-        # Lire tous les JSON (y compris dans traites/)
         all_files = list(folder.glob("*.json"))
         traites_folder = folder / "traites"
         if traites_folder.exists():
@@ -704,7 +711,6 @@ def show_timesheet():
         if not all_files:
             return None
 
-        # Regrouper toutes les lignes par date (date → liste de lignes)
         from collections import defaultdict
         MOIS_NUM_R = {
             "JAN":1,"FEB":2,"MAR":3,"APR":4,"MAY":5,"JUN":6,
@@ -738,7 +744,6 @@ def show_timesheet():
                     ti = _hhmm_to_decimal(ligne.get("time_in", ""))
                     to_ = _hhmm_to_decimal(ligne.get("time_out", ""))
                     pay_type = ligne.get("pay_type", "RT")
-                    # Reverse-map pay_type → category
                     cat_map = {"RT": "Regular Time", "OT": "Overtime", "DT": "Double Time",
                                "VP": "Vacances", "SP": "Maladie", "HD": "Férié"}
                     cat = cat_map.get(pay_type, "Regular Time")
@@ -754,7 +759,7 @@ def show_timesheet():
                         "order_ref":   ligne.get("order_ref", ""),
                         "wo_interne":  "",
                         "commentaire": ligne.get("commentaire", ""),
-                        "deja_bms":    True,   # déjà soumis = lecture seule
+                        "deja_bms":    True,
                         "meal_hrs":    ligne.get("meal_hrs", 0.0),
                     })
             except Exception:
@@ -763,7 +768,6 @@ def show_timesheet():
         if not lignes_by_date:
             return None
 
-        # Rebuilder la grille complète de la semaine en fusionnant
         result = []
         d = p_start
         while d <= p_end:
@@ -774,7 +778,7 @@ def show_timesheet():
             d += timedelta(days=1)
         return result
 
-    # Bouton charger + indicateur
+    # Bouton rafraîchir
     col_load, col_info = st.columns([1, 3])
     with col_load:
         if st.button("🔄 Rafraîchir", key="load_week_btn",
@@ -792,14 +796,13 @@ def show_timesheet():
             st.info(f"✅ {nb_deja} ligne(s) chargée(s) depuis Google Sheets — affichées en grisé.")
 
     # ═══════════════════════════════════════════════════════
-    #  Row editor — one expander per DAY, all lines inside
+    #  Row editor — one expander per DAY
     # ═══════════════════════════════════════════════════════
     st.markdown(f"**Saisie des heures — {emp_nom}**")
 
     total_hours = 0.0
     rows_to_delete = []
 
-    # Group rows by date to render all lines of a day inside one expander
     from itertools import groupby
     rows_by_day = []
     for d_key, group in groupby(enumerate(rows), key=lambda x: _coerce_date(x[1]["date"])):
@@ -808,13 +811,11 @@ def show_timesheet():
     for d, day_rows in rows_by_day:
         wd = d.weekday()
 
-        # Compute total hours for this day (all lines combined)
         day_total = 0.0
         day_cats = []
         for _, row in day_rows:
             ti  = row.get("time_in")
             to_ = row.get("time_out")
-            cat = row.get("category", "")
             meal = 0.0
             h = compute_hours(ti, to_, meal)
             day_total += h
@@ -823,14 +824,12 @@ def show_timesheet():
             if cat and cat not in day_cats:
                 day_cats.append(cat)
 
-        # Build title — show hours per category instead of total
         from collections import defaultdict
         hrs_by_cat = defaultdict(float)
         for _, row in day_rows:
             ti  = row.get("time_in")
             to_ = row.get("time_out")
             uid = row.get("uid", "")
-            # Read current absence selection from session_state if available
             absence_live = st.session_state.get(f"cat_{uid}", "")
             cat = row.get("category", "")
             if absence_live in ("Vacances", "Maladie", "Férié"):
@@ -866,39 +865,53 @@ def show_timesheet():
         with st.expander(f"{day_str}   {title_hrs}{line_label}",
                          expanded=st.session_state[exp_key]):
 
-            rt_accumulated = 0.0  # RT hours consumed so far in this day
-            for idx, row in day_rows:
-                # Separator between lines within the same day
-                if idx != day_rows[0][0]:
+            rt_accumulated = 0.0
+            last_time_out = None
+
+            # ── Boucle sur les lignes du jour ──────────────────────
+            for list_pos, (idx, row) in enumerate(day_rows):
+
+                # Séparateur entre lignes (sauf la première)
+                if list_pos > 0:
                     st.markdown(
-                        "<hr style='margin:4px 0;border:none;border-top:1px solid #2d3a4a;'>",
+                        "<hr style='margin:2px 0 4px 0;border:none;border-top:1px solid #2d3a4a;'>",
                         unsafe_allow_html=True
                     )
 
-                _render_row(idx, row, wo_labels, wo_by_label, d, emp_num, rt_already=rt_accumulated)
+                # Bouton ✕ inline à droite si plus d'une ligne et non verrouillé
+                if n_lines > 1 and not row.get("deja_bms", False):
+                    col_row, col_del = st.columns([12, 1])
+                    with col_del:
+                        st.markdown("<div style='padding-top:28px;'>", unsafe_allow_html=True)
+                        st.markdown('<div class="btn-remove">', unsafe_allow_html=True)
+                        if st.button("✕", key=f"del_{idx}", help="Enlever cette ligne"):
+                            rows_to_delete.append(idx)
+                        st.markdown("</div></div>", unsafe_allow_html=True)
+                    with col_row:
+                        _render_row(idx, row, wo_labels, wo_by_label, d, emp_num, rt_already=rt_accumulated)
+                else:
+                    _render_row(idx, row, wo_labels, wo_by_label, d, emp_num, rt_already=rt_accumulated)
 
-                # Update accumulated RT for next line using raw hours
-                # (category not reliable yet during render — use time delta)
+                # Accumuler RT pour la ligne suivante
                 ti_ = row.get("time_in")
                 to__ = row.get("time_out")
                 absence = row.get("category", "") in ("Vacances", "Maladie", "Férié")
                 if ti_ is not None and to__ is not None and not absence:
                     raw_hrs = max(0.0, float(to__) - float(ti_))
                     rt_accumulated = min(8.0, rt_accumulated + raw_hrs)
+                if row.get("time_out") is not None:
+                    last_time_out = row["time_out"]
 
-                # Add / Remove buttons for each line
-                c1, c2 = st.columns([1, 1])
-                with c1:
-                    if st.button("➕ Ajouter une ligne", key=f"add_{idx}"):
-                        new_row = _blank_row(d)
-                        if row.get("time_out") is not None:
-                            new_row["time_in"] = row["time_out"]
-                        rows.insert(idx + 1, new_row)
-                        st.rerun()
-                with c2:
-                    if n_lines > 1:
-                        if st.button("✕ Enlever", key=f"del_{idx}"):
-                            rows_to_delete.append(idx)
+            # ── UN SEUL bouton Ajouter, en bas du jour ─────────────
+            st.markdown("<div style='margin-top:6px;'>", unsafe_allow_html=True)
+            if st.button("➕ Ajouter une ligne", key=f"add_day_{d.isoformat()}"):
+                new_row = _blank_row(d)
+                if last_time_out is not None:
+                    new_row["time_in"] = last_time_out
+                last_idx = day_rows[-1][0]
+                rows.insert(last_idx + 1, new_row)
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
 
     # Apply deletions
     if rows_to_delete:
@@ -910,7 +923,6 @@ def show_timesheet():
     #  Summary + Submit
     # ═══════════════════════════════════════════════════════
 
-    # Build breakdown by category
     from collections import defaultdict
     breakdown: dict = defaultdict(float)
     for row in rows:
@@ -927,7 +939,6 @@ def show_timesheet():
             cat = infer_category(row["date"], ti, to_)
         breakdown[cat] += hrs
 
-    # Config: label, badge CSS class, icon
     CAT_DISPLAY = {
         "Regular Time": ("Régulier (RT)",  "badge-rt",  "🟢"),
         "Overtime":     ("Supplémentaire (OT)", "badge-ot", "🟡"),
@@ -937,7 +948,6 @@ def show_timesheet():
         "Férié":        ("Férié (HD)",     "badge-hd",  "🟣"),
     }
 
-    # Build breakdown HTML rows
     breakdown_rows_html = ""
     for cat, hrs in sorted(breakdown.items(), key=lambda x: list(PAY_CODES.keys()).index(x[0]) if x[0] in PAY_CODES else 99):
         label, badge_cls, icon = CAT_DISPLAY.get(cat, (cat, "badge-rt", "•"))
@@ -951,7 +961,6 @@ def show_timesheet():
 
     st.markdown("---")
 
-    # Summary box
     with st.container():
         st.markdown(f"""
         <div class="submit-section">
@@ -963,7 +972,6 @@ def show_timesheet():
         </div>
         """, unsafe_allow_html=True)
 
-    # JSON preview (collapsible) — only show new rows
     with st.expander("🔍 Aperçu JSON (bms_watcher)"):
         new_only = [r for r in rows if not r.get("deja_bms")]
         preview_rows = _build_json_rows(new_only)
@@ -977,7 +985,6 @@ def show_timesheet():
     col_sub, col_rst = st.columns([2, 1])
     with col_sub:
         if st.button("📤 Soumettre à BMS Watcher", type="primary", key="submit_btn"):
-            # Only submit rows NOT already submitted (deja_bms=False)
             new_rows_only = [r for r in rows if not r.get("deja_bms")]
             json_rows = _build_json_rows(new_rows_only)
             valid = [r for r in json_rows if r.get("heures", 0) > 0]
@@ -990,7 +997,6 @@ def show_timesheet():
                 ok, msg = submit_timesheet(emp_num, emp_nom, p_end, valid)
                 if ok:
                     st.success(f"✅ Soumis ! ({len(valid)} ligne(s)) → {msg}")
-                    # Mark only the newly submitted rows as deja_bms
                     for r in new_rows_only:
                         if r.get("time_in") and r.get("time_out"):
                             r["deja_bms"] = True
@@ -1006,19 +1012,13 @@ def show_timesheet():
 # ─────────────────────────── Row renderer ────────────────────────────────────
 
 def _render_time_timeline(d: date, time_in: float, time_out: float, meal_hrs: float):
-    """
-    Renders a compact visual 24h timeline showing when the shift falls,
-    color-coded by RT / OT / DT zone. Read-only, purely informational.
-    """
-    wd = d.weekday()  # Mon=0 … Sun=6
+    wd = d.weekday()
 
-    # Build color zones for this day type
-    # Each zone: (start_h, end_h, color, label)
-    if wd == 6:  # Sunday — all DT
+    if wd == 6:
         zones = [(0, 24, "#d63031", "DT")]
-    elif wd == 5:  # Saturday — all OT
+    elif wd == 5:
         zones = [(0, 24, "#e07b00", "OT")]
-    else:  # Weekday
+    else:
         zones = [
             (0,  6,  "#d63031", "DT"),
             (6,  8,  "#e07b00", "OT"),
@@ -1027,17 +1027,14 @@ def _render_time_timeline(d: date, time_in: float, time_out: float, meal_hrs: fl
             (23, 24, "#d63031", "DT"),
         ]
 
-    # Build SVG bar — 24h = 480px wide, 28px tall
     W, H = 480, 28
     bars_svg = ""
-    labels_svg = ""
 
     for (zh, zend, color, zlabel) in zones:
         x = zh / 24 * W
         w = (zend - zh) / 24 * W
         bars_svg += f'<rect x="{x:.1f}" y="0" width="{w:.1f}" height="{H}" fill="{color}" opacity="0.25"/>'
 
-    # Hour tick marks every 6h
     for h in [0, 6, 8, 12, 17, 23, 24]:
         x = h / 24 * W
         label = f"{h:02d}h"
@@ -1045,7 +1042,6 @@ def _render_time_timeline(d: date, time_in: float, time_out: float, meal_hrs: fl
         if h < 24:
             bars_svg += f'<text x="{x+2:.1f}" y="10" font-size="7" fill="#555">{label}</text>'
 
-    # Shift overlay
     ti_x  = time_in  / 24 * W
     to_x  = time_out / 24 * W
     shift_w = max(to_x - ti_x, 2)
@@ -1055,7 +1051,6 @@ def _render_time_timeline(d: date, time_in: float, time_out: float, meal_hrs: fl
         f'rx="3" fill="#2d6be4" opacity="0.85"/>'
     )
 
-    # Meal break marker
     if meal_hrs > 0:
         mid = (time_in + time_out) / 2
         mx = mid / 24 * W
@@ -1064,7 +1059,6 @@ def _render_time_timeline(d: date, time_in: float, time_out: float, meal_hrs: fl
             f'rx="1" fill="white" opacity="0.7"/>'
         )
 
-    # In/Out labels on the bar
     in_label  = f"{int(time_in):02d}:{int(round((time_in  % 1)*60)):02d}"
     out_label = f"{int(time_out):02d}:{int(round((time_out % 1)*60)):02d}"
     bars_svg += (
@@ -1091,21 +1085,18 @@ def _render_time_timeline(d: date, time_in: float, time_out: float, meal_hrs: fl
 def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date, emp_num: str = "", rt_already: float = 0.0):
     """Render all inputs for a single time-entry row, mutating `row` in place."""
 
-    # Louis Lauzon (FW688) is part-time — no automatic daily OT cap
     DAILY_OT_EXEMPT = {"FW688"}
     apply_daily_cap = emp_num not in DAILY_OT_EXEMPT
 
-    # Use stable uid so widget state survives row insertions/deletions
     uid = row.get("uid", str(idx))
     is_readonly = row.get("deja_bms", False)
 
-    # ── Read-only view for already-submitted rows ─────────────────
+    # ── Read-only view ────────────────────────────────────────────
     if is_readonly:
         ti  = row.get("time_in")
         to_ = row.get("time_out")
         meal = row.get("meal_hrs", 0.0) or 0.0
 
-        # Convert to float if stored as string (from Google Sheets)
         def _to_float(v):
             if v is None: return None
             try:
@@ -1153,10 +1144,9 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         """, unsafe_allow_html=True)
         if ti is not None and to_ is not None:
             _render_time_timeline(d, ti, to_, float(meal))
-        return  # no editable fields
+        return
 
-    # ── Compact single-row layout ─────────────────────────────────
-    # All fields on one line: In | Out | Absence | Job Type | Order Ref | Commentaire | BMS
+    # ── Editable row ──────────────────────────────────────────────
     c1, c2, c3, c4, c5, c6, c7 = st.columns([0.8, 0.8, 1.0, 1.0, 1.5, 1.5, 0.5])
 
     with c1:
@@ -1180,24 +1170,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
             help="RT/OT/DT calculés automatiquement"
         )
 
-    # Parse times first so we can set job_type default
     def _parse_time(s) -> tuple[float | None, str | None]:
-        """
-        Parse a time string into a decimal hour value.
-        Returns (value, warning_message) where warning_message is None if OK.
-
-        Accepted formats:
-          8       → 8.0
-          8.5     → 8.5
-          8h      → 8.0
-          8h15    → 8.25
-          8h30    → 8.5
-          8:15    → 8.25
-          8:30    → 8.5
-          8,5     → 8.5
-
-        Always rounded to nearest quarter hour (0, .25, .5, .75).
-        """
         import re
         if not s or not str(s).strip():
             return None, None
@@ -1206,17 +1179,14 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         val = None
         warn = None
 
-        # Format: 8h15, 8h30, 8h, 8H
         m = re.match(r'^(\d{1,2})h(\d{0,2})$', s)
         if m:
             h = int(m.group(1))
             mins = int(m.group(2)) if m.group(2) else 0
             val = h + mins / 60.0
-        # Format: 8:15, 8:30
         elif re.match(r'^\d{1,2}:\d{2}$', s):
             h, mins = s.split(":")
             val = int(h) + int(mins) / 60.0
-        # Format: 8.0, 8.5, 8.25
         else:
             try:
                 val = float(s)
@@ -1226,11 +1196,9 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         if val is None:
             return None, None
 
-        # Validate range
         if val < 0 or val > 24:
             return None, f"Heure invalide : {val:.2f}. Doit être entre 0 et 24."
 
-        # Round to 1 decimal place (BMS accepts only X.X format)
         rounded = round(val, 1)
         if abs(rounded - val) > 0.01:
             warn = f"Arrondi à {rounded:.1f}h (BMS accepte seulement 1 chiffre après la virgule)"
@@ -1240,7 +1208,6 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
     ti_val, ti_warn = _parse_time(time_in_str)
     to_val, to_warn = _parse_time(time_out_str)
 
-    # Show warnings inline
     if ti_warn:
         st.warning(f"⏰ In : {ti_warn}")
     if to_warn:
@@ -1260,7 +1227,6 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
     elif ti is not None and to_ is not None:
         cat  = infer_category(d, ti, to_)
         meal = 0.0
-        # Override to OT if daily cap already reached by previous lines
         if apply_daily_cap and rt_already >= 8.0 and cat == "Regular Time":
             cat = "Overtime"
     else:
@@ -1316,10 +1282,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         deja = st.checkbox("✓", value=row.get("deja_bms", False), key=f"bms_{uid}",
                            help="Déjà entré dans BMS")
 
-    # ── Info bar displayed AFTER split detection (uses final cat value) ──
-    # (moved below _compute_zone_split block)
-
-    # ── Detect mixed RT/OT/DT zones in the shift ─────────────────
+    # ── Detect mixed RT/OT/DT zones ──────────────────────────────
     def _compute_zone_split(d: date, ti: float, to_: float) -> list[dict]:
         wd = d.weekday()
         if wd == 6:
@@ -1335,7 +1298,6 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                 (23, 24, "Double Time"),
             ]
 
-        # Build raw segments by time zone
         segments = []
         for zstart, zend, zcat in boundaries:
             overlap_start = max(ti, zstart)
@@ -1348,11 +1310,9 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                     "hours":    round(overlap_end - overlap_start, 4),
                 })
 
-        # Apply daily 8h cap — hours beyond 8h total become OT
-        # (only on weekdays, and only for non-exempt employees)
         if apply_daily_cap and wd < 5:
             DAILY_RT_CAP = 8.0
-            rt_consumed = rt_already  # ← account for previous lines in same day
+            rt_consumed = rt_already
             capped = []
             for seg in segments:
                 if seg["category"] != "Regular Time":
@@ -1360,10 +1320,8 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                     continue
                 remaining_rt = max(0.0, DAILY_RT_CAP - rt_consumed)
                 if remaining_rt <= 0:
-                    # All RT becomes OT
                     capped.append({**seg, "category": "Overtime"})
                 elif seg["hours"] > remaining_rt:
-                    # Split: first part RT, rest OT
                     split_point = seg["time_in"] + remaining_rt
                     capped.append({
                         "time_in":  seg["time_in"],
@@ -1394,13 +1352,11 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         dt_hrs = sum(s["hours"] for s in segments if s["category"] == "Double Time")
         outside_hrs = round(ot_hrs + dt_hrs, 2)
 
-        # Also trigger if daily cap was applied (rt_already >= 8h, whole line becomes OT)
         daily_cap_full = apply_daily_cap and rt_already >= 8.0 and not has_mixed
 
         if (has_mixed and outside_hrs > 0) or daily_cap_full:
             def _fmt_h(h): return f"{h:.2f}h".rstrip("0").rstrip(".")
 
-            # Check if it's purely a daily cap OT (within normal hours)
             daily_cap_ot = daily_cap_full or (apply_daily_cap and any(
                 s["category"] == "Overtime" and 8 <= s["time_in"] < 17
                 for s in segments
@@ -1421,7 +1377,6 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                 confirmed = st.session_state.get(f"split_confirm_{uid}")
 
                 if confirmed is None:
-                    # Show warning and buttons only if no choice made yet
                     st.warning(
                         f"⚠️ Ce shift contient **{_fmt_h(outside_hrs)}** en dehors des heures "
                         f"régulières (08:00–17:00). **Le client a-t-il demandé de travailler "
@@ -1451,7 +1406,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
             row["_split_segments"] = None
             row["_client_requis"]  = False
 
-    # ── Auto-computed info bar (uses final cat after all logic) ──────
+    # ── Info bar ─────────────────────────────────────────────────
     if ti is not None and to_ is not None:
         pay_id, pay_type = PAY_CODES.get(cat, ("RT", "RT"))
         badge_map = {
@@ -1467,11 +1422,11 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
             unsafe_allow_html=True
         )
 
-    # ── Visual RT/OT/DT timeline (compact, shown below the row) ──
+    # ── Visual timeline ───────────────────────────────────────────
     if ti is not None and to_ is not None and not is_absence:
         _render_time_timeline(d, ti, to_, meal)
 
-    # Mutate row dict in place
+    # Mutate row in place
     row["time_in"]     = ti
     row["time_out"]    = to_
     row["meal_hrs"]    = meal
@@ -1485,9 +1440,6 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
 
 
 def _build_json_rows(rows: list[dict]) -> list[dict]:
-    """Convert internal row dicts to the JSON format bms_watcher.py expects.
-    If a row has _split_segments (client-requested OT), expands into multiple lines.
-    """
     MOIS_EN_U = {1:"JAN",2:"FEB",3:"MAR",4:"APR",5:"MAY",6:"JUN",
                  7:"JUL",8:"AUG",9:"SEP",10:"OCT",11:"NOV",12:"DEC"}
 
