@@ -827,23 +827,46 @@ def show_timesheet():
         from collections import defaultdict
         hrs_by_cat = defaultdict(float)
         for _, row in day_rows:
-            ti  = row.get("time_in")
-            to_ = row.get("time_out")
             uid = row.get("uid", "")
             absence_live = st.session_state.get(f"cat_{uid}", "")
+
+            # Lire time_in/time_out depuis session_state (parsés) ou row dict
+            def _ss_to_float(key):
+                v = st.session_state.get(key)
+                if v is None:
+                    return None
+                try:
+                    s = str(v).strip()
+                    if not s:
+                        return None
+                    if ":" in s:
+                        h, m = s.split(":")
+                        return int(h) + int(m) / 60.0
+                    return float(s.replace(",", "."))
+                except Exception:
+                    return None
+
+            ti_raw  = st.session_state.get(f"ti_{uid}", "")
+            to_raw  = st.session_state.get(f"to_{uid}", "")
+            ti  = _ss_to_float(f"ti_{uid}") if ti_raw else row.get("time_in")
+            to_ = _ss_to_float(f"to_{uid}") if to_raw else row.get("time_out")
+
             cat = row.get("category", "")
             if absence_live in ("Vacances", "Maladie", "Férié"):
                 cat = absence_live
+
             # Lire les segments depuis session_state (disponibles dès le rerun suivant le clic)
-            segs_ss = st.session_state.get(f"split_segments_{uid}")
+            segs_ss   = st.session_state.get(f"split_segments_{uid}")
             requis_ss = st.session_state.get(f"split_client_requis_{uid}", False)
             active_segs = segs_ss if segs_ss and requis_ss else row.get("_split_segments")
             use_split = bool(active_segs) and (requis_ss or row.get("_client_requis", False))
             if use_split:
                 for seg in active_segs:
                     hrs_by_cat[seg["category"]] += seg["hours"]
-            elif ti is not None and to_ is not None and cat:
-                hrs_by_cat[cat] += compute_hours(ti, to_, 0.0)
+            elif ti is not None and to_ is not None:
+                effective_cat = cat if cat else infer_category(row["date"], ti, to_)
+                if effective_cat:
+                    hrs_by_cat[effective_cat] += compute_hours(ti, to_, 0.0)
 
         badge_map = {
             "Regular Time": ("🟢", "RT"), "Overtime": ("🟡", "OT"),
