@@ -86,12 +86,15 @@ TECHNICIANS = [
 
 # Pay code table — mirrors the Codes sheet
 PAY_CODES = {
-    "Regular Time":  ("RT", "RT"),
-    "Overtime":      ("OT", "OT"),
-    "Double Time":   ("DT", "DT"),
-    "Vacances":      ("RT", "VP"),
-    "Maladie":       ("RT", "SP"),
-    "Férié":         ("RT", "HD"),
+    "Regular Time":       ("RT", "RT"),
+    "Overtime":           ("OT", "OT"),
+    "Double Time":        ("DT", "DT"),
+    "Vacances":           ("RT", "VP"),
+    "Maladie":            ("RT", "SP"),
+    "Férié":              ("RT", "HD"),
+    "Heures en banque":   ("RT", "BTO"),
+    "OT en banque":       ("OT", "OBTI"),
+    "DT en banque":       ("DT", "DBTI"),
 }
 
 # Fallback WO Interne (used when WO_JSON_URL is empty / unreachable)
@@ -869,11 +872,18 @@ def show_timesheet():
                     hrs_by_cat[effective_cat] += compute_hours(ti, to_, 0.0)
 
         badge_map = {
-            "Regular Time": ("🟢", "RT"), "Overtime": ("🟡", "OT"),
-            "Double Time":  ("🔴", "DT"), "Vacances": ("🔵", "VP"),
-            "Maladie":      ("⚪", "SP"), "Férié":    ("🟣", "HD"),
+            "Regular Time":     ("🟢", "RT"),
+            "Overtime":         ("🟡", "OT"),
+            "Double Time":      ("🔴", "DT"),
+            "Vacances":         ("🔵", "VP"),
+            "Maladie":          ("⚪", "SP"),
+            "Férié":            ("🟣", "HD"),
+            "Heures en banque": ("🏦", "BTO"),
+            "OT en banque":     ("🏦", "OBTI"),
+            "DT en banque":     ("🏦", "DBTI"),
         }
-        cat_order = ["Regular Time", "Overtime", "Double Time", "Vacances", "Maladie", "Férié"]
+        cat_order = ["Regular Time", "Overtime", "Double Time", "Vacances", "Maladie", "Férié",
+                     "Heures en banque", "OT en banque", "DT en banque"]
 
         if hrs_by_cat:
             parts = []
@@ -926,7 +936,7 @@ def show_timesheet():
                 # Accumuler RT pour la ligne suivante
                 ti_ = row.get("time_in")
                 to__ = row.get("time_out")
-                absence = row.get("category", "") in ("Vacances", "Maladie", "Férié")
+                absence = row.get("category", "") in ("Vacances", "Maladie", "Férié", "Heures en banque")
                 if ti_ is not None and to__ is not None and not absence:
                     raw_hrs = max(0.0, float(to__) - float(ti_))
                     rt_accumulated = min(8.0, rt_accumulated + raw_hrs)
@@ -980,12 +990,15 @@ def show_timesheet():
             breakdown[cat] += hrs
 
     CAT_DISPLAY = {
-        "Regular Time": ("Régulier (RT)",  "badge-rt",  "🟢"),
-        "Overtime":     ("Supplémentaire (OT)", "badge-ot", "🟡"),
-        "Double Time":  ("Double (DT)",    "badge-dt",  "🔴"),
-        "Vacances":     ("Vacances (VP)",  "badge-vp",  "🔵"),
-        "Maladie":      ("Maladie (SP)",   "badge-sp",  "⚪"),
-        "Férié":        ("Férié (HD)",     "badge-hd",  "🟣"),
+        "Regular Time":     ("Régulier (RT)",        "badge-rt",  "🟢"),
+        "Overtime":         ("Supplémentaire (OT)",  "badge-ot",  "🟡"),
+        "Double Time":      ("Double (DT)",          "badge-dt",  "🔴"),
+        "Vacances":         ("Vacances (VP)",        "badge-vp",  "🔵"),
+        "Maladie":          ("Maladie (SP)",         "badge-sp",  "⚪"),
+        "Férié":            ("Férié (HD)",           "badge-hd",  "🟣"),
+        "Heures en banque": ("Banque — retraits (BTO)",  "badge-sp",  "🏦"),
+        "OT en banque":     ("OT en banque (OBTI)",  "badge-ot",  "🏦"),
+        "DT en banque":     ("DT en banque (DBTI)",  "badge-dt",  "🏦"),
     }
 
     breakdown_rows_html = ""
@@ -1156,8 +1169,15 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         pay_id, pay_type = PAY_CODES.get(cat, ("RT", "RT"))
 
         badge_map = {
-            "Regular Time": "🟢 RT", "Overtime": "🟡 OT",
-            "Double Time":  "🔴 DT", "Vacances": "🔵 VP", "Maladie": "⚪ SP", "Férié": "🟣 HD",
+            "Regular Time":     "🟢 RT",
+            "Overtime":         "🟡 OT",
+            "Double Time":      "🔴 DT",
+            "Vacances":         "🔵 VP",
+            "Maladie":          "⚪ SP",
+            "Férié":            "🟣 HD",
+            "Heures en banque": "🏦 BTO",
+            "OT en banque":     "🏦 OBTI",
+            "DT en banque":     "🏦 DBTI",
         }
         badge = badge_map.get(cat, cat or "—")
 
@@ -1202,9 +1222,9 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
             key=f"to_{uid}", placeholder="17.0",
         )
     with c3:
-        absence_options = ["—", "Vacances", "Maladie", "Férié"]
+        absence_options = ["—", "Vacances", "Maladie", "Férié", "Heures en banque"]
         current_cat = row.get("category", "")
-        absence_idx = absence_options.index(current_cat) if current_cat in ("Vacances", "Maladie", "Férié") else 0
+        absence_idx = absence_options.index(current_cat) if current_cat in ("Vacances", "Maladie", "Férié", "Heures en banque") else 0
         absence_sel = st.selectbox(
             "Absence", absence_options, index=absence_idx, key=f"cat_{uid}",
             help="RT/OT/DT calculés automatiquement"
@@ -1260,7 +1280,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
     ti  = ti_val
     to_ = to_val
 
-    if absence_sel in ("Vacances", "Maladie", "Férié"):
+    if absence_sel in ("Vacances", "Maladie", "Férié", "Heures en banque"):
         cat  = absence_sel
         meal = 0.0
         row["meal_hrs"] = 0.0
@@ -1274,7 +1294,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         meal = 0.0
 
     hrs = compute_hours(ti, to_, meal)
-    is_absence = cat in ("Vacances", "Maladie", "Férié")
+    is_absence = cat in ("Vacances", "Maladie", "Férié", "Heures en banque")
 
     job_type       = row.get("job_type", "Job Client")
     trans_type     = row.get("trans_type", "WO")
@@ -1384,7 +1404,62 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         return segments
 
     split_triggered = False
-    if ti is not None and to_ is not None and not is_absence and d.weekday() < 5:
+    def _fmt_h(h): return f"{h:.2f}h".rstrip("0").rstrip(".")
+
+    def _apply_banque_to_segments(segs, cat_from, cat_to):
+        """Remplace category cat_from par cat_to dans les segments."""
+        return [{**s, "category": cat_to} if s["category"] == cat_from else s for s in segs]
+
+    def _persist_split(segs, requis=True):
+        row["_split_segments"] = segs
+        row["_client_requis"]  = requis
+        st.session_state[f"split_segments_{uid}"] = segs
+        st.session_state[f"split_client_requis_{uid}"] = requis
+
+    # ── Samedi (tout OT) et Dimanche (tout DT) — proposer mise en banque ──
+    if ti is not None and to_ is not None and not is_absence and d.weekday() in (5, 6):
+        is_sunday = d.weekday() == 6
+        outside_cat = "Double Time" if is_sunday else "Overtime"
+        banque_cat  = "DT en banque" if is_sunday else "OT en banque"
+        label_payé  = "DT payé" if is_sunday else "OT payé"
+        full_hrs    = compute_hours(ti, to_, 0.0)
+        full_segs   = [{"time_in": ti, "time_out": to_, "category": outside_cat, "hours": round(full_hrs, 4)}]
+
+        confirmed_we = st.session_state.get(f"split_confirm_{uid}")
+
+        if confirmed_we is None:
+            st.warning(
+                f"⚠️ {'Dimanche' if is_sunday else 'Samedi'} — **{_fmt_h(full_hrs)}** "
+                f"en **{label_payé}**. Mettre en banque ?"
+            )
+            col_a, col_b, col_c = st.columns([1, 1, 1])
+            with col_a:
+                if st.button(f"💰 {label_payé}", key=f"split_oui_{uid}"):
+                    st.session_state[f"split_confirm_{uid}"] = "paye"
+                    st.rerun()
+            with col_b:
+                if st.button(f"🏦 Mettre en banque", key=f"split_banque_{uid}"):
+                    st.session_state[f"split_confirm_{uid}"] = "banque"
+                    st.rerun()
+            with col_c:
+                if st.button("❌ Ne pas soumettre", key=f"split_non_{uid}"):
+                    st.session_state[f"split_confirm_{uid}"] = "non"
+                    st.rerun()
+
+        elif confirmed_we == "paye":
+            _persist_split(full_segs)
+            split_triggered = True
+
+        elif confirmed_we == "banque":
+            banque_segs = _apply_banque_to_segments(full_segs, outside_cat, banque_cat)
+            _persist_split(banque_segs)
+            split_triggered = True
+
+        elif confirmed_we == "non":
+            _persist_split(None, False)
+
+    # ── Lundi–Vendredi — hors heures standard ──
+    elif ti is not None and to_ is not None and not is_absence and d.weekday() < 5:
         segments = _compute_zone_split(d, ti, to_)
         cats_in_shift = {s["category"] for s in segments}
         has_mixed = len(cats_in_shift) > 1
@@ -1395,7 +1470,6 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         daily_cap_full = apply_daily_cap and rt_already >= 8.0 and not has_mixed
 
         if (has_mixed and outside_hrs > 0) or daily_cap_full:
-            def _fmt_h(h): return f"{h:.2f}h".rstrip("0").rstrip(".")
 
             daily_cap_ot = daily_cap_full or (apply_daily_cap and any(
                 s["category"] == "Overtime" and 8 <= s["time_in"] < 17
@@ -1403,16 +1477,36 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
             ))
 
             if daily_cap_ot:
+                # Cap 8h automatique — proposer quand même banque vs payé pour la partie OT
                 rt_hrs = sum(s["hours"] for s in segments if s["category"] == "Regular Time")
                 ot_only = round(sum(s["hours"] for s in segments if s["category"] == "Overtime"), 2)
-                if rt_hrs > 0:
-                    msg = f"ℹ️ Cap quotidien 8h atteint — **{_fmt_h(rt_hrs)}h RT** + **{_fmt_h(ot_only)}h OT** seront créés automatiquement."
-                else:
-                    msg = f"ℹ️ Cap quotidien 8h déjà atteint — cette ligne (**{_fmt_h(ot_only)}h**) sera en **OT** automatiquement."
-                st.info(msg)
-                row["_split_segments"] = segments
-                row["_client_requis"]  = True
-                split_triggered = True
+                confirmed_cap = st.session_state.get(f"split_confirm_{uid}")
+
+                if confirmed_cap is None:
+                    if rt_hrs > 0:
+                        msg = f"ℹ️ Cap quotidien 8h atteint — **{_fmt_h(rt_hrs)}h RT** + **{_fmt_h(ot_only)}h OT**. Mettre le OT en banque ?"
+                    else:
+                        msg = f"ℹ️ Cap quotidien 8h déjà atteint — cette ligne (**{_fmt_h(ot_only)}h**) sera en **OT**. Mettre en banque ?"
+                    st.info(msg)
+                    col_a, col_b = st.columns([1, 1])
+                    with col_a:
+                        if st.button("💰 OT payé", key=f"split_oui_{uid}"):
+                            st.session_state[f"split_confirm_{uid}"] = "paye"
+                            st.rerun()
+                    with col_b:
+                        if st.button("🏦 Mettre en banque (OBTI)", key=f"split_banque_{uid}"):
+                            st.session_state[f"split_confirm_{uid}"] = "banque"
+                            st.rerun()
+
+                elif confirmed_cap == "paye":
+                    _persist_split(segments)
+                    split_triggered = True
+
+                elif confirmed_cap == "banque":
+                    banque_segs = _apply_banque_to_segments(segments, "Overtime", "OT en banque")
+                    _persist_split(banque_segs)
+                    split_triggered = True
+
             else:
                 confirmed = st.session_state.get(f"split_confirm_{uid}")
 
@@ -1422,10 +1516,14 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                         f"régulières (08:00–17:00). **Le client a-t-il demandé de travailler "
                         f"en dehors des heures normales ?**"
                     )
-                    col_oui, col_non = st.columns([1, 1])
+                    col_oui, col_banque, col_non = st.columns([1, 1, 1])
                     with col_oui:
-                        if st.button("✅ Oui — Requis client (créer OT + RT)", key=f"split_oui_{uid}"):
+                        if st.button("✅ Requis client — OT payé", key=f"split_oui_{uid}"):
                             st.session_state[f"split_confirm_{uid}"] = "oui"
+                            st.rerun()
+                    with col_banque:
+                        if st.button("🏦 Requis client — OT en banque", key=f"split_banque_{uid}"):
+                            st.session_state[f"split_confirm_{uid}"] = "banque"
                             st.rerun()
                     with col_non:
                         if st.button("❌ Non — Garder en RT seulement", key=f"split_non_{uid}"):
@@ -1433,28 +1531,34 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                             st.rerun()
 
                 elif confirmed == "oui":
-                    row["_split_segments"] = segments
-                    row["_client_requis"]  = True
-                    st.session_state[f"split_segments_{uid}"] = segments
-                    st.session_state[f"split_client_requis_{uid}"] = True
+                    _persist_split(segments)
+                    split_triggered = True
+
+                elif confirmed == "banque":
+                    banque_segs = _apply_banque_to_segments(segments, "Overtime", "OT en banque")
+                    # DT (nuit) reste DT payé — seulement OT → banque
+                    _persist_split(banque_segs)
                     split_triggered = True
 
                 elif confirmed == "non":
-                    row["_split_segments"] = None
-                    row["_client_requis"]  = False
-                    st.session_state[f"split_segments_{uid}"] = None
-                    st.session_state[f"split_client_requis_{uid}"] = False
+                    _persist_split(None, False)
                     cat = "Regular Time"
                     row["category"] = "Regular Time"
         else:
-            row["_split_segments"] = None
-            row["_client_requis"]  = False
+            _persist_split(None, False)
 
     # ── Info bar ─────────────────────────────────────────────────
     if ti is not None and to_ is not None:
         badge_map = {
-            "Regular Time": "🟢 RT", "Overtime": "🟡 OT",
-            "Double Time":  "🔴 DT", "Vacances": "🔵 VP", "Maladie": "⚪ SP", "Férié": "🟣 HD",
+            "Regular Time":     "🟢 RT",
+            "Overtime":         "🟡 OT",
+            "Double Time":      "🔴 DT",
+            "Vacances":         "🔵 VP",
+            "Maladie":          "⚪ SP",
+            "Férié":            "🟣 HD",
+            "Heures en banque": "🏦 BTO",
+            "OT en banque":     "🏦 OBTI",
+            "DT en banque":     "🏦 DBTI",
         }
         meal_txt = f"  |  🍽️ {meal:.1f}h repas" if meal > 0 else ""
 
