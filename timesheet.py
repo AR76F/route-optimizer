@@ -834,7 +834,12 @@ def show_timesheet():
             cat = row.get("category", "")
             if absence_live in ("Vacances", "Maladie", "Férié"):
                 cat = absence_live
-            if ti is not None and to_ is not None and cat:
+            # Si split confirmé client → comptabiliser par segment
+            active_segs = row.get("_split_segments")
+            if active_segs and row.get("_client_requis"):
+                for seg in active_segs:
+                    hrs_by_cat[seg["category"]] += seg["hours"]
+            elif ti is not None and to_ is not None and cat:
                 hrs_by_cat[cat] += compute_hours(ti, to_, 0.0)
 
         badge_map = {
@@ -931,13 +936,19 @@ def show_timesheet():
         if ti is None or to_ is None:
             continue
         meal = row.get("meal_hrs", 0.0) or 0.0
-        hrs  = compute_hours(ti, to_, meal)
-        if hrs <= 0:
-            continue
-        cat = row.get("category", "") or ""
-        if not cat:
-            cat = infer_category(row["date"], ti, to_)
-        breakdown[cat] += hrs
+        # Si split confirmé client → comptabiliser par segment
+        active_segs = row.get("_split_segments")
+        if active_segs and row.get("_client_requis"):
+            for seg in active_segs:
+                breakdown[seg["category"]] += seg["hours"]
+        else:
+            hrs  = compute_hours(ti, to_, meal)
+            if hrs <= 0:
+                continue
+            cat = row.get("category", "") or ""
+            if not cat:
+                cat = infer_category(row["date"], ti, to_)
+            breakdown[cat] += hrs
 
     CAT_DISPLAY = {
         "Regular Time": ("Régulier (RT)",  "badge-rt",  "🟢"),
@@ -1408,19 +1419,35 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
 
     # ── Info bar ─────────────────────────────────────────────────
     if ti is not None and to_ is not None:
-        pay_id, pay_type = PAY_CODES.get(cat, ("RT", "RT"))
         badge_map = {
             "Regular Time": "🟢 RT", "Overtime": "🟡 OT",
             "Double Time":  "🔴 DT", "Vacances": "🔵 VP", "Maladie": "⚪ SP", "Férié": "🟣 HD",
         }
-        badge = badge_map.get(cat, cat)
         meal_txt = f"  |  🍽️ {meal:.1f}h repas" if meal > 0 else ""
-        st.markdown(
-            f'<div style="font-size:0.78rem;color:#7eb8d4;padding:2px 0 6px 2px;">'
-            f'<b>{badge}</b> &nbsp;·&nbsp; {hrs:.2f} h &nbsp;·&nbsp; '
-            f'Pay: {pay_id}/{pay_type}{meal_txt}</div>',
-            unsafe_allow_html=True
-        )
+
+        # Si split confirmé par le client → afficher le détail par segment
+        active_segments = row.get("_split_segments")
+        if active_segments and row.get("_client_requis"):
+            parts = []
+            for seg in active_segments:
+                sc = seg["category"]
+                icon_label = badge_map.get(sc, sc)
+                parts.append(f"<b>{icon_label}</b> {seg['hours']:.2f}h")
+            detail = "  +  ".join(parts)
+            st.markdown(
+                f'<div style="font-size:0.78rem;color:#7eb8d4;padding:2px 0 6px 2px;">'
+                f'Split requis client → {detail}{meal_txt}</div>',
+                unsafe_allow_html=True
+            )
+        else:
+            pay_id, pay_type = PAY_CODES.get(cat, ("RT", "RT"))
+            badge = badge_map.get(cat, cat)
+            st.markdown(
+                f'<div style="font-size:0.78rem;color:#7eb8d4;padding:2px 0 6px 2px;">'
+                f'<b>{badge}</b> &nbsp;·&nbsp; {hrs:.2f} h &nbsp;·&nbsp; '
+                f'Pay: {pay_id}/{pay_type}{meal_txt}</div>',
+                unsafe_allow_html=True
+            )
 
     # ── Visual timeline ───────────────────────────────────────────
     if ti is not None and to_ is not None and not is_absence:
