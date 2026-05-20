@@ -834,9 +834,12 @@ def show_timesheet():
             cat = row.get("category", "")
             if absence_live in ("Vacances", "Maladie", "Férié"):
                 cat = absence_live
-            # Si split confirmé client → comptabiliser par segment
-            active_segs = row.get("_split_segments")
-            if active_segs and row.get("_client_requis"):
+            # Lire les segments depuis session_state (disponibles dès le rerun suivant le clic)
+            segs_ss = st.session_state.get(f"split_segments_{uid}")
+            requis_ss = st.session_state.get(f"split_client_requis_{uid}", False)
+            active_segs = segs_ss if segs_ss and requis_ss else row.get("_split_segments")
+            use_split = bool(active_segs) and (requis_ss or row.get("_client_requis", False))
+            if use_split:
                 for seg in active_segs:
                     hrs_by_cat[seg["category"]] += seg["hours"]
             elif ti is not None and to_ is not None and cat:
@@ -936,9 +939,12 @@ def show_timesheet():
         if ti is None or to_ is None:
             continue
         meal = row.get("meal_hrs", 0.0) or 0.0
-        # Si split confirmé client → comptabiliser par segment
-        active_segs = row.get("_split_segments")
-        if active_segs and row.get("_client_requis"):
+        uid = row.get("uid", "")
+        segs_ss   = st.session_state.get(f"split_segments_{uid}")
+        requis_ss = st.session_state.get(f"split_client_requis_{uid}", False)
+        active_segs = segs_ss if segs_ss and requis_ss else row.get("_split_segments")
+        use_split = bool(active_segs) and (requis_ss or row.get("_client_requis", False))
+        if use_split:
             for seg in active_segs:
                 breakdown[seg["category"]] += seg["hours"]
         else:
@@ -1406,11 +1412,15 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                 elif confirmed == "oui":
                     row["_split_segments"] = segments
                     row["_client_requis"]  = True
+                    st.session_state[f"split_segments_{uid}"] = segments
+                    st.session_state[f"split_client_requis_{uid}"] = True
                     split_triggered = True
 
                 elif confirmed == "non":
                     row["_split_segments"] = None
                     row["_client_requis"]  = False
+                    st.session_state[f"split_segments_{uid}"] = None
+                    st.session_state[f"split_client_requis_{uid}"] = False
                     cat = "Regular Time"
                     row["category"] = "Regular Time"
         else:
@@ -1426,8 +1436,12 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         meal_txt = f"  |  🍽️ {meal:.1f}h repas" if meal > 0 else ""
 
         # Si split confirmé par le client → afficher le détail par segment
-        active_segments = row.get("_split_segments")
-        if active_segments and row.get("_client_requis"):
+        # Lire depuis session_state pour être à jour dès le rerun après le clic
+        segs_ss_ib   = st.session_state.get(f"split_segments_{uid}")
+        requis_ss_ib = st.session_state.get(f"split_client_requis_{uid}", False)
+        active_segments = segs_ss_ib if segs_ss_ib and requis_ss_ib else row.get("_split_segments")
+        use_split_ib = bool(active_segments) and (requis_ss_ib or row.get("_client_requis", False))
+        if use_split_ib:
             parts = []
             for seg in active_segments:
                 sc = seg["category"]
