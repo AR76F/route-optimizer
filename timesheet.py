@@ -1296,6 +1296,13 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
     hrs = compute_hours(ti, to_, meal)
     is_absence = cat in ("Vacances", "Maladie", "Férié", "Heures en banque")
 
+    # Si c'est une absence, vider tout état de split résiduel en session_state
+    if is_absence:
+        for _k in (f"split_confirm_{uid}", f"split_segments_{uid}", f"split_client_requis_{uid}"):
+            st.session_state.pop(_k, None)
+        row["_split_segments"] = None
+        row["_client_requis"]  = False
+
     job_type       = row.get("job_type", "Job Client")
     trans_type     = row.get("trans_type", "WO")
     order_ref      = row.get("order_ref", "")
