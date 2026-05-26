@@ -1047,41 +1047,131 @@ def render_page_2():
         st.session_state["p2_api_calls"] = st.session_state.get("p2_api_calls", 0) + total_calls
         return total_new
 
-    # ── PREFETCH AUTOMATIQUE ────────────────────────────────────────────────
-    # Les jobs changent chaque mois → le cache SQLite est froid à chaque nouvel
-    # upload. Sans prefetch, le scheduler utilise haversine (estimation vol
-    # d'oiseau) au lieu des vrais temps Google Maps, ce qui peut fausser les
-    # assignations. On déclenche donc le prefetch automatiquement dès l'upload,
-    # en arrière-plan, avant que l'utilisateur lance la planification.
+    # ── PREFETCH AUTOMATIQUE NON-BLOQUANT ──────────────────────────────────
+    # Les jobs changent chaque mois → cache SQLite froid à chaque nouvel upload.
+    # On préchauffe le cache en CHUNKS PROGRESSIFS dans la sidebar, sans bloquer
+    # la page. L'utilisateur peut configurer ses paramètres pendant que le cache
+    # se remplit. Quand il clique "Générer le mois", le cache est prêt ou presque.
     #
-    # Mécanisme anti-doublon : on stocke un hash du contenu du fichier dans
-    # session_state. Si le fichier n'a pas changé depuis le dernier prefetch
-    # (même session), on ne refait pas les appels API — prefetch_travel_matrix
-    # vérifie lui-même les paires déjà en cache SQLite, donc les mois suivants
-    # où les adresses techs sont stables sont très rapides.
+    # Fonctionnement :
+    #   - Détecte un nouveau fichier via hash MD5
+    #   - Découpe les paires manquantes en chunks de ~100 paires
+    #   - Calcule UN chunk par rerun Streamlit (via st.rerun())
+    #   - Affiche la progression dans la sidebar
+    #   - S'arrête automatiquement quand tout est en cache
     # ────────────────────────────────────────────────────────────────────────
     _file_hash = hashlib.md5(st.session_state["jobs_file_bytes"]).hexdigest()
-    if st.session_state.get("_prefetch_done_hash") != _file_hash:
-        _job_addrs_for_prefetch = jobs["address"].dropna().unique().tolist()
-        _tech_addrs_for_prefetch = list(TECH_HOME.values())
-        _all_addrs_for_prefetch = list(dict.fromkeys(_tech_addrs_for_prefetch + _job_addrs_for_prefetch))
+    _job_addrs_pf  = jobs["address"].dropna().unique().tolist()
+    _tech_addrs_pf = list(TECH_HOME.values())
+    _all_addrs_pf  = list(dict.fromkeys(_tech_addrs_pf + _job_addrs_pf))
+    _total_pairs_pf = max(1, len(_all_addrs_pf) * (len(_all_addrs_pf) - 1))
 
-        with st.spinner(f"⚡ Précalcul des trajets en cours ({len(_job_addrs_for_prefetch)} adresses clients + {len(_tech_addrs_for_prefetch)} techs)…"):
-            _new_pairs = prefetch_travel_matrix(
-                _all_addrs_for_prefetch,
-                _all_addrs_for_prefetch,
-            )
+    # Réinitialiser si nouveau fichier
+    if st.session_state.get("_prefetch_file_hash") != _file_hash:
+        st.session_state["_prefetch_file_hash"] = _file_hash
+        st.session_state["_prefetch_done"] = False
+        st.session_state["_prefetch_pairs_done"] = 0
 
-        st.session_state["_prefetch_done_hash"] = _file_hash
+    _pf_done = st.session_state.get("_prefetch_done", False)
+    _pf_pairs_done = st.session_state.get("_prefetch_pairs_done", 0)
 
-        if _new_pairs > 0:
-            st.success(
-                f"✅ Cache trajets mis à jour — {_new_pairs} nouvelles paires calculées. "
-                f"Le planning utilisera les vrais temps Google Maps."
-            )
+    # Affichage sidebar
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("⚡ Cache trajets")
+    if _pf_done:
+        st.sidebar.success("✅ Cache trajets complet — planning optimal garanti.")
+    else:
+        _pct = min(99, int(_pf_pairs_done / _total_pairs_pf * 100))
+        st.sidebar.progress(_pct)
+        st.sidebar.caption(
+            f"Cache en cours… {_pf_pairs_done:,} / {_total_pairs_pf:,} paires "
+            f"({_pct}%) — vous pouvez déjà configurer le planning."
+        )
+
+    # Calcul d'un chunk si pas encore terminé (non-bloquant : 1 chunk par rerun)
+    if not _pf_done:
+        _CHUNK_PAIRS = 100  # ~1 appel batch par rerun, ~1-2 secondes
+        now_pf = int(time.time())
+        min_ts_pf = now_pf - int(cache_days if 'cache_days' in dir() else 30) * 86400
+        conn_pf = _get_db()
+
+        # Identifier les paires manquantes pour ce chunk
+        _missing_o: List[str] = []
+        _missing_d_per_o: Dict[str, List[str]] = {}
+        _counted = 0
+        _chunk_full = False
+
+        for _o in _all_addrs_pf:
+            _missing_d = []
+            for _d in _all_addrs_pf:
+                if _o == _d:
+                    continue
+                _k = _key(_o, _d, use_traffic if 'use_traffic' in dir() else True)
+                _row = conn_pf.cursor().execute(
+                    "SELECT 1 FROM travel WHERE k=? AND ts>=?", (_k, min_ts_pf)
+                ).fetchone()
+                if not _row:
+                    _missing_d.append(_d)
+                    _counted += 1
+                    if _counted >= _CHUNK_PAIRS:
+                        _chunk_full = True
+                        break
+            if _missing_d:
+                _missing_o.append(_o)
+                _missing_d_per_o[_o] = _missing_d
+            if _chunk_full:
+                break
+
+        if not _missing_o:
+            # Tout est en cache
+            st.session_state["_prefetch_done"] = True
+            st.session_state["_prefetch_pairs_done"] = _total_pairs_pf
+            st.rerun()
         else:
-            st.info("✅ Cache trajets déjà à jour — aucun appel API supplémentaire nécessaire.")
-    # ── FIN PREFETCH AUTOMATIQUE ─────────────────────────────────────────────
+            # Calculer ce chunk via Distance Matrix batch
+            _CHUNK_O = 10; _CHUNK_D = 10
+            _new_in_chunk = 0
+            for _oc in [_missing_o[i:i+_CHUNK_O] for i in range(0, len(_missing_o), _CHUNK_O)]:
+                _all_d_chunk = list({_d for _o in _oc for _d in _missing_d_per_o.get(_o, [])})
+                for _dc in [_all_d_chunk[i:i+_CHUNK_D] for i in range(0, len(_all_d_chunk), _CHUNK_D)]:
+                    if not _dc:
+                        continue
+                    try:
+                        _r = gmaps_client.distance_matrix(_oc, _dc, mode="driving")
+                        _inserts = []
+                        for _oi, _row_data in enumerate(_r.get("rows", [])):
+                            if _oi >= len(_oc):
+                                break
+                            _orig = _oc[_oi]
+                            for _di, _el in enumerate(_row_data.get("elements", [])):
+                                if _di >= len(_dc):
+                                    break
+                                _dest = _dc[_di]
+                                if _orig == _dest:
+                                    continue
+                                if _dest not in _missing_d_per_o.get(_orig, []):
+                                    continue
+                                if _el.get("status") != "OK":
+                                    continue
+                                _dur = (_el.get("duration_in_traffic") or _el.get("duration") or {})
+                                _mins = int(round(int(_dur.get("value", 0)) / 60))
+                                _inserts.append((_key(_orig, _dest, use_traffic if 'use_traffic' in dir() else True), _mins, now_pf))
+                                _new_in_chunk += 1
+                        if _inserts:
+                            conn_pf.executemany(
+                                "INSERT OR REPLACE INTO travel(k, minutes, ts) VALUES(?,?,?)",
+                                _inserts
+                            )
+                            conn_pf.commit()
+                    except Exception:
+                        pass
+
+            st.session_state["_prefetch_pairs_done"] = _pf_pairs_done + _new_in_chunk
+            st.session_state["p2_api_calls"] = st.session_state.get("p2_api_calls", 0) + 1
+            # Déclencher le prochain chunk automatiquement
+            time.sleep(0.1)
+            st.rerun()
+    # ── FIN PREFETCH NON-BLOQUANT ────────────────────────────────────────────
 
     def haversine_km(lat1, lon1, lat2, lon2) -> float:
         if lat1 is None or lon1 is None or lat2 is None or lon2 is None:
@@ -1204,23 +1294,11 @@ def render_page_2():
         "Utilise ce bouton uniquement si tu veux forcer un recalcul complet."
     )
     if st.sidebar.button("🔄 Forcer recalcul matrice trajets", key="p2_prefetch_btn"):
-        # Réinitialiser le hash pour forcer un recalcul même si le fichier n'a pas changé
-        st.session_state.pop("_prefetch_done_hash", None)
-        all_tech_addrs = list(home_map.values())
-        all_job_addrs  = jobs["address"].dropna().unique().tolist()
-        all_addrs      = list(dict.fromkeys(all_tech_addrs + all_job_addrs))
-        prog_bar  = st.sidebar.progress(0)
-        prog_text = st.sidebar.empty()
-        CHUNK_SIZE = 100
-        total_calls_est = max(1, (len(all_addrs) * len(all_addrs)) // CHUNK_SIZE)
-        def _cb(calls_done):
-            pct = min(99, int(calls_done / max(1, total_calls_est) * 100))
-            prog_bar.progress(pct)
-            prog_text.write(f"Appels batch effectués : {calls_done}")
-        new_pairs = prefetch_travel_matrix(all_addrs, all_addrs, progress_cb=_cb)
-        prog_bar.progress(100)
-        prog_text.write(f"✅ {new_pairs} nouvelles paires ajoutées au cache.")
-        st.sidebar.success(f"Matrice recalculée — {new_pairs} nouvelles paires. Appels API batch : {st.session_state.get('p2_api_calls', 0)}")
+        # Réinitialiser pour forcer un recalcul complet
+        st.session_state.pop("_prefetch_file_hash", None)
+        st.session_state["_prefetch_done"] = False
+        st.session_state["_prefetch_pairs_done"] = 0
+        st.rerun()
 
     st.sidebar.caption("💡 OR-Tools actif" if ORTOOLS_AVAILABLE else "⚠️ OR-Tools non installé (`pip install ortools`). Greedy utilisé à la place.")
 
