@@ -1505,8 +1505,8 @@ def render_page_2():
                                 duo_is_overtime = False
                                 if int(job_min_each) > int(daily_onsite_cap):
                                     _t1lat, _t1lon = tech_ll_map.get(t1, (None, None))
-                                    _duo_tmin = travel_min_estimate(cur_loc[t1], job["address"])
-                                    _duo_tback = travel_min_estimate(job["address"], _home_map[t1])
+                                    _duo_tmin = travel_min_estimate(cur_loc[t1], job["address"], None, None, jlat, jlon)
+                                    _duo_tback = travel_min_estimate(job["address"], _home_map[t1], jlat, jlon, None, None)
                                     _duo_need = _duo_tmin + int(job_min_each) + int(buffer_job) + _duo_tback
                                     if _duo_need <= int(OT_ACTIVE_CAP):
                                         if jobs_count[t1] != 0 or jobs_count[t2] != 0: continue
@@ -1515,12 +1515,12 @@ def render_page_2():
                                         continue
                                 _t1lat, _t1lon = tech_ll_map.get(t1, (None, None))
                                 _t2lat, _t2lon = tech_ll_map.get(t2, (None, None))
-                                t1_tr = travel_min_estimate(cur_loc[t1], addr)
-                                t2_tr = travel_min_estimate(cur_loc[t2], addr)
+                                t1_tr = travel_min_estimate(cur_loc[t1], addr, None, None, jlat, jlon)
+                                t2_tr = travel_min_estimate(cur_loc[t2], addr, None, None, jlat, jlon)
                                 start_m = max(used[t1] + int(t1_tr), used[t2] + int(t2_tr))
                                 end_m = start_m + int(need_block)
-                                t1_back = travel_min_estimate(addr, _home_map[t1])
-                                t2_back = travel_min_estimate(addr, _home_map[t2])
+                                t1_back = travel_min_estimate(addr, _home_map[t1], jlat, jlon, None, None)
+                                t2_back = travel_min_estimate(addr, _home_map[t2], jlat, jlon, None, None)
                                 if (end_m + int(t1_back) <= available) and (end_m + int(t2_back) <= available):
                                     score = (start_m, max(int(t1_tr), int(t2_tr)))
                                     if best is None or score < best[0]:
@@ -1580,8 +1580,8 @@ def render_page_2():
                             jlat, jlon, jsec = ensure_job_ll_master(jobs, idx) if idx in jobs.index else (*get_ll_for_address(job.get("address","")), classify_sector(*get_ll_for_address(job.get("address",""))))
                             if not sector_compatible(_tech_sector.get(t, "UNK"), jsec): continue
                             tlat_f, tlon_f = tech_ll_map.get(t, (None, None))
-                            tmin = travel_min_estimate(cur_loc[t], job["address"])
-                            tback = travel_min_estimate(job["address"], _home_map[t])
+                            tmin = travel_min_estimate(cur_loc[t], job["address"], tlat_f, tlon_f, jlat, jlon)
+                            tback = travel_min_estimate(job["address"], _home_map[t], jlat, jlon, tlat_f, tlon_f)
                             need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
                             if need <= 0: continue
                             if used[t] + need <= available:
@@ -1621,8 +1621,8 @@ def render_page_2():
                                 jlat, jlon, jsec = ensure_job_ll_master(jobs, idx) if idx in jobs.index else (*get_ll_for_address(job.get("address","")), classify_sector(*get_ll_for_address(job.get("address",""))))
                                 if not sector_compatible(_tech_sector.get(t, "UNK"), jsec): continue
                                 tlat_f, tlon_f = tech_ll_map.get(t, (None, None))
-                                tmin = travel_min_estimate(cur_loc[t], job["address"])
-                                tback = travel_min_estimate(job["address"], _home_map[t])
+                                tmin = travel_min_estimate(cur_loc[t], job["address"], tlat_f, tlon_f, jlat, jlon)
+                                tback = travel_min_estimate(job["address"], _home_map[t], jlat, jlon, tlat_f, tlon_f)
                                 need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
                                 if need <= OT_ACTIVE_CAP:
                                     if best_ot_cost is None or int(tmin) < best_ot_cost:
@@ -1657,8 +1657,8 @@ def render_page_2():
                             if not sector_compatible(_tech_sector.get(t, "UNK"), jsec): continue
                             addr = job["address"]
                             tlat_f, tlon_f = tech_ll_map.get(t, (None, None))
-                            tmin = travel_min_estimate(cur_loc[t], addr)
-                            tback = travel_min_estimate(addr, _home_map[t])
+                            tmin = travel_min_estimate(cur_loc[t], addr, tlat_f, tlon_f, jlat, jlon)
+                            tback = travel_min_estimate(addr, _home_map[t], jlat, jlon, tlat_f, tlon_f)
                             full_need = int(tmin) + int(jm) + int(buffer_job) + int(tback)
                             is_overtime_candidate = (jobs_count[t] == 0 and full_need <= int(OT_ACTIVE_CAP))
                             max_onsite_today = int(available) - int(used[t]) - int(tmin) - int(buffer_job) - int(tback)
@@ -1858,8 +1858,8 @@ def render_page_2():
                         home_addr = _home_map.get(t, "")
                         if cur_count >= int(max_jobs_per_day): continue
                         _t_blat, _t_blon = tech_ll_map.get(t, (None, None))
-                        tmin = travel_min_estimate(home_addr, addr)
-                        tback = travel_min_estimate(addr, home_addr)
+                        tmin = travel_min_estimate(home_addr, addr, _t_blat, _t_blon, jlat, jlon)
+                        tback = travel_min_estimate(addr, home_addr, jlat, jlon, _t_blat, _t_blon)
                         need = int(tmin) + int(jm) + int(buffer_job) + int(tback)
                         fits_normal = (cur_used + need) <= int(available)
                         fits_ot = (cur_used == 0) and (need <= int(OT_ACTIVE_CAP))
@@ -1953,7 +1953,7 @@ def render_page_2():
                 if i == j: row_m.append(0)
                 else:
                     _ilat, _ilon = _locs_ll[i]; _jlat, _jlon = _locs_ll[j]
-                    v = travel_min_estimate(all_locs[i], all_locs[j])
+                    v = travel_min_estimate(all_locs[i], all_locs[j], _ilat, _ilon, _jlat, _jlon)
                     if v >= 9999: has_missing = True
                     row_m.append(int(v))
             matrix.append(row_m)
@@ -2074,7 +2074,12 @@ def render_page_2():
         _travel_local: Dict[Tuple[str,str], int] = {}
         def _travel(a, b):
             k = (a, b)
-            if k not in _travel_local: _travel_local[k] = travel_min_estimate(a, b)
+            if k not in _travel_local:
+                # Récupère les coords depuis ll_cache (chargé en mémoire au début de render_page_2)
+                # → évite que travel_min_estimate refasse get_ll_for_address en boucle
+                _a_lat, _a_lon = get_ll_for_address(a)
+                _b_lat, _b_lon = get_ll_for_address(b)
+                _travel_local[k] = travel_min_estimate(a, b, _a_lat, _a_lon, _b_lat, _b_lon)
             return _travel_local[k]
         locked, movable = [], []
         original_rows_by_day_tech: Dict[Tuple[str,str], List[Dict[str,Any]]] = {}
@@ -2494,8 +2499,8 @@ def render_page_2():
                     tlat_ma, tlon_ma = tech_ll_map.get(chosen_tech, (None, None))
                     jlat_ma = jobs.at[idx, "job_lat"] if idx in jobs.index and "job_lat" in jobs.columns else None
                     jlon_ma = jobs.at[idx, "job_lon"] if idx in jobs.index and "job_lon" in jobs.columns else None
-                    tmin = travel_min_estimate(cur_loc, job["address"])
-                    tback = travel_min_estimate(job["address"], home_addr)
+                    tmin = travel_min_estimate(cur_loc, job["address"], tlat_ma, tlon_ma, jlat_ma, jlon_ma)
+                    tback = travel_min_estimate(job["address"], home_addr, jlat_ma, jlon_ma, tlat_ma, tlon_ma)
                     need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
                     if need <= 0: continue
                     if used + need <= available:
@@ -2526,8 +2531,8 @@ def render_page_2():
                         jlat, jlon, jsec = ensure_job_ll_master(jobs, idx) if idx in jobs.index else (*get_ll_for_address(job.get("address","")), classify_sector(*get_ll_for_address(job.get("address",""))))
                         if not sector_compatible(tsec, jsec): continue
                         _tlat_a, _tlon_a = tech_ll_map.get(chosen_tech, (None, None))
-                        tmin = travel_min_estimate(cur_loc, job["address"])
-                        tback = travel_min_estimate(job["address"], home_addr)
+                        tmin = travel_min_estimate(cur_loc, job["address"], _tlat_a, _tlon_a, jlat, jlon)
+                        tback = travel_min_estimate(job["address"], home_addr, jlat, jlon, _tlat_a, _tlon_a)
                         need = int(tmin) + int(job["job_minutes"]) + int(buffer_job) + int(tback)
                         if need <= OT_ACTIVE_CAP:
                             if best_ot_cost is None or int(tmin) < best_ot_cost:
@@ -2557,8 +2562,8 @@ def render_page_2():
                     tlat_ma, tlon_ma = tech_ll_map.get(chosen_tech, (None, None))
                     jlat_ma = jobs.at[idx, "job_lat"] if idx in jobs.index and "job_lat" in jobs.columns else None
                     jlon_ma = jobs.at[idx, "job_lon"] if idx in jobs.index and "job_lon" in jobs.columns else None
-                    tmin = travel_min_estimate(cur_loc, job["address"])
-                    tback = travel_min_estimate(job["address"], home_addr)
+                    tmin = travel_min_estimate(cur_loc, job["address"], tlat_ma, tlon_ma, jlat_ma, jlon_ma)
+                    tback = travel_min_estimate(job["address"], home_addr, jlat_ma, jlon_ma, tlat_ma, tlon_ma)
                     max_onsite_today = int(available) - int(used) - int(tmin) - int(buffer_job) - int(tback)
                     if max_onsite_today <= 0: continue
                     onsite_today_candidate = choose_onsite_no_crumbs(jm, max_onsite_today, MIN_ONSITE_CHUNK_MIN)
