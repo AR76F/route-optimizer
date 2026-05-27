@@ -1896,6 +1896,7 @@ def render_page_2():
                 "difference": getter("difference", ""),
                 "unit": getter("unit", ""),
                 "serial_number": getter("serial_number", ""),
+                "all_open_work": getter("all_open_work", ""),
             }
 
         _home_map = {t: home_map[t] for t in tech_names}
