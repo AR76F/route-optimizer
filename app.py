@@ -1003,6 +1003,7 @@ def render_page_2():
     COL_DIFF = pick_col(jobs_raw, ["DIFFERENCE", "Difference", "Diff", "ÉCART", "Ecart"])
     COL_UNIT = pick_col(jobs_raw, ["UNIT", "Unit", "UNITE", "Unité", "UNITE #", "UNIT #"])
     COL_SERIAL = pick_col(jobs_raw, ["SERIAL NUMBER", "Serial Number", "SERIAL", "S/N", "SN", "Serial"])
+    COL_ALL_OPEN_WORK = pick_col(jobs_raw, ["ALL OPEN WORK", "All Open Work", "ALL OPEN WO"])
 
     if not COL_ORDER:
         st.error("Je ne trouve pas la colonne Job/Order (#). Assure-toi qu'elle existe dans ton export.")
@@ -1072,6 +1073,7 @@ def render_page_2():
     jobs["difference"] = jobs_raw[COL_DIFF].apply(_clean_text) if COL_DIFF else ""
     jobs["unit"] = jobs_raw[COL_UNIT].apply(_clean_text) if COL_UNIT else ""
     jobs["serial_number"] = jobs_raw[COL_SERIAL].apply(_clean_text) if COL_SERIAL else ""
+    jobs["all_open_work"] = jobs_raw[COL_ALL_OPEN_WORK].apply(_clean_text) if COL_ALL_OPEN_WORK else ""
 
     jobs = jobs[(jobs["address"].astype(str).str.len() > 8) & (jobs["job_minutes"] > 0)].copy()
 
@@ -3287,7 +3289,7 @@ def render_page_2():
             "insp_wo": "Insp. WO#", "insp_type": "Insp. Type", "insp_date": "Insp. Date",
             "job_minutes": "Durée (min)", "techs_needed": "Techs",
             "postal": "Code postal", "ot_impossible": "OT impossible",
-            "address": "Adresse",
+            "address": "Adresse","all_open_work": "All Open Work",
         }
 
         col_widths = {
@@ -3297,7 +3299,7 @@ def render_page_2():
             "buffer_min": 10, "techs_needed": 7, "unit": 10,
             "serial_number": 14, "difference": 12, "description": 45,
             "insp_wo": 14, "insp_type": 18, "insp_date": 14,
-            "job_minutes": 12, "postal": 12, "ot_impossible": 12,
+            "job_minutes": 12, "postal": 12, "ot_impossible": 12,"all_open_work": 40,
         }
 
         thin = Side(style="thin", color="CCCCCC")
