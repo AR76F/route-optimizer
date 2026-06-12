@@ -1238,15 +1238,6 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                 f'🔒 <b>{_to_disp}</b></div>',
                 unsafe_allow_html=True)
             time_out_str = str(row["time_out"]) if row["time_out"] is not None else ""
-            # Bouton modifier — réinitialise la décision
-            if st.button("✏️ Modifier", key=f"split_edit_{uid}",
-                         help="Changer les heures et reconsidérer la décision"):
-                for _k in (f"split_confirm_{uid}", f"split_segments_{uid}",
-                           f"split_client_requis_{uid}"):
-                    st.session_state.pop(_k, None)
-                row["_split_segments"] = None
-                row["_client_requis"]  = False
-                st.rerun()
         else:
             time_out_str = st.text_input("⏰ Out",
                                          value="" if row["time_out"] is None else str(row["time_out"]),
@@ -1257,6 +1248,10 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         absence_idx  = absence_options.index(current_cat) if current_cat in absence_options else 0
         absence_sel  = st.selectbox("Absence", absence_options, index=absence_idx,
                                     key=f"cat_{uid}", help="RT/OT/DT calculés automatiquement")
+
+    # Message informatif si les heures sont figées
+    if split_decided:
+        st.caption("🔒 Heures figées — supprimez et recréez la ligne pour modifier.")
 
     ti_val, ti_warn = _parse_time(time_in_str)
     to_val, to_warn = _parse_time(time_out_str)
