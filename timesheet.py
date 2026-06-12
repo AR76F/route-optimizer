@@ -697,6 +697,7 @@ def show_timesheet():
                     st.markdown('<div class="btn-remove">', unsafe_allow_html=True)
                     if st.button(_del_lbl, key=f"del_{idx}"):
                         rows_to_delete.append(idx)
+                        st.session_state["_reopen_exp"] = exp_key
                     st.markdown('</div>', unsafe_allow_html=True)
 
                 _render_row(idx, row, wo_labels, wo_by_label, d, emp_num,
@@ -720,6 +721,7 @@ def show_timesheet():
                         new_row["time_in"] = last_time_out
                     last_idx = day_rows[-1][0]
                     rows.insert(last_idx + 1, new_row)
+                    st.session_state[exp_key] = True  # garder l'expander ouvert
                     st.rerun()
             with col_reset_day:
                 if st.button("🗑️ Réinitialiser", key=f"reset_day_{d.isoformat()}",
@@ -738,12 +740,17 @@ def show_timesheet():
                     # Insérer une ligne vide à la bonne position
                     insert_pos = global_idxs[0]
                     rows.insert(insert_pos, _blank_row(d))
+                    st.session_state[exp_key] = True  # garder l'expander ouvert
                     st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
     if rows_to_delete:
         for i in sorted(rows_to_delete, reverse=True):
             rows.pop(i)
+        # Rouvrir l'expander du jour concerné
+        reopen = st.session_state.pop("_reopen_exp", None)
+        if reopen:
+            st.session_state[reopen] = True
         st.rerun()
 
     # Summary + Submit
