@@ -1077,6 +1077,13 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
     absence_pre = st.session_state.get(f"cat_{uid}", row.get("category", ""))
     is_absence_pre = absence_pre in ("Vacances", "Maladie", "Férié", "Heures en banque")
 
+    # Persister ti/to dans le row dict AVANT tout st.stop() potentiel
+    # pour que les valeurs survivent au rerun
+    if ti_pre is not None:
+        row["time_in"] = ti_pre
+    if to_pre is not None:
+        row["time_out"] = to_pre
+
     needs_split_confirmation = False
     _pre_segments = None
 
