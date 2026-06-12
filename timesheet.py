@@ -725,22 +725,23 @@ def show_timesheet():
                     st.rerun()
             with col_reset_day:
                 if st.button("🗑️ Réinitialiser", key=f"reset_day_{d.isoformat()}",
-                             help="Effacer toutes les lignes de cette journée"):
-                    # Retirer toutes les lignes de ce jour et les remplacer par une ligne vide
-                    idxs_to_remove = [i for i, (gi, r) in enumerate(day_rows)]
-                    global_idxs = [gi for gi, r in day_rows]
-                    for gi in sorted(global_idxs, reverse=True):
+                             help="Effacer les lignes non soumises de cette journée"):
+                    # Seulement retirer les lignes NON soumises (deja_bms=False)
+                    global_idxs_new = [gi for gi, r in day_rows if not r.get("deja_bms", False)]
+                    for gi in sorted(global_idxs_new, reverse=True):
                         rows.pop(gi)
-                    # Vider session_state split pour ces lignes
-                    for _, r in day_rows:
-                        uid_r = r.get("uid", "")
-                        for _k in (f"split_confirm_{uid_r}", f"split_segments_{uid_r}",
-                                   f"split_client_requis_{uid_r}"):
-                            st.session_state.pop(_k, None)
-                    # Insérer une ligne vide à la bonne position
-                    insert_pos = global_idxs[0]
+                    # Vider session_state split pour ces lignes seulement
+                    for gi, r in day_rows:
+                        if not r.get("deja_bms", False):
+                            uid_r = r.get("uid", "")
+                            for _k in (f"split_confirm_{uid_r}", f"split_segments_{uid_r}",
+                                       f"split_client_requis_{uid_r}"):
+                                st.session_state.pop(_k, None)
+                    # Insérer une ligne vide après les lignes soumises existantes
+                    deja_idxs = [gi for gi, r in day_rows if r.get("deja_bms", False)]
+                    insert_pos = (max(deja_idxs) + 1) if deja_idxs else [gi for gi, r in day_rows][0]
                     rows.insert(insert_pos, _blank_row(d))
-                    st.session_state[exp_key] = True  # garder l'expander ouvert
+                    st.session_state[exp_key] = True
                     st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
