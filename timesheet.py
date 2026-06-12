@@ -1176,6 +1176,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                     if st.button("❌ Garder RT seulement", key=f"split_non_{uid}", use_container_width=True):
                         st.session_state[f"split_confirm_{uid}"] = "non"
                         _persist_split(None, False)
+                        row["category"] = "Regular Time"
                         st.rerun()
             # Bloquer le reste du rendu — l'utilisateur doit répondre d'abord
             st.stop()
@@ -1268,10 +1269,14 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         meal = 0.0
         row["meal_hrs"] = 0.0
     elif ti is not None and to_ is not None:
-        cat  = infer_category(d, ti, to_)
+        # Si l'utilisateur a choisi "Garder RT seulement" → respecter ce choix
+        if st.session_state.get(f"split_confirm_{uid}") == "non":
+            cat = "Regular Time"
+        else:
+            cat = infer_category(d, ti, to_)
+            if apply_daily_cap and rt_already >= 8.0 and cat == "Regular Time":
+                cat = "Overtime"
         meal = 0.0
-        if apply_daily_cap and rt_already >= 8.0 and cat == "Regular Time":
-            cat = "Overtime"
     else:
         cat  = infer_category(d, None, None)
         meal = 0.0
