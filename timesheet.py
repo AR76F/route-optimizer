@@ -225,6 +225,7 @@ def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[d
                     str(r.get("meal_hrs", "")),
                     str(r.get("commentaire", "")),
                     str(r.get("pay_type", "")),
+                    "oui" if r.get("deja_bms", False) else "",
                 ])
             body = {"values": new_rows}
             ws.spreadsheet.values_append(
@@ -807,8 +808,7 @@ def show_timesheet():
         """, unsafe_allow_html=True)
 
     with st.expander("🔍 Aperçu JSON (bms_watcher)"):
-        new_only = [r for r in rows if not r.get("deja_bms")]
-        preview_rows = _build_json_rows(new_only)
+        preview_rows = _build_json_rows(rows)
         st.json({
             "employe_num": emp_num,
             "employe_nom": emp_nom,
@@ -819,21 +819,14 @@ def show_timesheet():
     col_sub, _ = st.columns([2, 1])
     with col_sub:
         if st.button("📤 Soumettre à BMS Watcher", type="primary", key="submit_btn"):
-            new_rows_only = [r for r in rows if not r.get("deja_bms")]
-            json_rows = _build_json_rows(new_rows_only)
+            json_rows = _build_json_rows(rows)
             valid = [r for r in json_rows if r.get("heures", 0) > 0]
             if not valid:
-                if not new_rows_only:
-                    st.warning("⚠️ Toutes les journées sont déjà soumises.")
-                else:
-                    st.warning("⚠️ Aucune ligne avec des heures à soumettre.")
+                st.warning("⚠️ Aucune ligne avec des heures à soumettre.")
             else:
                 ok, msg = submit_timesheet(emp_num, emp_nom, p_end, valid)
                 if ok:
                     st.success(f"✅ Soumis ! ({len(valid)} ligne(s)) → {msg}")
-                    for r in new_rows_only:
-                        if r.get("time_in") and r.get("time_out"):
-                            r["deja_bms"] = True
                 else:
                     st.error(f"❌ Erreur : {msg}")
 
