@@ -3,6 +3,7 @@ timesheet.py — BMS Timesheet (Streamlit page)
 """
 
 import os
+import time
 import json
 import math
 import streamlit as st
@@ -818,7 +819,7 @@ def show_timesheet():
 
     col_sub, _ = st.columns([2, 1])
     with col_sub:
-        if st.button("📤 Soumettre à BMS Watcher", type="primary", key="submit_btn"):
+        if st.button("💾 Sauvegarder", type="primary", key="submit_btn"):
             json_rows = _build_json_rows(rows)
             valid = [r for r in json_rows if r.get("heures", 0) > 0]
             if not valid:
@@ -826,9 +827,17 @@ def show_timesheet():
             else:
                 ok, msg = submit_timesheet(emp_num, emp_nom, p_end, valid)
                 if ok:
-                    st.success(f"✅ Soumis ! ({len(valid)} ligne(s)) → {msg}")
+                    st.success(f"✅ Sauvegardé ! ({len(valid)} ligne(s))")
+                    # Rafraîchir depuis Google Sheets pour passer les lignes en 🔒
+                    loaded = load_week_from_gsheet(emp_num, p_start, p_end)
+                    if loaded:
+                        st.session_state[state_key] = loaded
+                        st.session_state[f"loaded_{state_key}"] = True
+                    time.sleep(0.5)
+                    st.rerun()
                 else:
                     st.error(f"❌ Erreur : {msg}")
+        st.caption("💡 Tu peux sauvegarder après chaque ligne et revenir plus tard — tes heures seront conservées.")
 
 
 
