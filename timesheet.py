@@ -828,11 +828,17 @@ def show_timesheet():
                 ok, msg = submit_timesheet(emp_num, emp_nom, p_end, valid)
                 if ok:
                     st.success(f"✅ Sauvegardé ! ({len(valid)} ligne(s))")
+                    # Mémoriser quels expanders étaient ouverts avant le reload
+                    open_exps = {k: v for k, v in st.session_state.items()
+                                 if k.startswith(f"exp_{state_key}_") and v is True}
                     # Rafraîchir depuis Google Sheets pour passer les lignes en 🔒
                     loaded = load_week_from_gsheet(emp_num, p_start, p_end)
                     if loaded:
                         st.session_state[state_key] = loaded
                         st.session_state[f"loaded_{state_key}"] = True
+                    # Restaurer l'état des expanders
+                    for k, v in open_exps.items():
+                        st.session_state[k] = True
                     time.sleep(0.5)
                     st.rerun()
                 else:
