@@ -1211,17 +1211,46 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
     # ══════════════════════════════════════════════════════════════
     #  Champs de saisie normaux
     # ══════════════════════════════════════════════════════════════
+
+    # Si une décision split a déjà été prise → heures figées
+    split_decided = st.session_state.get(f"split_confirm_{uid}") is not None
+
     c1, c2, c3, c4, c5, c6, c7 = st.columns([0.8, 0.8, 1.0, 1.0, 1.5, 1.5, 0.5])
 
     with c1:
-        ti_default  = "" if row["time_in"] is None else str(row["time_in"])
-        time_in_str = st.text_input("⏰ In", value=ti_default,
-                                    key=f"ti_{uid}", placeholder="8.0",
-                                    help="Heure décimale : 8.0 = 8h00, 13.5 = 13h30")
+        if split_decided:
+            _ti_disp = decimal_to_hhmm(float(row["time_in"])) if row["time_in"] is not None else "—"
+            st.markdown(
+                f'<div style="padding-top:28px;font-size:0.9rem;color:#7eb8d4;">'
+                f'🔒 <b>{_ti_disp}</b></div>',
+                unsafe_allow_html=True)
+            time_in_str = str(row["time_in"]) if row["time_in"] is not None else ""
+        else:
+            ti_default  = "" if row["time_in"] is None else str(row["time_in"])
+            time_in_str = st.text_input("⏰ In", value=ti_default,
+                                        key=f"ti_{uid}", placeholder="8.0",
+                                        help="Heure décimale : 8.0 = 8h00, 13.5 = 13h30")
     with c2:
-        time_out_str = st.text_input("⏰ Out",
-                                     value="" if row["time_out"] is None else str(row["time_out"]),
-                                     key=f"to_{uid}", placeholder="17.0")
+        if split_decided:
+            _to_disp = decimal_to_hhmm(float(row["time_out"])) if row["time_out"] is not None else "—"
+            st.markdown(
+                f'<div style="padding-top:28px;font-size:0.9rem;color:#7eb8d4;">'
+                f'🔒 <b>{_to_disp}</b></div>',
+                unsafe_allow_html=True)
+            time_out_str = str(row["time_out"]) if row["time_out"] is not None else ""
+            # Bouton modifier — réinitialise la décision
+            if st.button("✏️ Modifier", key=f"split_edit_{uid}",
+                         help="Changer les heures et reconsidérer la décision"):
+                for _k in (f"split_confirm_{uid}", f"split_segments_{uid}",
+                           f"split_client_requis_{uid}"):
+                    st.session_state.pop(_k, None)
+                row["_split_segments"] = None
+                row["_client_requis"]  = False
+                st.rerun()
+        else:
+            time_out_str = st.text_input("⏰ Out",
+                                         value="" if row["time_out"] is None else str(row["time_out"]),
+                                         key=f"to_{uid}", placeholder="17.0")
     with c3:
         absence_options = ["—", "Vacances", "Maladie", "Férié", "Heures en banque"]
         current_cat  = row.get("category", "")
