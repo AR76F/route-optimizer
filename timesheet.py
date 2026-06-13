@@ -208,8 +208,50 @@ def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[d
     try:
         ws = _get_sheet("Soumissions")
         if ws:
+            # ── Charger les lignes existantes pour éviter les doublons ──
+            existing_keys = set()
+            try:
+                all_records = ws.get_all_records()
+                for rec in all_records:
+                    if str(rec.get("employe_num", "")).strip() != emp_num:
+                        continue
+                    if str(rec.get("periode_fin", "")).strip() != periode_str:
+                        continue
+                    key = (
+                        str(rec.get("date", "")).strip(),
+                        str(rec.get("time_in", "")).strip(),
+                        str(rec.get("time_out", "")).strip(),
+                        str(rec.get("pay_type", "")).strip(),
+                        str(rec.get("order_ref", "")).strip(),
+                    )
+                    existing_keys.add(key)
+            except Exception:
+                pass  # Si erreur lecture, on soumet quand même
+
             new_rows = []
+            skipped  = 0
             for r in rows:
+                # Normaliser time_in/time_out au format HH:MM pour la comparaison
+                def _fmt_key(v):
+                    s = str(v).strip()
+                    if not s or s == "None": return ""
+                    if ":" in s: return s
+                    try:
+                        h = float(s); hh = int(h); mm = int(round((h-hh)*60))
+                        return f"{hh:02d}:{mm:02d}"
+                    except Exception: return s
+
+                row_key = (
+                    str(r.get("date", "")).strip(),
+                    _fmt_key(r.get("time_in", "")),
+                    _fmt_key(r.get("time_out", "")),
+                    str(r.get("pay_type", "")).strip(),
+                    str(r.get("order_ref", "")).strip(),
+                )
+                if row_key in existing_keys:
+                    skipped += 1
+                    continue
+
                 new_rows.append([
                     str(r.get("date", "")),
                     str(emp_num),
@@ -228,12 +270,17 @@ def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[d
                     str(r.get("pay_type", "")),
                     "oui" if r.get("deja_bms", False) else "",
                 ])
-            body = {"values": new_rows}
-            ws.spreadsheet.values_append(
-                "Soumissions",
-                params={"valueInputOption": "RAW", "insertDataOption": "INSERT_ROWS"},
-                body=body
-            )
+
+            if skipped > 0 and not new_rows:
+                return True, f"Aucune nouvelle ligne — {skipped} ligne(s) déjà présente(s) dans Google Sheets."
+
+            if new_rows:
+                body = {"values": new_rows}
+                ws.spreadsheet.values_append(
+                    "Soumissions",
+                    params={"valueInputOption": "RAW", "insertDataOption": "INSERT_ROWS"},
+                    body=body
+                )
         else:
             detail = st.session_state.get("_gsheet_error", "raison inconnue")
             errors.append(f"Google Sheets non disponible — {detail}")
@@ -304,6 +351,8 @@ def load_week_from_gsheet(emp_num: str, p_start: date, p_end: date) -> list[dict
         }
         from collections import defaultdict
         lignes_by_date: dict = defaultdict(list)
+        # Clés déjà vues pour éviter les doublons (date, time_in, time_out, pay_type, order_ref)
+        seen_keys: set = set()
         for rec in all_records:
             if str(rec.get("employe_num", "")).strip() != emp_num:
                 continue
@@ -312,11 +361,27 @@ def load_week_from_gsheet(emp_num: str, p_start: date, p_end: date) -> list[dict
             d = _parse_date_bms(str(rec.get("date", "")))
             if d is None or not (p_start <= d <= p_end):
                 continue
+            # Ignorer les lignes sans heures
+            ti = _to_float(rec.get("time_in"))
+            to = _to_float(rec.get("time_out"))
+            if ti is None or to is None:
+                continue
+            # Clé de déduplication
+            dedup_key = (
+                str(rec.get("date", "")).strip(),
+                str(rec.get("time_in", "")).strip(),
+                str(rec.get("time_out", "")).strip(),
+                str(rec.get("pay_type", "")).strip(),
+                str(rec.get("order_ref", "")).strip(),
+            )
+            if dedup_key in seen_keys:
+                continue
+            seen_keys.add(dedup_key)
             pay_type = str(rec.get("pay_type", "RT")).strip()
             lignes_by_date[d].append({
                 "date":        d,
-                "time_in":     _to_float(rec.get("time_in")),
-                "time_out":    _to_float(rec.get("time_out")),
+                "time_in":     ti,
+                "time_out":    to,
                 "category":    cat_map.get(pay_type, "Regular Time"),
                 "job_type":    "Job Client",
                 "trans_type":  str(rec.get("trans_type", "WO")).strip(),
