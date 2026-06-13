@@ -817,7 +817,7 @@ def show_timesheet():
         """, unsafe_allow_html=True)
 
     with st.expander("🔍 Aperçu JSON (bms_watcher)"):
-        preview_rows = _build_json_rows(rows)
+        preview_rows = _build_json_rows([r for r in rows if not r.get("deja_bms", False)])
         st.json({
             "employe_num": emp_num,
             "employe_nom": emp_nom,
@@ -828,10 +828,11 @@ def show_timesheet():
     col_sub, _ = st.columns([2, 1])
     with col_sub:
         if st.button("💾 Sauvegarder", type="primary", key="submit_btn"):
-            json_rows = _build_json_rows(rows)
+            new_rows_only = [r for r in rows if not r.get("deja_bms", False)]
+            json_rows = _build_json_rows(new_rows_only)
             valid = [r for r in json_rows if r.get("heures", 0) > 0]
             if not valid:
-                st.warning("⚠️ Aucune ligne avec des heures à soumettre.")
+                st.warning("⚠️ Aucune nouvelle ligne à sauvegarder.")
             else:
                 ok, msg = submit_timesheet(emp_num, emp_nom, p_end, valid)
                 if ok:
