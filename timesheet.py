@@ -1198,14 +1198,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
     absence_pre = st.session_state.get(f"cat_{uid}", row.get("category", ""))
     is_absence_pre = absence_pre in ("Vacances", "Maladie", "Férié", "Heures en banque")
 
-    # DEBUG temporaire
-    if st.session_state.get("_debug_cap", False):
-        st.caption(f"🐛 DEBUG uid={uid} ti_pre={ti_pre} to_pre={to_pre} rt_already={rt_already} "
-                   f"confirmed={st.session_state.get(f'split_confirm_{uid}')} "
-                   f"weekday={d.weekday()}")
-
     # Persister ti/to dans le row dict AVANT tout st.stop() potentiel
-    # pour que les valeurs survivent au rerun
     if ti_pre is not None:
         row["time_in"] = ti_pre
     if to_pre is not None:
@@ -1213,55 +1206,56 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
 
     needs_split_confirmation = False
     _pre_segments = None
+    _pre_is_we = False
 
     if ti_pre is not None and to_pre is not None and not is_absence_pre:
         confirmed_pre = st.session_state.get(f"split_confirm_{uid}")
+
         if confirmed_pre is None:
-            # Vérifier si un split est nécessaire
-            if d.weekday() in (5, 6):
-                is_sunday_pre  = d.weekday() == 6
+            wd_pre = d.weekday()
+
+            # ── Samedi / Dimanche ──────────────────────────────────
+            if wd_pre in (5, 6):
+                is_sunday_pre  = wd_pre == 6
                 full_hrs_pre   = compute_hours(ti_pre, to_pre, 0.0)
                 outside_cat    = "Double Time" if is_sunday_pre else "Overtime"
                 banque_cat     = "DT en banque" if is_sunday_pre else "OT en banque"
                 label_paye_pre = "DT payé" if is_sunday_pre else "OT payé"
-                full_segs_pre  = [{"time_in": ti_pre, "time_out": to_pre,
-                                    "category": outside_cat, "hours": round(full_hrs_pre, 4)}]
                 needs_split_confirmation = True
-                _pre_segments  = full_segs_pre
-                _pre_is_we     = True
-                _pre_sunday    = is_sunday_pre
+                _pre_segments   = [{"time_in": ti_pre, "time_out": to_pre,
+                                     "category": outside_cat, "hours": round(full_hrs_pre, 4)}]
+                _pre_is_we      = True
+                _pre_sunday     = is_sunday_pre
                 _pre_banque_cat = banque_cat
                 _pre_label_paye = label_paye_pre
                 _pre_full_hrs   = full_hrs_pre
                 _pre_outside_cat = outside_cat
-            elif d.weekday() < 5:
+
+            # ── Lundi à Vendredi ────────────────────────────────────
+            else:
                 segs_pre = _compute_zone_split(d, ti_pre, to_pre)
-                cats_pre = {s["category"] for s in segs_pre}
-                has_mixed_pre = len(cats_pre) > 1
-                ot_pre = sum(s["hours"] for s in segs_pre if s["category"] == "Overtime")
-                dt_pre = sum(s["hours"] for s in segs_pre if s["category"] == "Double Time")
-                outside_pre = round(ot_pre + dt_pre, 2)
-                # Cap atteint avant CETTE ligne (déjà à 8h) OU dépassé PENDANT cette ligne
-                cap_already_full   = apply_daily_cap and rt_already >= 8.0 and not has_mixed_pre
-                cap_crossed_during = apply_daily_cap and any(
-                    s["category"] == "Overtime" and 8 <= s["time_in"] < 17 for s in segs_pre
+
+                # Heures OT/DT avant 8h (matin) — toujours demander confirmation
+                hrs_before_8h = sum(
+                    s["hours"] for s in segs_pre
+                    if s["category"] in ("Overtime", "Double Time") and s["time_in"] < 8.0
                 )
-                daily_cap_full_pre = cap_already_full or cap_crossed_during
-                # Déclencher la question seulement si des heures sont AVANT 8h (matin)
-                # Les heures après 17h (soir) sont assumées OT sans question
-                morning_ot = sum(s["hours"] for s in segs_pre
-                                 if s["category"] in ("Overtime", "Double Time")
-                                 and s["time_out"] <= 8.0)
-                morning_dt = sum(s["hours"] for s in segs_pre
-                                 if s["category"] == "Double Time"
-                                 and s["time_out"] <= 6.0)
-                has_morning_outside = (morning_ot + morning_dt) > 0
-                if has_morning_outside or daily_cap_full_pre:
+
+                # Heures OT créées par dépassement du cap 8h RT (peuvent survenir
+                # n'importe quand entre 8h et 17h si le cumul RT du jour dépasse 8h)
+                hrs_cap_overflow = sum(
+                    s["hours"] for s in segs_pre
+                    if s["category"] == "Overtime" and 8.0 <= s["time_in"] < 17.0
+                )
+
+                if hrs_before_8h > 0 or hrs_cap_overflow > 0:
                     needs_split_confirmation = True
-                    _pre_segments   = segs_pre
-                    _pre_is_we      = False
-                    _pre_outside_hrs = outside_pre
-                    _pre_daily_cap   = daily_cap_full_pre
+                    _pre_segments    = segs_pre
+                    _pre_is_we       = False
+                    _pre_outside_hrs = round(hrs_before_8h + hrs_cap_overflow, 2)
+                    # "daily_cap" = uniquement cap overflow, pas heures matinales
+                    _pre_daily_cap   = (hrs_cap_overflow > 0 and hrs_before_8h == 0)
+
 
     # ── Afficher la bannière de confirmation EN PREMIER si nécessaire ──────
     if needs_split_confirmation:
