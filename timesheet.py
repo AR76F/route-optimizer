@@ -744,12 +744,27 @@ def show_timesheet():
         n_lines    = len(day_rows)
         line_label = f"  ({n_lines} lignes)" if n_lines > 1 else ""
 
+        # ── Détection : RT cumulé > 8h en semaine (cap manqué, à corriger dans BMS) ──
+        rt_total_jour = hrs_by_cat.get("Regular Time", 0.0)
+        overflow_warning = (wd < 5 and rt_total_jour > 8.0)
+
         exp_key = f"exp_{state_key}_{d.isoformat()}"
         if exp_key not in st.session_state:
             st.session_state[exp_key] = (day_total == 0 and wd < 5)
 
         with st.expander(f"{day_str}   {title_hrs}{line_label}",
                          expanded=st.session_state[exp_key]):
+
+            if overflow_warning:
+                excedent = rt_total_jour - 8.0
+                st.markdown(f"""
+                <div style="background:#3a1f1f;border:1px solid #c0392b;border-radius:8px;
+                            padding:0.7rem 1rem;margin-bottom:0.8rem;color:#ffb3a7;font-size:0.85rem;">
+                    ⚠️ <b>{rt_total_jour:.2f}h RT cumulées</b> ce jour — dépasse le cap de 8h par
+                    <b>{excedent:.2f}h</b>. Les {excedent:.2f}h excédentaires devraient être en
+                    <b>OT</b>. Correction manuelle requise dans BMS.
+                </div>
+                """, unsafe_allow_html=True)
 
             rt_accumulated = 0.0
             last_time_out  = None
@@ -785,10 +800,18 @@ def show_timesheet():
 
                 ti_ = row.get("time_in")
                 to__ = row.get("time_out")
-                absence = row.get("category", "") in ("Vacances", "Maladie", "Férié", "Heures en banque")
+                row_cat = row.get("category", "")
+                absence = row_cat in ("Vacances", "Maladie", "Férié", "Heures en banque")
                 if ti_ is not None and to__ is not None and not absence:
                     raw_hrs = max(0.0, float(to__) - float(ti_))
-                    rt_accumulated = min(8.0, rt_accumulated + raw_hrs)
+                    # Pour les lignes déjà soumises, seules les heures catégorisées RT
+                    # comptent vers le cap quotidien — pas les heures déjà en OT/DT
+                    if row.get("deja_bms", False):
+                        if row_cat == "Regular Time" or not row_cat:
+                            rt_accumulated = min(8.0, rt_accumulated + raw_hrs)
+                        # Si déjà OT/DT, ne pas l'ajouter au cumul RT
+                    else:
+                        rt_accumulated = min(8.0, rt_accumulated + raw_hrs)
                 if row.get("time_out") is not None:
                     last_time_out = row["time_out"]
 
@@ -1211,7 +1234,12 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                 ot_pre = sum(s["hours"] for s in segs_pre if s["category"] == "Overtime")
                 dt_pre = sum(s["hours"] for s in segs_pre if s["category"] == "Double Time")
                 outside_pre = round(ot_pre + dt_pre, 2)
-                daily_cap_full_pre = apply_daily_cap and rt_already >= 8.0 and not has_mixed_pre
+                # Cap atteint avant CETTE ligne (déjà à 8h) OU dépassé PENDANT cette ligne
+                cap_already_full   = apply_daily_cap and rt_already >= 8.0 and not has_mixed_pre
+                cap_crossed_during = apply_daily_cap and any(
+                    s["category"] == "Overtime" and 8 <= s["time_in"] < 17 for s in segs_pre
+                )
+                daily_cap_full_pre = cap_already_full or cap_crossed_during
                 # Déclencher la question seulement si des heures sont AVANT 8h (matin)
                 # Les heures après 17h (soir) sont assumées OT sans question
                 morning_ot = sum(s["hours"] for s in segs_pre
@@ -1226,8 +1254,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                     _pre_segments   = segs_pre
                     _pre_is_we      = False
                     _pre_outside_hrs = outside_pre
-                    _pre_daily_cap   = daily_cap_full_pre or (apply_daily_cap and any(
-                        s["category"] == "Overtime" and 8 <= s["time_in"] < 17 for s in segs_pre))
+                    _pre_daily_cap   = daily_cap_full_pre
 
     # ── Afficher la bannière de confirmation EN PREMIER si nécessaire ──────
     if needs_split_confirmation:
