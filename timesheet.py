@@ -566,15 +566,30 @@ def show_timesheet():
         st.markdown("### 👤 Employé")
         tech_labels = [f"{nom}  ({num})" for nom, num in TECHNICIANS]
         url_emp = st.query_params.get("emp", "").strip().upper()
+        is_tech = bool(url_emp)
         default_idx = 0
         if url_emp:
             for i, (nom, num) in enumerate(TECHNICIANS):
                 if num.upper() == url_emp:
                     default_idx = i
                     break
-        sel_tech = st.selectbox("Nom", tech_labels, index=default_idx, key="sel_tech")
-        emp_nom, emp_num = sel_tech.rsplit("  (", 1)
-        emp_num = emp_num.rstrip(")")
+
+        if is_tech:
+            # Technicien — nom affiché en lecture seule, pas de dropdown
+            _nom_tech = TECHNICIANS[default_idx][0] if default_idx < len(TECHNICIANS) else url_emp
+            st.markdown(
+                f'<div style="background:#1e3a5f;border:1px solid #2d5a8e;border-radius:8px;'
+                f'padding:0.5rem 0.9rem;color:#e8f4fd;font-size:0.9rem;font-weight:500;">'
+                f'👤 {_nom_tech} <span style="color:#7eb8d4;font-size:0.78rem;">({url_emp})</span></div>',
+                unsafe_allow_html=True
+            )
+            emp_nom = _nom_tech
+            emp_num = url_emp
+        else:
+            # Superviseur — dropdown complet
+            sel_tech = st.selectbox("Nom", tech_labels, index=default_idx, key="sel_tech")
+            emp_nom, emp_num = sel_tech.rsplit("  (", 1)
+            emp_num = emp_num.rstrip(")")
 
         st.markdown("---")
         st.markdown("### 📅 Période")
@@ -599,17 +614,17 @@ def show_timesheet():
             f'<div class="period-badge">📅 {fmt_period(p_start)} → {fmt_period(p_end)}</div>',
             unsafe_allow_html=True
         )
-        st.markdown("---")
-        st.markdown("### ℹ️ Règles heures")
-        st.markdown("""
-        <div class="wo-rule-box">
-        🟢 <b>RT</b> Lun–Ven 08:00–17:00<br>
-        🟡 <b>OT</b> Lun–Ven 06–08 et 17–23<br>
-        🔴 <b>DT</b> Lun–Ven 23–06<br>
-        🟠 <b>OT</b> Samedi (toute la journée)<br>
-        🔴 <b>DT</b> Dimanche (toute la journée)
-        </div>
-        """, unsafe_allow_html=True)
+
+    # ── Règles heures — affichées sous le header principal ──
+    st.markdown("""
+    <div class="wo-rule-box" style="display:flex;gap:1.5rem;flex-wrap:wrap;">
+    🟢 <b>RT</b> Lun–Ven 08:00–17:00 &nbsp;·&nbsp;
+    🟡 <b>OT</b> Lun–Ven 06–08 et 17–23 &nbsp;·&nbsp;
+    🔴 <b>DT</b> Lun–Ven 23–06 &nbsp;·&nbsp;
+    🟠 <b>OT</b> Samedi &nbsp;·&nbsp;
+    🔴 <b>DT</b> Dimanche
+    </div>
+    """, unsafe_allow_html=True)
 
     state_key = f"rows_{emp_num}_{p_end.isoformat()}"
     if state_key not in st.session_state:
