@@ -1197,7 +1197,16 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                 dt_pre = sum(s["hours"] for s in segs_pre if s["category"] == "Double Time")
                 outside_pre = round(ot_pre + dt_pre, 2)
                 daily_cap_full_pre = apply_daily_cap and rt_already >= 8.0 and not has_mixed_pre
-                if (has_mixed_pre and outside_pre > 0) or daily_cap_full_pre:
+                # Déclencher la question seulement si des heures sont AVANT 8h (matin)
+                # Les heures après 17h (soir) sont assumées OT sans question
+                morning_ot = sum(s["hours"] for s in segs_pre
+                                 if s["category"] in ("Overtime", "Double Time")
+                                 and s["time_out"] <= 8.0)
+                morning_dt = sum(s["hours"] for s in segs_pre
+                                 if s["category"] == "Double Time"
+                                 and s["time_out"] <= 6.0)
+                has_morning_outside = (morning_ot + morning_dt) > 0
+                if has_morning_outside or daily_cap_full_pre:
                     needs_split_confirmation = True
                     _pre_segments   = segs_pre
                     _pre_is_we      = False
