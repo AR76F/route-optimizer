@@ -563,6 +563,7 @@ def show_timesheet():
     wo_by_label = {f"{desc}  ({no})": no for desc, no in wo_list}
 
     with st.sidebar:
+        st.session_state["_debug_cap"] = st.checkbox("🐛 Debug cap", value=False, key="debug_cap_toggle")
         st.markdown("### 👤 Employé")
         tech_labels = [f"{nom}  ({num})" for nom, num in TECHNICIANS]
         url_emp = st.query_params.get("emp", "").strip().upper()
@@ -1196,6 +1197,12 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
     to_pre  = _quick_parse(to_pre_raw) if to_pre_raw else row.get("time_out")
     absence_pre = st.session_state.get(f"cat_{uid}", row.get("category", ""))
     is_absence_pre = absence_pre in ("Vacances", "Maladie", "Férié", "Heures en banque")
+
+    # DEBUG temporaire
+    if st.session_state.get("_debug_cap", False):
+        st.caption(f"🐛 DEBUG uid={uid} ti_pre={ti_pre} to_pre={to_pre} rt_already={rt_already} "
+                   f"confirmed={st.session_state.get(f'split_confirm_{uid}')} "
+                   f"weekday={d.weekday()}")
 
     # Persister ti/to dans le row dict AVANT tout st.stop() potentiel
     # pour que les valeurs survivent au rerun
