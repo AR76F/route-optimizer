@@ -18,6 +18,8 @@ ONEDRIVE_FOLDER = os.environ.get(
 WO_JSON_URL = os.environ.get("WO_JSON_URL", "")
 TZ = ZoneInfo("America/Toronto")
 
+APP_VERSION = "2026-06-17-split-rows-v1"
+
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
     ("Alexandre Pelletier Guay",  "ME964"),
@@ -549,11 +551,12 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
 def show_timesheet():
     st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-    st.markdown("""
+    st.markdown(f"""
     <div class="ts-header">
         <div>
             <h1>⏱ Feuille de temps BMS</h1>
             <div class="subtitle">Succursale Z8 · Cummins Eastern Canada</div>
+            <div class="subtitle" style="color:#ffb347;margin-top:2px;">🔧 Build: {APP_VERSION}</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
