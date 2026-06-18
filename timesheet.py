@@ -18,7 +18,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 WO_JSON_URL = os.environ.get("WO_JSON_URL", "")
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-06-17-order-ref-validation-v4"
+APP_VERSION = "2026-06-17-highlight-missing-ref-v5"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -934,11 +934,15 @@ def show_timesheet():
 
     col_sub, _ = st.columns([2, 1])
     with col_sub:
+        if st.session_state.get("_missing_ref_msg"):
+            st.error(st.session_state["_missing_ref_msg"])
+
         if st.button("💾 Sauvegarder", type="primary", key="submit_btn"):
             new_rows_only = [r for r in rows if not r.get("_synced", False)]
 
             # ── Validation : Order Ref (ou WO Interne) requis si pas une absence ──
             missing_ref_dates = []
+            missing_ref_uids  = set()
             for r in new_rows_only:
                 if r.get("time_in") is None or r.get("time_out") is None:
                     continue
@@ -947,15 +951,20 @@ def show_timesheet():
                     continue
                 if not (r.get("order_ref", "") or "").strip():
                     missing_ref_dates.append(fmt_date_fr(r.get("date")))
+                    missing_ref_uids.add(r.get("uid", ""))
 
             if missing_ref_dates:
                 jours = "\n".join(f"- {d}" for d in sorted(set(missing_ref_dates)))
-                st.error(
+                st.session_state["_missing_ref_uids"] = missing_ref_uids
+                st.session_state["_missing_ref_msg"] = (
                     "⚠️ Le champ **Order Ref** (ou la sélection **WO Interne**) est manquant "
                     f"pour les lignes suivantes :\n\n{jours}\n\n"
-                    "Complète ces lignes avant de sauvegarder."
+                    "Les cases concernées sont encadrées en rouge ci-dessus."
                 )
+                st.rerun()
             else:
+                st.session_state["_missing_ref_uids"] = set()
+                st.session_state["_missing_ref_msg"] = None
                 json_rows = _build_json_rows(new_rows_only)
                 valid = [r for r in json_rows if r.get("heures", 0) > 0]
                 if not valid:
@@ -1514,19 +1523,29 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
 
     with c5:
         if not is_absence:
-            if job_type == "WO Interne":
-                try:
-                    wo_idx = wo_labels.index(wo_interne_sel) + 1
-                except ValueError:
-                    wo_idx = 0
-                wo_sel = st.selectbox("WO Interne", ["— choisir —"] + wo_labels,
-                                      index=wo_idx, key=f"wo_{uid}")
-                order_ref      = wo_by_label.get(wo_sel, "") if wo_sel != "— choisir —" else ""
-                wo_interne_sel = wo_sel if wo_sel != "— choisir —" else ""
-            else:
-                order_ref      = st.text_input("Order Ref", value=order_ref,
-                                               key=f"or_{uid}", placeholder="Ex: 345924")
-                wo_interne_sel = ""
+            missing_ref_uids = st.session_state.get("_missing_ref_uids", set())
+            needs_highlight  = (uid in missing_ref_uids) and not (order_ref or "").strip()
+            field_box = st.container(border=needs_highlight)
+            with field_box:
+                if needs_highlight:
+                    st.markdown(
+                        '<div style="color:#e74c3c;font-size:0.72rem;font-weight:700;'
+                        'margin-bottom:2px;">⚠️ Requis</div>',
+                        unsafe_allow_html=True
+                    )
+                if job_type == "WO Interne":
+                    try:
+                        wo_idx = wo_labels.index(wo_interne_sel) + 1
+                    except ValueError:
+                        wo_idx = 0
+                    wo_sel = st.selectbox("WO Interne", ["— choisir —"] + wo_labels,
+                                          index=wo_idx, key=f"wo_{uid}")
+                    order_ref      = wo_by_label.get(wo_sel, "") if wo_sel != "— choisir —" else ""
+                    wo_interne_sel = wo_sel if wo_sel != "— choisir —" else ""
+                else:
+                    order_ref      = st.text_input("Order Ref", value=order_ref,
+                                                   key=f"or_{uid}", placeholder="Ex: 345924")
+                    wo_interne_sel = ""
         else:
             order_ref = ""
             wo_interne_sel = ""
