@@ -1254,7 +1254,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                     _pre_is_we       = False
                     _pre_outside_hrs = round(hrs_before_8h + hrs_cap_overflow, 2)
                     # "daily_cap" = uniquement cap overflow, pas heures matinales
-                    _pre_daily_cap   = (hrs_cap_overflow > 0 and hrs_before_8h == 0)
+                    _pre_daily_cap   = (hrs_cap_overflow > 0)
 
 
     # ── Afficher la bannière de confirmation EN PREMIER si nécessaire ──────
