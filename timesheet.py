@@ -18,7 +18,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 WO_JSON_URL = os.environ.get("WO_JSON_URL", "")
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-06-17-wo-interne-exempt-v7"
+APP_VERSION = "2026-06-17-legend-once-per-day-v8"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -781,6 +781,10 @@ def show_timesheet():
             rt_accumulated = 0.0
             last_time_out  = None
 
+            if any(r.get("time_in") is not None and r.get("time_out") is not None
+                   for _, r in day_rows):
+                _render_timeline_legend()
+
             for list_pos, (idx, row) in enumerate(day_rows):
 
                 if list_pos > 0:
@@ -1052,14 +1056,19 @@ def _render_time_timeline(d: date, time_in: float, time_out: float, meal_hrs: fl
                 background:#1e2533;display:block;margin:4px 0 8px 0;">
       {bars_svg}
     </svg>
-    <div style="display:flex;gap:12px;font-size:0.7rem;color:#888;margin-bottom:6px;">
+    """
+    st.markdown(svg, unsafe_allow_html=True)
+
+
+def _render_timeline_legend():
+    st.markdown("""
+    <div style="display:flex;gap:12px;font-size:0.7rem;color:#888;margin-bottom:10px;flex-wrap:wrap;">
       <span><span style="display:inline-block;width:10px;height:10px;background:#27ae60;opacity:0.7;border-radius:2px;"></span> RT 08–17h</span>
       <span><span style="display:inline-block;width:10px;height:10px;background:#e07b00;opacity:0.7;border-radius:2px;"></span> OT 06–08h / 17–23h</span>
       <span><span style="display:inline-block;width:10px;height:10px;background:#d63031;opacity:0.7;border-radius:2px;"></span> DT nuit / dim.</span>
       <span><span style="display:inline-block;width:10px;height:10px;background:#2d6be4;opacity:0.9;border-radius:2px;"></span> Shift</span>
     </div>
-    """
-    st.markdown(svg, unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 
 def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date,
