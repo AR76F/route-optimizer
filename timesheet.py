@@ -1235,26 +1235,20 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
             else:
                 segs_pre = _compute_zone_split(d, ti_pre, to_pre)
 
-                # Heures OT/DT avant 8h (matin) — toujours demander confirmation
-                hrs_before_8h = sum(
+                # Toute heure classée OT/DT par le split (départ matinal, fin
+                # tardive, ou dépassement du cap de 8h RT — peu importe la cause)
+                # déclenche la même confirmation, sans option "Garder RT".
+                hrs_excess = sum(
                     s["hours"] for s in segs_pre
-                    if s["category"] in ("Overtime", "Double Time") and s["time_in"] < 8.0
+                    if s["category"] in ("Overtime", "Double Time")
                 )
 
-                # Heures OT créées par dépassement du cap 8h RT (peuvent survenir
-                # n'importe quand entre 8h et 17h si le cumul RT du jour dépasse 8h)
-                hrs_cap_overflow = sum(
-                    s["hours"] for s in segs_pre
-                    if s["category"] == "Overtime" and 8.0 <= s["time_in"] < 17.0
-                )
-
-                if hrs_before_8h > 0 or hrs_cap_overflow > 0:
+                if hrs_excess > 0:
                     needs_split_confirmation = True
                     _pre_segments    = segs_pre
                     _pre_is_we       = False
-                    _pre_outside_hrs = round(hrs_before_8h + hrs_cap_overflow, 2)
-                    # "daily_cap" = uniquement cap overflow, pas heures matinales
-                    _pre_daily_cap   = (hrs_cap_overflow > 0)
+                    _pre_outside_hrs = round(hrs_excess, 2)
+                    _pre_daily_cap   = True
 
 
     # ── Afficher la bannière de confirmation EN PREMIER si nécessaire ──────
