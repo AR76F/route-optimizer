@@ -18,7 +18,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 WO_JSON_URL = os.environ.get("WO_JSON_URL", "")
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-06-17-traite-oui-fix-v3"
+APP_VERSION = "2026-06-17-order-ref-validation-v4"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -567,7 +567,6 @@ def show_timesheet():
     wo_by_label = {f"{desc}  ({no})": no for desc, no in wo_list}
 
     with st.sidebar:
-        st.session_state["_debug_cap"] = st.checkbox("🐛 Debug cap", value=False, key="debug_cap_toggle")
         st.markdown("### 👤 Employé")
         tech_labels = [f"{nom}  ({num})" for nom, num in TECHNICIANS]
         url_emp = st.query_params.get("emp", "").strip().upper()
@@ -937,29 +936,49 @@ def show_timesheet():
     with col_sub:
         if st.button("💾 Sauvegarder", type="primary", key="submit_btn"):
             new_rows_only = [r for r in rows if not r.get("_synced", False)]
-            json_rows = _build_json_rows(new_rows_only)
-            valid = [r for r in json_rows if r.get("heures", 0) > 0]
-            if not valid:
-                st.warning("⚠️ Aucune nouvelle ligne à sauvegarder.")
+
+            # ── Validation : Order Ref (ou WO Interne) requis si pas une absence ──
+            missing_ref_dates = []
+            for r in new_rows_only:
+                if r.get("time_in") is None or r.get("time_out") is None:
+                    continue
+                cat = r.get("category", "") or ""
+                if cat in ("Vacances", "Maladie", "Férié", "Heures en banque"):
+                    continue
+                if not (r.get("order_ref", "") or "").strip():
+                    missing_ref_dates.append(fmt_date_fr(r.get("date")))
+
+            if missing_ref_dates:
+                jours = "\n".join(f"- {d}" for d in sorted(set(missing_ref_dates)))
+                st.error(
+                    "⚠️ Le champ **Order Ref** (ou la sélection **WO Interne**) est manquant "
+                    f"pour les lignes suivantes :\n\n{jours}\n\n"
+                    "Complète ces lignes avant de sauvegarder."
+                )
             else:
-                ok, msg = submit_timesheet(emp_num, emp_nom, p_end, valid)
-                if ok:
-                    st.success(f"✅ Sauvegardé ! ({len(valid)} ligne(s))")
-                    # Mémoriser quels expanders étaient ouverts avant le reload
-                    open_exps = {k: v for k, v in st.session_state.items()
-                                 if k.startswith(f"exp_{state_key}_") and v is True}
-                    # Rafraîchir depuis Google Sheets pour passer les lignes en 🔒
-                    loaded = load_week_from_gsheet(emp_num, p_start, p_end)
-                    if loaded:
-                        st.session_state[state_key] = loaded
-                        st.session_state[f"loaded_{state_key}"] = True
-                    # Restaurer l'état des expanders
-                    for k, v in open_exps.items():
-                        st.session_state[k] = True
-                    time.sleep(0.5)
-                    st.rerun()
+                json_rows = _build_json_rows(new_rows_only)
+                valid = [r for r in json_rows if r.get("heures", 0) > 0]
+                if not valid:
+                    st.warning("⚠️ Aucune nouvelle ligne à sauvegarder.")
                 else:
-                    st.error(f"❌ Erreur : {msg}")
+                    ok, msg = submit_timesheet(emp_num, emp_nom, p_end, valid)
+                    if ok:
+                        st.success(f"✅ Sauvegardé ! ({len(valid)} ligne(s))")
+                        # Mémoriser quels expanders étaient ouverts avant le reload
+                        open_exps = {k: v for k, v in st.session_state.items()
+                                     if k.startswith(f"exp_{state_key}_") and v is True}
+                        # Rafraîchir depuis Google Sheets pour passer les lignes en 🔒
+                        loaded = load_week_from_gsheet(emp_num, p_start, p_end)
+                        if loaded:
+                            st.session_state[state_key] = loaded
+                            st.session_state[f"loaded_{state_key}"] = True
+                        # Restaurer l'état des expanders
+                        for k, v in open_exps.items():
+                            st.session_state[k] = True
+                        time.sleep(0.5)
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Erreur : {msg}")
         st.caption("💡 Tu peux sauvegarder après chaque ligne et revenir plus tard — tes heures seront conservées.")
 
 
