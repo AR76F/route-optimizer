@@ -18,7 +18,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 WO_JSON_URL = os.environ.get("WO_JSON_URL", "")
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-06-17-split-rows-v1"
+APP_VERSION = "2026-06-17-cap-vs-outside-hours-v2"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -1087,7 +1087,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         return
 
     # ── Helpers ───────────────────────────────────────────────────
-    def _fmt_h(h): return f"{h:.2f}h".rstrip("0").rstrip(".")
+    def _fmt_h(h): return f"{h:.2f}".rstrip("0").rstrip(".")
 
     def _parse_time(s) -> tuple[float | None, str | None]:
         import re
@@ -1177,7 +1177,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                    f"cat_{old_uid}"):
             st.session_state.pop(_k, None)
 
-    def _compute_zone_split(d: date, ti: float, to_: float) -> list[dict]:
+    def _compute_zone_split(d: date, ti: float, to_: float) -> tuple[list[dict], bool]:
         wd = d.weekday()
         if wd == 6:
             boundaries = [(0, 24, "Double Time")]
@@ -1202,6 +1202,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                     "category": zcat,
                     "hours":    round(overlap_end - overlap_start, 4),
                 })
+        cap_triggered = False
         if apply_daily_cap and wd < 5:
             DAILY_RT_CAP = 8.0
             rt_consumed  = rt_already
@@ -1213,6 +1214,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                 remaining_rt = max(0.0, DAILY_RT_CAP - rt_consumed)
                 if remaining_rt <= 0:
                     capped.append({**seg, "category": "Overtime"})
+                    cap_triggered = True
                 elif seg["hours"] > remaining_rt:
                     split_point = seg["time_in"] + remaining_rt
                     capped.append({"time_in": seg["time_in"], "time_out": split_point,
@@ -1220,11 +1222,12 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                     capped.append({"time_in": split_point, "time_out": seg["time_out"],
                                    "category": "Overtime", "hours": round(seg["hours"] - remaining_rt, 4)})
                     rt_consumed += remaining_rt
+                    cap_triggered = True
                 else:
                     capped.append(seg)
                     rt_consumed += seg["hours"]
             segments = capped
-        return segments
+        return segments, cap_triggered
 
     # ══════════════════════════════════════════════════════════════
     #  DÉTECTION SPLIT ANTICIPÉE — AVANT les champs de saisie
@@ -1288,12 +1291,14 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
 
             # ── Lundi à Vendredi ────────────────────────────────────
             else:
-                segs_pre = _compute_zone_split(d, ti_pre, to_pre)
+                segs_pre, cap_triggered_pre = _compute_zone_split(d, ti_pre, to_pre)
                 segs_pre = _merge_adjacent_segments(segs_pre)
 
                 # Toute heure classée OT/DT par le split (départ matinal, fin
-                # tardive, ou dépassement du cap de 8h RT — peu importe la cause)
-                # déclenche la même confirmation, sans option "Garder RT".
+                # tardive, ou dépassement du cap de 8h RT) déclenche la
+                # confirmation. Le choix "Garder RT" n'est permis que si le
+                # cap de 8h RT n'a pas été réellement dépassé — sinon ce
+                # serait reclasser des heures excédentaires en RT.
                 hrs_excess = sum(
                     s["hours"] for s in segs_pre
                     if s["category"] in ("Overtime", "Double Time")
@@ -1304,7 +1309,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                     _pre_segments    = segs_pre
                     _pre_is_we       = False
                     _pre_outside_hrs = round(hrs_excess, 2)
-                    _pre_daily_cap   = True
+                    _pre_daily_cap   = cap_triggered_pre
 
 
     # ── Afficher la bannière de confirmation EN PREMIER si nécessaire ──────
@@ -1346,13 +1351,11 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                 col_a, col_b, col_c = st.columns([1, 1, 1])
                 with col_a:
                     if st.button("✅ OT payé", key=f"split_oui_{uid}", use_container_width=True):
-                        st.session_state[f"split_confirm_{uid}"] = "oui"
-                        _persist_split(_pre_segments)
+                        _split_into_rows(_pre_segments, banque=False)
                         st.rerun()
                 with col_b:
                     if st.button("🏦 OT en banque", key=f"split_banque_{uid}", use_container_width=True):
-                        st.session_state[f"split_confirm_{uid}"] = "banque"
-                        _persist_split(_apply_banque(_pre_segments, "Overtime", "OT en banque"))
+                        _split_into_rows(_pre_segments, banque=True)
                         st.rerun()
                 with col_c:
                     if st.button("❌ Garder RT seulement", key=f"split_non_{uid}", use_container_width=True):
