@@ -18,7 +18,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 WO_JSON_URL = os.environ.get("WO_JSON_URL", "")
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-06-17-highlight-missing-ref-v5"
+APP_VERSION = "2026-06-17-wo-interne-exempt-v7"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -157,6 +157,14 @@ def decimal_to_hhmm(h: float) -> str:
     hh = int(h)
     mm = int(round((h - hh) * 60))
     return f"{hh:02d}:{mm:02d}"
+
+def is_valid_order_ref(ref, is_wo_interne: bool = False) -> bool:
+    s = str(ref or "").strip()
+    if not s:
+        return False
+    if is_wo_interne:
+        return True
+    return s.isdigit() and len(s) == 6
 
 @st.cache_data(ttl=3600)
 def load_wo_interne() -> list[tuple[str, str]]:
@@ -940,7 +948,7 @@ def show_timesheet():
         if st.button("💾 Sauvegarder", type="primary", key="submit_btn"):
             new_rows_only = [r for r in rows if not r.get("_synced", False)]
 
-            # ── Validation : Order Ref (ou WO Interne) requis si pas une absence ──
+            # ── Validation : Order Ref (ou WO Interne) requis, 6 chiffres, si pas une absence ──
             missing_ref_dates = []
             missing_ref_uids  = set()
             for r in new_rows_only:
@@ -949,7 +957,7 @@ def show_timesheet():
                 cat = r.get("category", "") or ""
                 if cat in ("Vacances", "Maladie", "Férié", "Heures en banque"):
                     continue
-                if not (r.get("order_ref", "") or "").strip():
+                if not is_valid_order_ref(r.get("order_ref", ""), r.get("job_type", "") == "WO Interne"):
                     missing_ref_dates.append(fmt_date_fr(r.get("date")))
                     missing_ref_uids.add(r.get("uid", ""))
 
@@ -957,8 +965,9 @@ def show_timesheet():
                 jours = "\n".join(f"- {d}" for d in sorted(set(missing_ref_dates)))
                 st.session_state["_missing_ref_uids"] = missing_ref_uids
                 st.session_state["_missing_ref_msg"] = (
-                    "⚠️ Le champ **Order Ref** (ou la sélection **WO Interne**) est manquant "
-                    f"pour les lignes suivantes :\n\n{jours}\n\n"
+                    "⚠️ Le champ **Order Ref** doit contenir un numéro de **6 chiffres** "
+                    "(ou une **sélection WO Interne** valide) pour les lignes suivantes :"
+                    f"\n\n{jours}\n\n"
                     "Les cases concernées sont encadrées en rouge ci-dessus."
                 )
                 st.rerun()
@@ -1524,13 +1533,15 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
     with c5:
         if not is_absence:
             missing_ref_uids = st.session_state.get("_missing_ref_uids", set())
-            needs_highlight  = (uid in missing_ref_uids) and not (order_ref or "").strip()
+            is_wo            = (job_type == "WO Interne")
+            needs_highlight  = (uid in missing_ref_uids) and not is_valid_order_ref(order_ref, is_wo)
             field_box = st.container(border=needs_highlight)
             with field_box:
                 if needs_highlight:
+                    label_txt = "⚠️ Sélection requise" if is_wo else "⚠️ 6 chiffres requis"
                     st.markdown(
-                        '<div style="color:#e74c3c;font-size:0.72rem;font-weight:700;'
-                        'margin-bottom:2px;">⚠️ Requis</div>',
+                        f'<div style="color:#e74c3c;font-size:0.72rem;font-weight:700;'
+                        f'margin-bottom:2px;">{label_txt}</div>',
                         unsafe_allow_html=True
                     )
                 if job_type == "WO Interne":
