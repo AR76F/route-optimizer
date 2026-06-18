@@ -796,7 +796,7 @@ def show_timesheet():
                         st.session_state["_reopen_exp"] = exp_key
                     st.markdown('</div>', unsafe_allow_html=True)
 
-                _render_row(idx, row, wo_labels, wo_by_label, d, emp_num,
+                _render_row(idx, row, wo_labels, wo_by_label, d, emp_num, rows,
                             rt_already=rt_accumulated)
 
                 ti_ = row.get("time_in")
@@ -1022,7 +1022,7 @@ def _render_time_timeline(d: date, time_in: float, time_out: float, meal_hrs: fl
 
 
 def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date,
-                emp_num: str = "", rt_already: float = 0.0):
+                emp_num: str = "", rows: list = None, rt_already: float = 0.0):
 
     DAILY_OT_EXEMPT = {"FW688"}
     apply_daily_cap = emp_num not in DAILY_OT_EXEMPT
@@ -1121,6 +1121,58 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         row["_client_requis"]  = requis
         st.session_state[f"split_segments_{uid}"]      = segs
         st.session_state[f"split_client_requis_{uid}"] = requis
+
+    def _merge_adjacent_segments(segs: list[dict]) -> list[dict]:
+        """Fusionne les segments contigus de même catégorie (ex: OT créé par
+        le cap 8h suivi d'OT naturel en soirée → une seule ligne OT)."""
+        if not segs:
+            return segs
+        segs_sorted = sorted(segs, key=lambda s: s["time_in"])
+        merged = [dict(segs_sorted[0])]
+        for s in segs_sorted[1:]:
+            last = merged[-1]
+            if s["category"] == last["category"] and abs(s["time_in"] - last["time_out"]) < 1e-6:
+                last["time_out"] = s["time_out"]
+                last["hours"]    = round(last["hours"] + s["hours"], 4)
+            else:
+                merged.append(dict(s))
+        return merged
+
+    def _split_into_rows(segments: list[dict], banque: bool):
+        """Remplace la ligne courante par une ligne distincte par segment
+        (ex: 1 ligne RT 8h + 1 ligne OT 2h), chacune verrouillée."""
+        import uuid
+        new_rows = []
+        for seg in segments:
+            cat = seg["category"]
+            if banque and cat == "Overtime":
+                cat = "OT en banque"
+            elif banque and cat == "Double Time":
+                cat = "DT en banque"
+            new_uid = str(uuid.uuid4())[:8]
+            new_rows.append({
+                "date":        row["date"],
+                "uid":         new_uid,
+                "time_in":     seg["time_in"],
+                "time_out":    seg["time_out"],
+                "category":    cat,
+                "job_type":    row.get("job_type", "Job Client"),
+                "trans_type":  row.get("trans_type", "WO"),
+                "order_ref":   row.get("order_ref", ""),
+                "wo_interne":  row.get("wo_interne", ""),
+                "commentaire": row.get("commentaire", ""),
+                "deja_bms":    False,
+            })
+            st.session_state[f"split_confirm_{new_uid}"] = "banque" if banque else "paye"
+        if rows is not None:
+            rows.pop(idx)
+            for offset, nr in enumerate(new_rows):
+                rows.insert(idx + offset, nr)
+        old_uid = row.get("uid", "")
+        for _k in (f"split_confirm_{old_uid}", f"split_segments_{old_uid}",
+                   f"split_client_requis_{old_uid}", f"ti_{old_uid}", f"to_{old_uid}",
+                   f"cat_{old_uid}"):
+            st.session_state.pop(_k, None)
 
     def _compute_zone_split(d: date, ti: float, to_: float) -> list[dict]:
         wd = d.weekday()
@@ -1234,6 +1286,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
             # ── Lundi à Vendredi ────────────────────────────────────
             else:
                 segs_pre = _compute_zone_split(d, ti_pre, to_pre)
+                segs_pre = _merge_adjacent_segments(segs_pre)
 
                 # Toute heure classée OT/DT par le split (départ matinal, fin
                 # tardive, ou dépassement du cap de 8h RT — peu importe la cause)
@@ -1280,13 +1333,11 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                 col_a, col_b = st.columns([1, 1])
                 with col_a:
                     if st.button("💰 OT payé", key=f"split_oui_{uid}", use_container_width=True):
-                        st.session_state[f"split_confirm_{uid}"] = "paye"
-                        _persist_split(_pre_segments)
+                        _split_into_rows(_pre_segments, banque=False)
                         st.rerun()
                 with col_b:
                     if st.button("🏦 Mettre en banque (OBTI)", key=f"split_banque_{uid}", use_container_width=True):
-                        st.session_state[f"split_confirm_{uid}"] = "banque"
-                        _persist_split(_apply_banque(_pre_segments, "Overtime", "OT en banque"))
+                        _split_into_rows(_pre_segments, banque=True)
                         st.rerun()
             else:
                 col_a, col_b, col_c = st.columns([1, 1, 1])
