@@ -18,7 +18,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 WO_JSON_URL = os.environ.get("WO_JSON_URL", "")
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-06-17-cap-vs-outside-hours-v2"
+APP_VERSION = "2026-06-17-traite-oui-fix-v3"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -391,6 +391,7 @@ def load_week_from_gsheet(emp_num: str, p_start: date, p_end: date) -> list[dict
                 "wo_interne":  "",
                 "commentaire": str(rec.get("commentaire", "")).strip(),
                 "deja_bms":    True,
+                "_synced":     True,
                 "meal_hrs":    float(rec.get("meal_hrs", 0) or 0),
             })
         if not lignes_by_date:
@@ -782,7 +783,7 @@ def show_timesheet():
                     )
 
                 # ── Bouton supprimer — au-dessus de la ligne, bien visible sur mobile ──
-                if n_lines > 1 and not row.get("deja_bms", False):
+                if n_lines > 1 and not row.get("_synced", False):
                     # Calculer les heures de cette ligne pour l'afficher dans le bouton
                     _ti_del  = row.get("time_in")
                     _to_del  = row.get("time_out")
@@ -833,19 +834,19 @@ def show_timesheet():
             with col_reset_day:
                 if st.button("🗑️ Réinitialiser", key=f"reset_day_{d.isoformat()}",
                              help="Effacer les lignes non soumises de cette journée"):
-                    # Seulement retirer les lignes NON soumises (deja_bms=False)
-                    global_idxs_new = [gi for gi, r in day_rows if not r.get("deja_bms", False)]
+                    # Seulement retirer les lignes pas encore réellement dans Google Sheets
+                    global_idxs_new = [gi for gi, r in day_rows if not r.get("_synced", False)]
                     for gi in sorted(global_idxs_new, reverse=True):
                         rows.pop(gi)
                     # Vider session_state split pour ces lignes seulement
                     for gi, r in day_rows:
-                        if not r.get("deja_bms", False):
+                        if not r.get("_synced", False):
                             uid_r = r.get("uid", "")
                             for _k in (f"split_confirm_{uid_r}", f"split_segments_{uid_r}",
                                        f"split_client_requis_{uid_r}"):
                                 st.session_state.pop(_k, None)
                     # Insérer une ligne vide après les lignes soumises existantes
-                    deja_idxs = [gi for gi, r in day_rows if r.get("deja_bms", False)]
+                    deja_idxs = [gi for gi, r in day_rows if r.get("_synced", False)]
                     insert_pos = (max(deja_idxs) + 1) if deja_idxs else [gi for gi, r in day_rows][0]
                     rows.insert(insert_pos, _blank_row(d))
                     st.session_state[exp_key] = True
@@ -924,7 +925,7 @@ def show_timesheet():
         """, unsafe_allow_html=True)
 
     with st.expander("🔍 Aperçu JSON (bms_watcher)"):
-        preview_rows = _build_json_rows([r for r in rows if not r.get("deja_bms", False)])
+        preview_rows = _build_json_rows([r for r in rows if not r.get("_synced", False)])
         st.json({
             "employe_num": emp_num,
             "employe_nom": emp_nom,
@@ -935,7 +936,7 @@ def show_timesheet():
     col_sub, _ = st.columns([2, 1])
     with col_sub:
         if st.button("💾 Sauvegarder", type="primary", key="submit_btn"):
-            new_rows_only = [r for r in rows if not r.get("deja_bms", False)]
+            new_rows_only = [r for r in rows if not r.get("_synced", False)]
             json_rows = _build_json_rows(new_rows_only)
             valid = [r for r in json_rows if r.get("heures", 0) > 0]
             if not valid:
@@ -1031,7 +1032,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
     apply_daily_cap = emp_num not in DAILY_OT_EXEMPT
 
     uid         = row.get("uid", str(idx))
-    is_readonly = row.get("deja_bms", False)
+    is_readonly = row.get("deja_bms", False) and row.get("_synced", False)
 
     # ── Read-only ─────────────────────────────────────────────────
     if is_readonly:
