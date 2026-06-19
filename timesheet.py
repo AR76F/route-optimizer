@@ -18,7 +18,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 WO_JSON_URL = os.environ.get("WO_JSON_URL", "")
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-06-17-remove-timeline-graph-v9"
+APP_VERSION = "2026-06-17-fix-banked-category-reload-v10"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -355,10 +355,7 @@ def load_week_from_gsheet(emp_num: str, p_start: date, p_end: date) -> list[dict
                 return float(s.replace(",", "."))
             except Exception:
                 return None
-        cat_map = {
-            "RT": "Regular Time", "OT": "Overtime", "DT": "Double Time",
-            "VP": "Vacances", "SP": "Maladie", "HD": "Férié",
-        }
+        cat_map = {pay_type: cat for cat, (pay_id, pay_type) in PAY_CODES.items()}
         from collections import defaultdict
         lignes_by_date: dict = defaultdict(list)
         # Clés déjà vues pour éviter les doublons (date, time_in, time_out, pay_type, order_ref)
