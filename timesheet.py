@@ -18,7 +18,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 WO_JSON_URL = os.environ.get("WO_JSON_URL", "")
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-06-19-period-selector-inline-v11"
+APP_VERSION = "2026-06-19-vacances-week-button-v12"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -646,7 +646,7 @@ def show_timesheet():
             st.session_state[state_key] = default_rows(p_start, p_end)
     rows: list[dict] = st.session_state[state_key]
 
-    col_load, col_info = st.columns([1, 3])
+    col_load, col_vac, col_info = st.columns([1, 1, 2])
     with col_load:
         if st.button("🔄 Rafraîchir", key="load_week_btn",
                      help="Recharger les données depuis Google Sheets"):
@@ -657,6 +657,28 @@ def show_timesheet():
                 st.rerun()
             else:
                 st.warning("Aucune soumission trouvée pour cette période.")
+    with col_vac:
+        if st.button("🏖️ Semaine en vacances", key="vac_week_btn",
+                     help="Remplir Lun–Ven avec Vacances (8h/jour)"):
+            for r in rows:
+                if r.get("_synced", False):
+                    continue  # ne pas toucher aux lignes déjà soumises
+                dr = _coerce_date(r.get("date"))
+                if dr is not None and dr.weekday() < 5:  # 0=Lun … 4=Ven
+                    r["category"]  = "Vacances"
+                    r["time_in"]   = 8.0
+                    r["time_out"]  = 16.0
+                    r["meal_hrs"]  = 0.0
+                    r["job_type"]  = "Job Client"
+                    r["order_ref"] = ""
+                    r["wo_interne"] = ""
+                    # purger tout état de split éventuel
+                    uid_r = r.get("uid", "")
+                    for _k in (f"cat_{uid_r}", f"ti_{uid_r}", f"to_{uid_r}",
+                               f"split_confirm_{uid_r}", f"split_segments_{uid_r}",
+                               f"split_client_requis_{uid_r}"):
+                        st.session_state.pop(_k, None)
+            st.rerun()
     with col_info:
         if st.session_state.get(f"loaded_{state_key}"):
             nb_deja = sum(1 for r in rows if r.get("deja_bms"))
