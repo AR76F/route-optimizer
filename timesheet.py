@@ -18,7 +18,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 WO_JSON_URL = os.environ.get("WO_JSON_URL", "")
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-06-19-vacances-week-no-warning-v14"
+APP_VERSION = "2026-06-19-type-dash-location-v15"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -56,6 +56,18 @@ PAY_CODES = {
     "OT en banque":       ("OT", "OBTI"),
     "DT en banque":       ("DT", "DBTI"),
 }
+
+# Localisations (succursales) — étiquette affichée → code succursale
+LOCATIONS = [
+    "Candiac (Z8)",
+    "Ottawa (AK)",
+    "Quebec (AQ)",
+    "Val-d'Or (AX)",
+]
+LOCATION_DEFAULT = "Candiac (Z8)"
+
+# Type de travail — '—' force un choix conscient
+JOB_TYPES = ["—", "WO (Service)", "WO Interne", "PM"]
 
 HARDCODED_WO = [
     ("MAINTENANCE BATIMENT",                       "350993"),
@@ -390,11 +402,12 @@ def load_week_from_gsheet(emp_num: str, p_start: date, p_end: date) -> list[dict
                 "time_in":     ti,
                 "time_out":    to,
                 "category":    cat_map.get(pay_type, "Regular Time"),
-                "job_type":    "Job Client",
+                "job_type":    "PM" if str(rec.get("trans_type", "WO")).strip() == "PM" else "WO (Service)",
                 "trans_type":  str(rec.get("trans_type", "WO")).strip(),
                 "order_ref":   str(rec.get("order_ref", "")).strip(),
                 "wo_interne":  "",
                 "commentaire": str(rec.get("commentaire", "")).strip(),
+                "location":    str(rec.get("location", "") or LOCATION_DEFAULT).strip() or LOCATION_DEFAULT,
                 "deja_bms":    True,
                 "_synced":     True,
                 "meal_hrs":    float(rec.get("meal_hrs", 0) or 0),
@@ -421,11 +434,12 @@ def _blank_row(d: date) -> dict:
         "time_in":     None,
         "time_out":    None,
         "category":    "",
-        "job_type":    "Job Client",
+        "job_type":    "—",
         "trans_type":  "WO",
         "order_ref":   "",
         "wo_interne":  "",
         "commentaire": "",
+        "location":    LOCATION_DEFAULT,
         "deja_bms":    False,
     }
 
@@ -669,7 +683,7 @@ def show_timesheet():
                     r["time_in"]   = 8.0
                     r["time_out"]  = 16.0
                     r["meal_hrs"]  = 0.0
-                    r["job_type"]  = "Job Client"
+                    r["job_type"]  = "—"
                     r["order_ref"] = ""
                     r["wo_interne"] = ""
                     uid_r = r.get("uid", "")
@@ -973,27 +987,42 @@ def show_timesheet():
         if st.button("💾 Sauvegarder", type="primary", key="submit_btn"):
             new_rows_only = [r for r in rows if not r.get("_synced", False)]
 
-            # ── Validation : Order Ref (ou WO Interne) requis, 6 chiffres, si pas une absence ──
+            # ── Validation : Type requis (pas '—') + Order Ref 6 chiffres si pas une absence ──
             missing_ref_dates = []
             missing_ref_uids  = set()
+            missing_type_dates = []
             for r in new_rows_only:
                 if r.get("time_in") is None or r.get("time_out") is None:
                     continue
                 cat = r.get("category", "") or ""
                 if cat in ("Vacances", "Maladie", "Férié", "Heures en banque"):
                     continue
+                # Type doit être choisi
+                if r.get("job_type", "—") in ("—", "", None):
+                    missing_type_dates.append(fmt_date_fr(r.get("date")))
+                    missing_ref_uids.add(r.get("uid", ""))
+                    continue  # inutile de valider l'Order Ref tant que le Type n'est pas choisi
                 if not is_valid_order_ref(r.get("order_ref", ""), r.get("job_type", "") == "WO Interne"):
                     missing_ref_dates.append(fmt_date_fr(r.get("date")))
                     missing_ref_uids.add(r.get("uid", ""))
 
-            if missing_ref_dates:
-                jours = "\n".join(f"- {d}" for d in sorted(set(missing_ref_dates)))
+            if missing_type_dates or missing_ref_dates:
+                msg_parts = []
+                if missing_type_dates:
+                    jours_t = "\n".join(f"- {d}" for d in sorted(set(missing_type_dates)))
+                    msg_parts.append(
+                        f"⚠️ Le champ **Type** doit être choisi (pas «—») pour :\n\n{jours_t}"
+                    )
+                if missing_ref_dates:
+                    jours = "\n".join(f"- {d}" for d in sorted(set(missing_ref_dates)))
+                    msg_parts.append(
+                        "⚠️ Le champ **Order Ref** doit contenir un numéro de **6 chiffres** "
+                        f"(ou une **sélection WO Interne** valide) pour :\n\n{jours}"
+                    )
                 st.session_state["_missing_ref_uids"] = missing_ref_uids
                 st.session_state["_missing_ref_msg"] = (
-                    "⚠️ Le champ **Order Ref** doit contenir un numéro de **6 chiffres** "
-                    "(ou une **sélection WO Interne** valide) pour les lignes suivantes :"
-                    f"\n\n{jours}\n\n"
-                    "Les cases concernées sont encadrées en rouge ci-dessus."
+                    "\n\n".join(msg_parts) +
+                    "\n\nLes cases concernées sont encadrées en rouge ci-dessus."
                 )
                 st.rerun()
             else:
@@ -1158,11 +1187,12 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                 "time_in":     seg["time_in"],
                 "time_out":    seg["time_out"],
                 "category":    cat,
-                "job_type":    row.get("job_type", "Job Client"),
+                "job_type":    row.get("job_type", "—"),
                 "trans_type":  row.get("trans_type", "WO"),
                 "order_ref":   row.get("order_ref", ""),
                 "wo_interne":  row.get("wo_interne", ""),
                 "commentaire": row.get("commentaire", ""),
+                "location":    row.get("location", LOCATION_DEFAULT),
                 "deja_bms":    False,
             })
             st.session_state[f"split_confirm_{new_uid}"] = "banque" if banque else "paye"
@@ -1400,7 +1430,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
     # Si une décision split a déjà été prise → heures figées
     split_decided = st.session_state.get(f"split_confirm_{uid}") is not None
 
-    c1, c2, c3, c4, c5, c6, c7 = st.columns([0.8, 0.8, 1.0, 1.0, 1.5, 1.5, 0.5])
+    c1, c2, c3, c4, c5, c6, c8, c7 = st.columns([0.7, 0.7, 0.9, 0.9, 1.3, 1.2, 1.1, 0.5])
 
     with c1:
         if split_decided:
@@ -1481,18 +1511,19 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         row["_split_segments"] = None
         row["_client_requis"]  = False
 
-    job_type       = row.get("job_type", "Job Client")
+    job_type       = row.get("job_type", "—")
     trans_type     = row.get("trans_type", "WO")
     order_ref      = row.get("order_ref", "")
     wo_interne_sel = row.get("wo_interne", "")
 
     with c4:
         if not is_absence:
-            job_type = st.selectbox(
-                "Type", ["Job Client", "WO Interne", "PM"],
-                index=["Job Client", "WO Interne", "PM"].index(job_type)
-                      if job_type in ["Job Client", "WO Interne", "PM"] else 0,
-                key=f"jt_{uid}")
+            jt_key = f"jt_{uid}"
+            if jt_key in st.session_state:
+                job_type = st.selectbox("Type", JOB_TYPES, key=jt_key)
+            else:
+                jt_idx = JOB_TYPES.index(job_type) if job_type in JOB_TYPES else 0
+                job_type = st.selectbox("Type", JOB_TYPES, index=jt_idx, key=jt_key)
             trans_type = "PM" if job_type == "PM" else "WO"
         else:
             st.markdown("<div style='padding-top:28px;font-size:0.75rem;color:#888;'>🏖️ Absence</div>",
@@ -1532,6 +1563,17 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
     with c6:
         commentaire = st.text_input("Commentaire", value=row.get("commentaire", ""),
                                     key=f"cm_{uid}", placeholder="Optionnel")
+    with c8:
+        if not is_absence:
+            loc_key = f"loc_{uid}"
+            current_loc = row.get("location", LOCATION_DEFAULT)
+            if loc_key in st.session_state:
+                location = st.selectbox("Localisation", LOCATIONS, key=loc_key)
+            else:
+                loc_idx = LOCATIONS.index(current_loc) if current_loc in LOCATIONS else 0
+                location = st.selectbox("Localisation", LOCATIONS, index=loc_idx, key=loc_key)
+        else:
+            location = row.get("location", LOCATION_DEFAULT)
     with c7:
         st.markdown("<div style='font-size:0.72rem;color:#888;margin-bottom:4px;'>BMS</div>",
                     unsafe_allow_html=True)
@@ -1575,6 +1617,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
     row["order_ref"]   = order_ref
     row["wo_interne"]  = wo_interne_sel
     row["commentaire"] = commentaire
+    row["location"]    = location
     row["deja_bms"]    = deja
 
 
@@ -1602,6 +1645,8 @@ def _build_json_rows(rows: list[dict]) -> list[dict]:
             continue
         segments      = row.get("_split_segments")
         client_requis = row.get("_client_requis", False)
+        loc_label = row.get("location", LOCATION_DEFAULT) or LOCATION_DEFAULT
+        loc_code  = loc_label.split("(")[-1].rstrip(")").strip() if "(" in loc_label else loc_label
         if segments and client_requis:
             for seg in segments:
                 cat = seg["category"]
@@ -1617,6 +1662,8 @@ def _build_json_rows(rows: list[dict]) -> list[dict]:
                     "order_ref":     row.get("order_ref", ""),
                     "meal_hrs":      0.0,
                     "commentaire":   row.get("commentaire", ""),
+                    "location":      loc_label,
+                    "location_code": loc_code,
                     "client_requis": cat in ("Overtime", "Double Time"),
                     "deja_bms":      row.get("deja_bms", False),
                 })
@@ -1635,6 +1682,8 @@ def _build_json_rows(rows: list[dict]) -> list[dict]:
                 "order_ref":     row.get("order_ref", ""),
                 "meal_hrs":      0.0,
                 "commentaire":   row.get("commentaire", ""),
+                "location":      loc_label,
+                "location_code": loc_code,
                 "client_requis": False,
                 "deja_bms":      row.get("deja_bms", False),
             })
