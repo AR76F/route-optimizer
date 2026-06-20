@@ -18,7 +18,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 WO_JSON_URL = os.environ.get("WO_JSON_URL", "")
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-06-19-vacances-week-button-v12"
+APP_VERSION = "2026-06-19-vacances-week-fill-fix-v13"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -672,12 +672,17 @@ def show_timesheet():
                     r["job_type"]  = "Job Client"
                     r["order_ref"] = ""
                     r["wo_interne"] = ""
-                    # purger tout état de split éventuel
                     uid_r = r.get("uid", "")
-                    for _k in (f"cat_{uid_r}", f"ti_{uid_r}", f"to_{uid_r}",
-                               f"split_confirm_{uid_r}", f"split_segments_{uid_r}",
+                    # Purger l'état de split
+                    for _k in (f"split_confirm_{uid_r}", f"split_segments_{uid_r}",
                                f"split_client_requis_{uid_r}"):
                         st.session_state.pop(_k, None)
+                    # Écrire DIRECTEMENT dans l'état des widgets (ce que les
+                    # champs lisent réellement) — sinon la valeur mémorisée vide
+                    # des champs In/Out écrase le dict au réaffichage.
+                    st.session_state[f"ti_{uid_r}"]  = "8.0"
+                    st.session_state[f"to_{uid_r}"]  = "16.0"
+                    st.session_state[f"cat_{uid_r}"] = "Vacances"
             st.rerun()
     with col_info:
         if st.session_state.get(f"loaded_{state_key}"):
