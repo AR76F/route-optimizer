@@ -18,7 +18,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 WO_JSON_URL = os.environ.get("WO_JSON_URL", "")
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-06-19-vacances-week-fill-fix-v13"
+APP_VERSION = "2026-06-19-vacances-week-no-warning-v14"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -1411,10 +1411,11 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                 unsafe_allow_html=True)
             time_in_str = str(row["time_in"]) if row["time_in"] is not None else ""
         else:
-            ti_default  = "" if row["time_in"] is None else str(row["time_in"])
-            time_in_str = st.text_input("⏰ In", value=ti_default,
-                                        key=f"ti_{uid}", placeholder="8.0",
-                                        help="Heure décimale : 8.0 = 8h00, 13.5 = 13h30")
+            ti_key = f"ti_{uid}"
+            ti_kwargs = {} if ti_key in st.session_state else {"value": ("" if row["time_in"] is None else str(row["time_in"]))}
+            time_in_str = st.text_input("⏰ In", key=ti_key, placeholder="8.0",
+                                        help="Heure décimale : 8.0 = 8h00, 13.5 = 13h30",
+                                        **ti_kwargs)
     with c2:
         if split_decided:
             _to_disp = decimal_to_hhmm(float(row["time_out"])) if row["time_out"] is not None else "—"
@@ -1424,15 +1425,21 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                 unsafe_allow_html=True)
             time_out_str = str(row["time_out"]) if row["time_out"] is not None else ""
         else:
-            time_out_str = st.text_input("⏰ Out",
-                                         value="" if row["time_out"] is None else str(row["time_out"]),
-                                         key=f"to_{uid}", placeholder="17.0")
+            to_key = f"to_{uid}"
+            to_kwargs = {} if to_key in st.session_state else {"value": ("" if row["time_out"] is None else str(row["time_out"]))}
+            time_out_str = st.text_input("⏰ Out", key=to_key, placeholder="17.0",
+                                         **to_kwargs)
     with c3:
         absence_options = ["—", "Vacances", "Maladie", "Férié", "Heures en banque"]
         current_cat  = row.get("category", "")
-        absence_idx  = absence_options.index(current_cat) if current_cat in absence_options else 0
-        absence_sel  = st.selectbox("Absence", absence_options, index=absence_idx,
-                                    key=f"cat_{uid}", help="RT/OT/DT calculés automatiquement")
+        cat_key      = f"cat_{uid}"
+        if cat_key in st.session_state:
+            absence_sel = st.selectbox("Absence", absence_options, key=cat_key,
+                                       help="RT/OT/DT calculés automatiquement")
+        else:
+            absence_idx = absence_options.index(current_cat) if current_cat in absence_options else 0
+            absence_sel = st.selectbox("Absence", absence_options, index=absence_idx,
+                                       key=cat_key, help="RT/OT/DT calculés automatiquement")
 
     # Message informatif si les heures sont figées
     if split_decided:
