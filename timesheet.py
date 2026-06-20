@@ -18,7 +18,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 WO_JSON_URL = os.environ.get("WO_JSON_URL", "")
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-06-17-fix-banked-category-reload-v10"
+APP_VERSION = "2026-06-19-period-selector-inline-v11"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -600,30 +600,6 @@ def show_timesheet():
             emp_nom, emp_num = sel_tech.rsplit("  (", 1)
             emp_num = emp_num.rstrip(")")
 
-        st.markdown("---")
-        st.markdown("### 📅 Période")
-        today = date.today()
-        p_start, p_end = current_period(today)
-        if "period_offset" not in st.session_state:
-            st.session_state.period_offset = 0
-        col_prev, col_cur, col_next = st.columns([1, 2, 1])
-        with col_prev:
-            if st.button("◀", key="prev_week"):
-                st.session_state.period_offset -= 1
-        with col_cur:
-            if st.button("Auj.", key="today_week"):
-                st.session_state.period_offset = 0
-        with col_next:
-            if st.button("▶", key="next_week"):
-                st.session_state.period_offset += 1
-        offset = st.session_state.period_offset
-        p_start = p_start + timedelta(weeks=offset)
-        p_end   = p_end   + timedelta(weeks=offset)
-        st.markdown(
-            f'<div class="period-badge">📅 {fmt_period(p_start)} → {fmt_period(p_end)}</div>',
-            unsafe_allow_html=True
-        )
-
     # ── Règles heures — affichées sous le header principal ──
     st.markdown("""
     <div class="wo-rule-box" style="display:flex;gap:1.5rem;flex-wrap:wrap;">
@@ -634,6 +610,31 @@ def show_timesheet():
     🔴 <b>DT</b> Dimanche
     </div>
     """, unsafe_allow_html=True)
+
+    # ── Sélecteur de période — directement dans la feuille de temps ──
+    st.markdown("#### 📅 Période")
+    today = date.today()
+    p_start, p_end = current_period(today)
+    if "period_offset" not in st.session_state:
+        st.session_state.period_offset = 0
+    col_prev, col_cur, col_next, col_badge = st.columns([1, 1, 1, 4])
+    with col_prev:
+        if st.button("◀", key="prev_week", use_container_width=True):
+            st.session_state.period_offset -= 1
+    with col_cur:
+        if st.button("Auj.", key="today_week", use_container_width=True):
+            st.session_state.period_offset = 0
+    with col_next:
+        if st.button("▶", key="next_week", use_container_width=True):
+            st.session_state.period_offset += 1
+    offset = st.session_state.period_offset
+    p_start = p_start + timedelta(weeks=offset)
+    p_end   = p_end   + timedelta(weeks=offset)
+    with col_badge:
+        st.markdown(
+            f'<div class="period-badge">📅 {fmt_period(p_start)} → {fmt_period(p_end)}</div>',
+            unsafe_allow_html=True
+        )
 
     state_key = f"rows_{emp_num}_{p_end.isoformat()}"
     if state_key not in st.session_state:
