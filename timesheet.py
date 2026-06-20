@@ -18,7 +18,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 WO_JSON_URL = os.environ.get("WO_JSON_URL", "")
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-06-19-type-dash-location-v15"
+APP_VERSION = "2026-06-19-location-before-comment-v16"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -1430,7 +1430,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
     # Si une décision split a déjà été prise → heures figées
     split_decided = st.session_state.get(f"split_confirm_{uid}") is not None
 
-    c1, c2, c3, c4, c5, c6, c8, c7 = st.columns([0.7, 0.7, 0.9, 0.9, 1.3, 1.2, 1.1, 0.5])
+    c1, c2, c3, c4, c5, c8, c6, c7 = st.columns([0.7, 0.7, 0.9, 0.9, 1.3, 1.1, 1.2, 0.5])
 
     with c1:
         if split_decided:
