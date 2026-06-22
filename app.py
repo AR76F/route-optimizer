@@ -1544,6 +1544,12 @@ def render_page_2():
         if lon < -74.00 and lat < 45.60:
             return "RIVE_SUD_OUEST"
 
+        # Rive Sud à l'est de Longueuil — Varennes, Verchères, Contrecoeur
+        # Le fleuve coule en diagonale : lat_fleuve ≈ 45.70 + (lon + 73.45)
+        # Ces villes sont au sud du fleuve mais en latitudes parfois élevées
+        if -73.45 < lon <= -73.15 and lat < (45.70 + (lon + 73.45)):
+            return "RIVE_SUD"
+        
         # RIVE_NORD stricte — lat > 45.70, hors île MTL
         # Blainville, Saint-Jérôme, Lachute, Terrebonne, Saint-Eustache, Repentigny…
         if lat > 45.70:
