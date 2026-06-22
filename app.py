@@ -3805,7 +3805,8 @@ def render_page_2():
                         continue  # on retraitera les RETURN_HOME après
                     _base = normalize_base_job_id(_jid)
                     _is_split = bool(re.search(r"\(PART\s+\d+/\d+\)", _jid))
-                    _key = (_r.get("date",""), _r.get("technicien",""), _base) if _is_split else _base
+                    _is_duo = bool(str(_r.get("duo", "")).strip())
+                    _key = (_r.get("date",""), _r.get("technicien",""), _base) if (_is_split or _is_duo) else _base
                     if _key not in _dedup_seen:
                         _dedup_seen.add(_key)
                         _dedup_rows.append(_r)
@@ -4013,7 +4014,8 @@ def render_page_2():
                         continue
                     _base = normalize_base_job_id(_jid)
                     _is_split = bool(re.search(r"\(PART\s+\d+/\d+\)", _jid))
-                    _key = (_r.get("date",""), _r.get("technicien",""), _base) if _is_split else _base
+                    _is_duo = bool(str(_r.get("duo", "")).strip())
+                    _key = (_r.get("date",""), _r.get("technicien",""), _base) if (_is_split or _is_duo) else _base
                     if _key not in _dedup_seen2:
                         _dedup_seen2.add(_key)
                         _dedup_rows2.append(_r)
