@@ -15,10 +15,9 @@ ONEDRIVE_FOLDER = os.environ.get(
     "ONEDRIVE_FOLDER",
     str(Path.home() / "OneDrive - Cummins" / "FeuilleDeTemps"),
 )
-WO_JSON_URL = os.environ.get("WO_JSON_URL", "")
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-06-19-location-before-comment-v16"
+APP_VERSION = "2026-06-19-wo-json-secrets-v17"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -70,28 +69,29 @@ LOCATION_DEFAULT = "Candiac (Z8)"
 JOB_TYPES = ["—", "WO (Service)", "WO Interne", "PM"]
 
 HARDCODED_WO = [
-    ("MAINTENANCE BATIMENT",                       "350993"),
-    ("RÉPARATION CAMION - FSPG",                   "350994"),
-    ("SHOP SUPPLIES - FSPG",                       "351013"),
-    ("EXPÉDITION PIÈCES",                          "350995"),
-    ("SHOP SUPPLIES - DE Z8 À AK",                 "350996"),
-    ("AJUSTEMENTS PIÈCES",                         "351012"),
-    ("FORMATION -SÉCURITÉ  FSPG",                  "350997"),
-    ("FORMATION EN LIGNE (QSOL - CLC) - FSPG",    "350998"),
-    ("FORMATION TECHNIQUE EN CLASSE -  FSPG",      "350999"),
-    ("FRAIS DE FORMATION (AUTORISÉ PAR DAN EPURE)","351000"),
-    ("TEMPS NON-PRODUCTIF - FSPG",                 "351002"),
-    ("OUTILLAGES",                                 "351011"),
-    ("ÉQUIPEMENT DE SÉCURITÉ ET RÉUNIONS",         "351003"),
-    ("SUPERVISION",                                "351004"),
-    ("PMO - SHOP SUPPLIES",                        "351005"),
-    ("RÉUNION D'ÉQUIPE",                           "351006"),
-    ("PERTE DE TEMPS TI / ORDI",                   "351007"),
-    ("DÉPLACEMENT QUÉBEC (AQ)",                    "463357"),
-    ("DÉPLACEMENT OTTAWA (AK)",                    "111345"),
-    ("SUPPORT TECH LEAD HAND",                     "351008"),
-    ("ADMIN ISPG",                                 "351009"),
-    ("PAIEMENT 4HR RT(INCITATIF TRAVAUX NUIT)",    "351010"),
+    ("MAINTENANCE BATIMENT",                       "352661"),
+    ("RÉPARATION CAMION - FSPG",                   "352663"),
+    ("SHOP SUPPLIES - FSPG",                       "352682"),
+    ("EXPÉDITION PIÈCES",                          "352665"),
+    ("SHOP SUPPLIES - DE Z8 À AK",                 "352666"),
+    ("AJUSTEMENTS PIÈCES",                         "352681"),
+    ("FORMATION -SÉCURITÉ  FSPG",                  "352667"),
+    ("FORMATION EN LIGNE (QSOL - CLC) - FSPG",    "352668"),
+    ("FORMATION TECHNIQUE EN CLASSE -  FSPG",      "352669"),
+    ("FRAIS DE FORMATION (AUTORISÉ PAR DAN EPURE)","352670"),
+    ("TEMPS NON-PRODUCTIF - FSPG",                 "352671"),
+    ("OUTILLAGES",                                 "352680"),
+    ("ÉQUIPEMENT DE SÉCURITÉ ET RÉUNIONS",         "352672"),
+    ("SUPERVISION",                                "352673"),
+    ("PMO - SHOP SUPPLIES",                        "352674"),
+    ("RÉUNION D'ÉQUIPE",                           "352675"),
+    ("PERTE DE TEMPS TI / ORDI",                   "352676"),
+    ("DÉPLACEMENT QUÉBEC (AQ)",                    "467796"),
+    ("DÉPLACEMENT VAL-D'OR (AX)",                  "27242"),
+    ("DÉPLACEMENT OTTAWA (AK)",                    "111912"),
+    ("SUPPORT TECH LEAD HAND",                     "352677"),
+    ("ADMIN ISPG",                                 "352678"),
+    ("PAIEMENT 4HR RT(INCITATIF TRAVAUX NUIT)",    "352679"),
 ]
 
 MOIS_EN = {1:"JAN",2:"FEB",3:"MAR",4:"APR",5:"MAY",6:"JUN",
@@ -180,10 +180,19 @@ def is_valid_order_ref(ref, is_wo_interne: bool = False) -> bool:
 
 @st.cache_data(ttl=3600)
 def load_wo_interne() -> list[tuple[str, str]]:
-    if WO_JSON_URL:
+    # Lire l'URL depuis st.secrets (Streamlit Cloud) en priorité, puis os.environ
+    wo_url = ""
+    try:
+        wo_url = st.secrets.get("WO_JSON_URL", "")
+    except Exception:
+        pass
+    if not wo_url:
+        wo_url = os.environ.get("WO_JSON_URL", "")
+
+    if wo_url:
         try:
             import urllib.request
-            with urllib.request.urlopen(WO_JSON_URL, timeout=5) as r:
+            with urllib.request.urlopen(wo_url, timeout=5) as r:
                 data = json.loads(r.read())
             return [(item["description"], item["no_wo"]) for item in data]
         except Exception:
