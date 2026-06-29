@@ -17,7 +17,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 )
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-06-19-wo-json-secrets-v17"
+APP_VERSION = "2026-06-19-wo-month-based-v18"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -178,6 +178,11 @@ def is_valid_order_ref(ref, is_wo_interne: bool = False) -> bool:
         return True
     return s.isdigit() and len(s) == 6
 
+def _mois_courant_key() -> str:
+    """Retourne la clé mois courant 'YYYY-MM' selon la date du jour (fuseau Toronto)."""
+    from datetime import datetime
+    return datetime.now(TZ).strftime("%Y-%m")
+
 @st.cache_data(ttl=3600)
 def load_wo_interne() -> list[tuple[str, str]]:
     # Lire l'URL depuis st.secrets (Streamlit Cloud) en priorité, puis os.environ
@@ -194,7 +199,25 @@ def load_wo_interne() -> list[tuple[str, str]]:
             import urllib.request
             with urllib.request.urlopen(wo_url, timeout=5) as r:
                 data = json.loads(r.read())
-            return [(item["description"], item["no_wo"]) for item in data]
+            mois = _mois_courant_key()
+            result = []
+            for item in data:
+                desc = item.get("description", "")
+                if "numeros_par_mois" in item:
+                    # Nouveau format : choisir le numéro du mois courant.
+                    # Repli : si le mois courant n'existe pas, prendre le plus récent disponible.
+                    par_mois = item["numeros_par_mois"]
+                    no = par_mois.get(mois)
+                    if not no and par_mois:
+                        dernier_mois = sorted(par_mois.keys())[-1]
+                        no = par_mois[dernier_mois]
+                    if no:
+                        result.append((desc, str(no)))
+                elif "no_wo" in item:
+                    # Ancien format (rétrocompatible)
+                    result.append((desc, str(item["no_wo"])))
+            if result:
+                return result
         except Exception:
             pass
     return HARDCODED_WO
