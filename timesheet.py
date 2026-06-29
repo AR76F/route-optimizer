@@ -17,7 +17,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 )
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-06-19-wo-month-based-v18"
+APP_VERSION = "2026-06-19-wo-desc-readonly-v19"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -182,6 +182,47 @@ def _mois_courant_key() -> str:
     """Retourne la clé mois courant 'YYYY-MM' selon la date du jour (fuseau Toronto)."""
     from datetime import datetime
     return datetime.now(TZ).strftime("%Y-%m")
+
+@st.cache_data(ttl=3600)
+def load_wo_numero_vers_desc() -> dict:
+    """
+    Retourne un dict { numero_wo : description } incluant TOUS les numéros connus
+    (tous les mois du nouveau format, + ancien format). Sert à afficher la
+    description d'un WO interne déjà soumis à partir de son numéro.
+    """
+    wo_url = ""
+    try:
+        wo_url = st.secrets.get("WO_JSON_URL", "")
+    except Exception:
+        pass
+    if not wo_url:
+        wo_url = os.environ.get("WO_JSON_URL", "")
+
+    mapping = {}
+    if wo_url:
+        try:
+            import urllib.request
+            with urllib.request.urlopen(wo_url, timeout=5) as r:
+                data = json.loads(r.read())
+            for item in data:
+                desc = item.get("description", "")
+                if "numeros_par_mois" in item:
+                    for no in item["numeros_par_mois"].values():
+                        if no:
+                            mapping[str(no).strip()] = desc
+                else:
+                    for k in ("no_wo", "no_wo_precedent"):
+                        no = str(item.get(k, "")).strip()
+                        if no:
+                            mapping[no] = desc
+        except Exception:
+            pass
+    if not mapping:
+        # Repli sur la liste codée en dur
+        for desc, no in HARDCODED_WO:
+            mapping[str(no).strip()] = desc
+    return mapping
+
 
 @st.cache_data(ttl=3600)
 def load_wo_interne() -> list[tuple[str, str]]:
@@ -1124,7 +1165,14 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         }
         badge    = badge_map_ro.get(cat, cat or "—")
         meal_txt = f" | 🍽️ {float(meal):.1f}h" if float(meal) > 0 else ""
-        wo_txt   = row.get('order_ref', '') or row.get('wo_interne', '') or '—'
+        wo_num   = row.get('order_ref', '') or row.get('wo_interne', '') or ''
+        # Pour un WO interne, afficher la description (plus clair pour les
+        # superviseurs) ; sinon afficher le numéro.
+        wo_desc  = load_wo_numero_vers_desc().get(str(wo_num).strip())
+        if wo_desc:
+            wo_txt = f"{wo_desc} ({wo_num})"
+        else:
+            wo_txt = wo_num or '—'
         comm_txt = row.get('commentaire', '') or ''
 
         def _fmt(h):
