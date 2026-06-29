@@ -1,25 +1,163 @@
 [
-  {"description": "MAINTENANCE BATIMENT",                         "no_wo": "352661", "no_wo_precedent": "352120"},
-  {"description": "RÉPARATION CAMION - FSPG",                     "no_wo": "352663", "no_wo_precedent": "352121"},
-  {"description": "SHOP SUPPLIES - FSPG",                         "no_wo": "352682", "no_wo_precedent": "352145"},
-  {"description": "EXPÉDITION PIÈCES",                            "no_wo": "352665", "no_wo_precedent": "352122"},
-  {"description": "SHOP SUPPLIES - DE Z8 À AK",                   "no_wo": "352666", "no_wo_precedent": "352123"},
-  {"description": "AJUSTEMENTS PIÈCES",                           "no_wo": "352681", "no_wo_precedent": "352143"},
-  {"description": "FORMATION - SÉCURITÉ FSPG",                    "no_wo": "352667", "no_wo_precedent": "352124"},
-  {"description": "FORMATION EN LIGNE (QSOL - CLC) - FSPG",       "no_wo": "352668", "no_wo_precedent": "352125"},
-  {"description": "FORMATION TECHNIQUE EN CLASSE - FSPG",         "no_wo": "352669", "no_wo_precedent": "352126"},
-  {"description": "FRAIS DE FORMATION (AUTORISÉ PAR DAN EPURE)",  "no_wo": "352670", "no_wo_precedent": "352128"},
-  {"description": "TEMPS NON-PRODUCTIF - FSPG",                   "no_wo": "352671", "no_wo_precedent": "352129"},
-  {"description": "OUTILLAGES",                                    "no_wo": "352680", "no_wo_precedent": "352142"},
-  {"description": "ÉQUIPEMENT DE SÉCURITÉ ET RÉUNIONS",           "no_wo": "352672", "no_wo_precedent": "352130"},
-  {"description": "SUPERVISION",                                   "no_wo": "352673", "no_wo_precedent": "352131"},
-  {"description": "PMO - SHOP SUPPLIES",                          "no_wo": "352674", "no_wo_precedent": "352132"},
-  {"description": "RÉUNION D'ÉQUIPE",                             "no_wo": "352675", "no_wo_precedent": "352134"},
-  {"description": "PERTE DE TEMPS TI / ORDI",                     "no_wo": "352676", "no_wo_precedent": "352135"},
-  {"description": "DÉPLACEMENT QUÉBEC (AQ)",                      "no_wo": "467796", "no_wo_precedent": "466048"},
-  {"description": "DÉPLACEMENT VAL-D'OR",                         "no_wo": "27242",  "no_wo_precedent": "27199"},
-  {"description": "DÉPLACEMENT OTTAWA (AK)",                      "no_wo": "111912", "no_wo_precedent": "111731"},
-  {"description": "SUPPORT TECH LEAD HAND",                       "no_wo": "352677", "no_wo_precedent": "352138"},
-  {"description": "ADMIN ISPG",                                    "no_wo": "352678", "no_wo_precedent": "352139"},
-  {"description": "PAIEMENT 4HR RT (INCITATIF TRAVAUX NUIT)",     "no_wo": "352679", "no_wo_precedent": "352141"}
+  {
+    "description": "MAINTENANCE BATIMENT",
+    "numeros_par_mois": {
+      "2026-06": "352120",
+      "2026-07": "352661"
+    }
+  },
+  {
+    "description": "RÉPARATION CAMION - FSPG",
+    "numeros_par_mois": {
+      "2026-06": "352121",
+      "2026-07": "352663"
+    }
+  },
+  {
+    "description": "SHOP SUPPLIES - FSPG",
+    "numeros_par_mois": {
+      "2026-06": "352145",
+      "2026-07": "352682"
+    }
+  },
+  {
+    "description": "EXPÉDITION PIÈCES",
+    "numeros_par_mois": {
+      "2026-06": "352122",
+      "2026-07": "352665"
+    }
+  },
+  {
+    "description": "SHOP SUPPLIES - DE Z8 À AK",
+    "numeros_par_mois": {
+      "2026-06": "352123",
+      "2026-07": "352666"
+    }
+  },
+  {
+    "description": "AJUSTEMENTS PIÈCES",
+    "numeros_par_mois": {
+      "2026-06": "352143",
+      "2026-07": "352681"
+    }
+  },
+  {
+    "description": "FORMATION - SÉCURITÉ FSPG",
+    "numeros_par_mois": {
+      "2026-06": "352124",
+      "2026-07": "352667"
+    }
+  },
+  {
+    "description": "FORMATION EN LIGNE (QSOL - CLC) - FSPG",
+    "numeros_par_mois": {
+      "2026-06": "352125",
+      "2026-07": "352668"
+    }
+  },
+  {
+    "description": "FORMATION TECHNIQUE EN CLASSE - FSPG",
+    "numeros_par_mois": {
+      "2026-06": "352126",
+      "2026-07": "352669"
+    }
+  },
+  {
+    "description": "FRAIS DE FORMATION (AUTORISÉ PAR DAN EPURE)",
+    "numeros_par_mois": {
+      "2026-06": "352128",
+      "2026-07": "352670"
+    }
+  },
+  {
+    "description": "TEMPS NON-PRODUCTIF - FSPG",
+    "numeros_par_mois": {
+      "2026-06": "352129",
+      "2026-07": "352671"
+    }
+  },
+  {
+    "description": "OUTILLAGES",
+    "numeros_par_mois": {
+      "2026-06": "352142",
+      "2026-07": "352680"
+    }
+  },
+  {
+    "description": "ÉQUIPEMENT DE SÉCURITÉ ET RÉUNIONS",
+    "numeros_par_mois": {
+      "2026-06": "352130",
+      "2026-07": "352672"
+    }
+  },
+  {
+    "description": "SUPERVISION",
+    "numeros_par_mois": {
+      "2026-06": "352131",
+      "2026-07": "352673"
+    }
+  },
+  {
+    "description": "PMO - SHOP SUPPLIES",
+    "numeros_par_mois": {
+      "2026-06": "352132",
+      "2026-07": "352674"
+    }
+  },
+  {
+    "description": "RÉUNION D'ÉQUIPE",
+    "numeros_par_mois": {
+      "2026-06": "352134",
+      "2026-07": "352675"
+    }
+  },
+  {
+    "description": "PERTE DE TEMPS TI / ORDI",
+    "numeros_par_mois": {
+      "2026-06": "352135",
+      "2026-07": "352676"
+    }
+  },
+  {
+    "description": "DÉPLACEMENT QUÉBEC (AQ)",
+    "numeros_par_mois": {
+      "2026-06": "466048",
+      "2026-07": "467796"
+    }
+  },
+  {
+    "description": "DÉPLACEMENT VAL-D'OR",
+    "numeros_par_mois": {
+      "2026-06": "27199",
+      "2026-07": "27242"
+    }
+  },
+  {
+    "description": "DÉPLACEMENT OTTAWA (AK)",
+    "numeros_par_mois": {
+      "2026-06": "111731",
+      "2026-07": "111912"
+    }
+  },
+  {
+    "description": "SUPPORT TECH LEAD HAND",
+    "numeros_par_mois": {
+      "2026-06": "352138",
+      "2026-07": "352677"
+    }
+  },
+  {
+    "description": "ADMIN ISPG",
+    "numeros_par_mois": {
+      "2026-06": "352139",
+      "2026-07": "352678"
+    }
+  },
+  {
+    "description": "PAIEMENT 4HR RT (INCITATIF TRAVAUX NUIT)",
+    "numeros_par_mois": {
+      "2026-06": "352141",
+      "2026-07": "352679"
+    }
+  }
 ]
