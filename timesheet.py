@@ -17,7 +17,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 )
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-06-19-wo-desc-readonly-v19"
+APP_VERSION = "2026-07-09-location-to-gsheet-v20"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -364,6 +364,8 @@ def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[d
                     str(r.get("commentaire", "")),
                     str(r.get("pay_type", "")),
                     "oui" if r.get("deja_bms", False) else "",
+                    str(r.get("location", "")),
+                    str(r.get("location_code", "")),
                 ])
 
             if skipped > 0 and not new_rows:
