@@ -17,7 +17,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 )
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-07-09-location-to-gsheet-v20"
+APP_VERSION = "2026-07-13-ottawa-autoloc-nojson-v21"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -67,6 +67,20 @@ LOCATION_DEFAULT = "Candiac (Z8)"
 
 # Type de travail — '—' force un choix conscient
 JOB_TYPES = ["—", "WO (Service)", "WO Interne", "PM"]
+
+def _location_pour_wo(label: str):
+    """Si le WO interne est un déplacement vers une succursale, retourne la
+    localisation correspondante ('Ottawa (AK)', etc.), sinon None."""
+    u = str(label or "").upper()
+    if "DÉPLACEMENT" not in u and "DEPLACEMENT" not in u:
+        return None
+    if "OTTAWA" in u:
+        return "Ottawa (AK)"
+    if "QUÉBEC" in u or "QUEBEC" in u:
+        return "Quebec (AQ)"
+    if "VAL-D'OR" in u or "VAL D'OR" in u or "VAL DOR" in u:
+        return "Val-d'Or (AX)"
+    return None
 
 HARDCODED_WO = [
     ("MAINTENANCE BATIMENT",                       "352661"),
@@ -1045,15 +1059,6 @@ def show_timesheet():
         </div>
         """, unsafe_allow_html=True)
 
-    with st.expander("🔍 Aperçu JSON (bms_watcher)"):
-        preview_rows = _build_json_rows([r for r in rows if not r.get("_synced", False)])
-        st.json({
-            "employe_num": emp_num,
-            "employe_nom": emp_nom,
-            "periode_fin": fmt_period(p_end),
-            "lignes": preview_rows,
-        })
-
     col_sub, _ = st.columns([2, 1])
     with col_sub:
         if st.session_state.get("_missing_ref_msg"):
@@ -1066,6 +1071,7 @@ def show_timesheet():
             missing_ref_dates = []
             missing_ref_uids  = set()
             missing_type_dates = []
+            wrong_loc_dates = []
             for r in new_rows_only:
                 if r.get("time_in") is None or r.get("time_out") is None:
                     continue
@@ -1080,8 +1086,14 @@ def show_timesheet():
                 if not is_valid_order_ref(r.get("order_ref", ""), r.get("job_type", "") == "WO Interne"):
                     missing_ref_dates.append(fmt_date_fr(r.get("date")))
                     missing_ref_uids.add(r.get("uid", ""))
+                    continue
+                # Un WO commençant par 1 = Ottawa → la localisation doit être Ottawa (AK)
+                oref = str(r.get("order_ref", "")).strip()
+                if oref.startswith("1") and r.get("location", "") != "Ottawa (AK)":
+                    wrong_loc_dates.append(fmt_date_fr(r.get("date")))
+                    missing_ref_uids.add(r.get("uid", ""))
 
-            if missing_type_dates or missing_ref_dates:
+            if missing_type_dates or missing_ref_dates or wrong_loc_dates:
                 msg_parts = []
                 if missing_type_dates:
                     jours_t = "\n".join(f"- {d}" for d in sorted(set(missing_type_dates)))
@@ -1093,6 +1105,12 @@ def show_timesheet():
                     msg_parts.append(
                         "⚠️ Le champ **Order Ref** doit contenir un numéro de **6 chiffres** "
                         f"(ou une **sélection WO Interne** valide) pour :\n\n{jours}"
+                    )
+                if wrong_loc_dates:
+                    jours_l = "\n".join(f"- {d}" for d in sorted(set(wrong_loc_dates)))
+                    msg_parts.append(
+                        "⚠️ Un WO commençant par **1** est un WO d'**Ottawa** — la "
+                        f"**Localisation** doit être «Ottawa (AK)» pour :\n\n{jours_l}"
                     )
                 st.session_state["_missing_ref_uids"] = missing_ref_uids
                 st.session_state["_missing_ref_msg"] = (
@@ -1634,6 +1652,15 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                                           index=wo_idx, key=f"wo_{uid}")
                     order_ref      = wo_by_label.get(wo_sel, "") if wo_sel != "— choisir —" else ""
                     wo_interne_sel = wo_sel if wo_sel != "— choisir —" else ""
+                    # ── Auto-sélection de la succursale pour les WO de déplacement ──
+                    # (s'applique seulement quand la sélection CHANGE, pour ne pas
+                    #  écraser un choix manuel de localisation à chaque rerun)
+                    prev_key = f"_wo_prev_{uid}"
+                    if wo_sel != st.session_state.get(prev_key):
+                        st.session_state[prev_key] = wo_sel
+                        loc_auto = _location_pour_wo(wo_sel)
+                        if loc_auto:
+                            st.session_state[f"loc_{uid}"] = loc_auto
                 else:
                     order_ref      = st.text_input("Order Ref", value=order_ref,
                                                    key=f"or_{uid}", placeholder="Ex: 345924")
