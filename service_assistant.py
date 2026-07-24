@@ -29,7 +29,7 @@ v0.4.0
 v0.3.0
 - Changed knowledge retrieval method.
     - Defined a helper function to retrieve Markdown files inside knowledge_base instead of retrieving a single master file.
-- Specified GPT model in the agent function (5.6 Terra)
+- Specified GPT model in the agent function 
 - Reduced and refined system prompt.
 
 v0.2.0
@@ -81,6 +81,17 @@ TECHNICAL_QUERY_HINTS = {
     "engine", "diagnostic", "diagnostics", "ats", "commissioning", "controls",
     "field service", "field technician", "shop only", "shop-only", "who covers",
     "who is", "who handles", "who works", "specializes", "specializes in"
+}
+
+LIST_ALL_QUERY_HINTS = {
+    "list", "all", "every", "show all", "which technicians", "who has",
+    "who are", "qualified", "certified", "trained"
+}
+
+LIST_ALL_CAPABILITY_HINTS = {
+    "training", "trainings", "certification", "certifications", "qualification",
+    "qualifications", "course", "courses", "pcc", "ats", "controls",
+    "commissioning", "engine", "diagnostic", "diagnostics"
 }
 
 
@@ -153,6 +164,15 @@ def is_technician_query(question: str) -> bool:
     """
     q = normalize_text(question)
     return any(hint in q for hint in TECHNICAL_QUERY_HINTS)
+
+def is_list_all_query(question: str) -> bool:
+    """
+    Detect questions that need broader technician-profile coverage.
+    """
+    q = normalize_text(question)
+    has_list_language = any(hint in q for hint in LIST_ALL_QUERY_HINTS)
+    has_capability_language = any(hint in q for hint in LIST_ALL_CAPABILITY_HINTS)
+    return has_list_language and has_capability_language
 
 
 def split_markdown_into_chunks(text: str, max_words: int = 220) -> list[str]:
@@ -448,7 +468,14 @@ def build_agent(question: str) -> Agent:
     Build an agent with only the most relevant knowledge excerpts.
     """
     kb_index = build_embedding_index("knowledge_base")
-    top_k = 6 if is_technician_query(question) else 4
+
+    if is_list_all_query(question):
+        top_k = 15
+    elif is_technician_query(question):
+        top_k = 8
+    else:
+        top_k = 4
+
     relevant_chunks = retrieve_relevant_chunks(question, kb_index, top_k=top_k)
     retrieved_context = format_retrieved_context(relevant_chunks)
 
@@ -495,7 +522,7 @@ Knowledge excerpts:
 
     return Agent(
         name = "Service Coordinator Assistant",
-        model = "gpt-5.6-terra",
+        model = "gpt-4o-mini",
         instructions = human_instructions,
     )
 
