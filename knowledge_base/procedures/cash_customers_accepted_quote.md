@@ -1,12 +1,17 @@
 # Cash Customers - Accepted Quotation Procedure
 
-# Version 1.0.0
+# Version 1.1.0
 
 # Last Updated: 2026-07-23
 
 # Updated By: Jipeng Li
 
 # Change Log:
+
+v1.1.0
+- Simplified Order Entry section.
+- Removed duplicated Order Entry instructions.
+- Referenced the Customer Deposits Process as the authoritative procedure.
 
 v1.0.0
 - Creation of initial document.
@@ -30,9 +35,7 @@ Collect Full Payment in Clover
         ↓
 Send Payment Receipt
         ↓
-Create Order Entry (OE)
-        ↓
-Apply Payment to Work Order
+Process Customer Deposit (OE)
         ↓
 Order Parts
         ↓
@@ -81,9 +84,9 @@ Instead:
 
 This payment must be completed before:
 
-- Ordering parts
-- Scheduling work
-- Dispatching a technician
+- Ordering parts.
+- Scheduling work.
+- Dispatching a technician.
 
 ---
 
@@ -97,75 +100,44 @@ Using Clover:
 4. Complete the transaction.
 5. Retrieve the payment receipt.
 6. Record the Authorization ID.
-7. Enter the Authorization ID as the Purchase Order (PO) number on the BMS Work Order.
+7. Enter the Authorization ID as the Purchase Order (PO) number on the corresponding BMS Work Order.
 8. Email the payment receipt to the customer.
 
 Refer to the **Clover Training** procedure for detailed instructions.
 
 ---
 
-# Creating the Order Entry (OE)
+# Processing the Customer Deposit
 
-After payment has been received:
+After full payment has been received:
 
-Create an **Order Entry (OE)** in BMS.
+Process the customer's payment by creating an **Order Entry (OE)** in BMS.
 
-The Order Entry reserves the customer's payment against the future Work Order.
+The Customer Deposit process includes:
 
----
+- Creating the Order Entry.
+- Recording the customer deposit.
+- Applying the correct Tax District.
+- Linking the payment to the Work Order.
+- Applying the deposit to the final invoice.
+- Following the appropriate sales tax rules.
 
-## Charges
-
-Within the OE:
-
-Enter the payment amount in the **Charges** tab.
-
-Examples include:
-
-- Credit card payment
-- Interac transfer
-
-Confirm the received amount with the Accounting Department when required.
-
----
-
-## Comments
-
-In the **Comments** section, enter:
-
-```text
-Reference to payment for Work Order XXXX
-```
-
-Replace **XXXX** with the applicable Work Order number.
-
----
-
-## Apply the Payment
-
-Apply the Order Entry to the Work Order.
-
-Within the Work Order:
-
-- Open the **Misc Charges** section.
-- Allocate the payment as:
-
-```text
-Deposit
-```
-
-This links the customer's payment to the Work Order.
+> **Important**
+>
+> Follow the **Customer Deposits Process** procedure for the complete Order Entry workflow.
+>
+> The customer deposit must be processed before ordering parts or scheduling the work.
 
 ---
 
 # Ordering Parts
 
-Once payment has been successfully applied:
+Once the customer deposit has been successfully processed:
 
 - Order the required parts.
 - Continue with the normal scheduling process.
 
-Parts should **not** be ordered before payment has been secured.
+Parts should **never** be ordered before payment has been secured.
 
 ---
 
@@ -173,8 +145,8 @@ Parts should **not** be ordered before payment has been secured.
 
 Schedule the work only after:
 
-- Payment has been received.
-- The Order Entry has been completed.
+- Full payment has been received.
+- The customer deposit has been processed.
 - Required parts have been confirmed.
 
 Proceed with the standard Work Order scheduling process.
@@ -228,8 +200,8 @@ Prompt invoicing keeps customer records current and closes the Work Order effici
 
 Email the customer:
 
-- Final invoice
-- Payment receipt (if not previously provided)
+- Final invoice.
+- Payment receipt (if not previously provided).
 
 Verify successful delivery.
 
@@ -239,11 +211,11 @@ Verify successful delivery.
 
 Print or save copies of:
 
-- Payment receipt
-- Final invoice
-- Order Entry documentation
+- Payment receipt.
+- Final invoice.
+- Order Entry documentation.
 
-File all documents in the designated payment drawer located at the front of the Parts Department.
+File the documents in the designated payment drawer located at the front of the Parts Department.
 
 ---
 
@@ -254,8 +226,7 @@ Service Coordinators are responsible for:
 - Collecting full payment before ordering parts.
 - Processing payment through Clover.
 - Recording the Authorization ID on the Work Order.
-- Creating the Order Entry.
-- Applying the payment to the Work Order.
+- Processing the customer deposit following the Customer Deposits Process.
 - Scheduling work only after payment has been secured.
 - Following up with the supervisor.
 - Contacting the customer after service completion.
@@ -266,17 +237,16 @@ Service Coordinators are responsible for:
 
 # Coordinator Checklist
 
-Before Ordering Parts
+## Before Ordering Parts
 
 - [ ] Credit card information collected.
 - [ ] Full payment received.
 - [ ] Clover receipt generated.
 - [ ] Authorization ID entered on the Work Order.
-- [ ] Order Entry created.
-- [ ] Payment applied to Misc Charges.
+- [ ] Customer deposit processed.
 - [ ] Parts ordered.
 
-After Service
+## After Service
 
 - [ ] Technician punch verified.
 - [ ] Supervisor follow-up completed.
@@ -291,7 +261,7 @@ After Service
 
 - Never order parts before receiving payment.
 - Send the Clover receipt immediately after payment.
-- Verify that the Order Entry has been applied correctly.
+- Complete the Customer Deposit process before ordering parts.
 - Produce invoices during the same week the work is completed.
 - Keep all payment records organized for future reference.
 
@@ -307,19 +277,13 @@ Accepted quotations require **full payment**, not a pre-authorization.
 
 ## Ordering Parts Before Payment
 
-Parts should never be ordered until payment has been successfully received and recorded.
+Parts should never be ordered until payment has been successfully received.
 
 ---
 
-## Forgetting the Order Entry
+## Customer Deposit Not Processed
 
-The customer's payment must always be linked to the Work Order through an Order Entry.
-
----
-
-## Payment Not Applied to the Work Order
-
-Verify that the payment has been entered under the **Deposit** category in the Work Order's Misc Charges section.
+Always complete the Customer Deposits Process before ordering parts or scheduling work.
 
 ---
 

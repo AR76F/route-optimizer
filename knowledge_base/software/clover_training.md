@@ -138,9 +138,16 @@ After payment:
 
 Refer to:
 
-- coordinator_cash_customers_service_call.md
+- cash_customers_service_call.md
+- cash_customer_accepted_quote.md
 
 for the complete cash customer payment workflow.
+
+Refer to:
+
+- cash_customers_order_entry.md
+
+for the complete order entry workflow.
 
 ---
 
@@ -274,9 +281,3 @@ Remember that pre-authorizations expire after two weeks if the customer's paymen
 - Review pre-authorizations regularly to ensure they do not expire before parts become available.
 
 ---
-
-# Related Documents
-
-- cash_customers_service_call.md
-- service_call_management.md
-- invoicing.md

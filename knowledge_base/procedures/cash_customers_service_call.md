@@ -1,12 +1,18 @@
 # Cash Customers - Service Call Procedure
 
-# Version 2.0.0
+# Version 2.1.0
 
 # Last Updated: 2026-07-23
 
 # Updated By: Jipeng Li
 
 # Change Log:
+
+v2.1.0
+- Removed duplicated Order Entry (OE) instructions.
+- Added Customer Deposit processing section.
+- Referenced the Customer Deposits Process as the authoritative procedure.
+- Updated coordinator responsibilities, checklist, best practices, and common mistakes.
 
 v2.0.0
 - Completely redesigned procedure.
@@ -49,6 +55,8 @@ Contact Customer
 Confirm Final Charges
         ↓
 Convert Pre-Authorization to Payment
+        ↓
+Process Customer Deposit (OE)
         ↓
 Generate Invoice
         ↓
@@ -118,7 +126,7 @@ Refer to the **Clover Training** procedure for detailed instructions.
 Once the pre-authorization has been successfully completed:
 
 - Dispatch the technician.
-- Complete the work order following the standard dispatch procedure.
+- Complete the Work Order following the standard dispatch procedure.
 
 ---
 
@@ -139,7 +147,7 @@ Confirm:
 
 # Customer Follow-Up
 
-Contact the customer **once** after the technician has completed the work.
+Contact the customer once the technician has completed the work.
 
 During the call:
 
@@ -157,13 +165,34 @@ Whenever possible, send a preview of the invoice before requesting final payment
 
 Once customer approval has been received:
 
-Convert the Clover pre-authorization into the final payment.
+1. Convert the Clover pre-authorization into the final payment.
+2. Verify that the payment has been successfully processed.
+3. Generate the payment receipt.
+4. Record the Authorization ID if required.
+5. Save a copy of the payment receipt.
 
-After payment has been successfully processed:
+---
 
-- Generate the payment receipt.
-- Verify the payment amount.
-- Save a copy of the receipt.
+# Processing the Customer Deposit
+
+After the final payment has been completed:
+
+Process the customer's payment by creating an **Order Entry (OE)** in BMS.
+
+The Customer Deposit process includes:
+
+- Creating the Order Entry.
+- Recording the customer deposit.
+- Applying the correct Tax District.
+- Linking the payment to the Work Order.
+- Applying the deposit to the final invoice.
+- Following the appropriate sales tax rules.
+
+> **Important**
+>
+> Follow the **Customer Deposits Process** procedure for the complete Order Entry workflow.
+>
+> The customer deposit should be completed as soon as the payment has been successfully processed.
 
 ---
 
@@ -184,8 +213,8 @@ After payment has been completed:
 
 Email the customer:
 
-- Final invoice
-- Payment receipt
+- Final invoice.
+- Payment receipt.
 
 Verify that both documents have been successfully delivered.
 
@@ -195,8 +224,9 @@ Verify that both documents have been successfully delivered.
 
 Print or save copies of:
 
-- Final invoice
-- Payment receipt
+- Final invoice.
+- Payment receipt.
+- Order Entry documentation.
 
 File the documents in the designated payment drawer located at the front of the Parts Department.
 
@@ -239,7 +269,8 @@ Service Coordinators are responsible for:
 - Recording the Clover Authorization ID on the Work Order.
 - Following up with the supervisor after service completion.
 - Contacting the customer to review the completed work.
-- Converting the pre-authorization into final payment.
+- Converting the pre-authorization into the final payment.
+- Processing the customer deposit following the Customer Deposits Process.
 - Producing and sending the invoice during the same week.
 - Sending the payment receipt.
 - Filing all required documentation.
@@ -248,24 +279,25 @@ Service Coordinators are responsible for:
 
 # Coordinator Checklist
 
-Before Dispatch
+## Before Dispatch
 
 - [ ] Credit card information collected.
 - [ ] $750 pre-authorization completed.
 - [ ] Authorization ID entered on the BMS Work Order.
 - [ ] Technician dispatched.
 
-After Service
+## After Service
 
 - [ ] Technician punch verified.
 - [ ] Supervisor follow-up completed.
 - [ ] Customer contacted.
 - [ ] Final amount confirmed.
 - [ ] Pre-authorization converted to payment.
+- [ ] Customer deposit processed.
 - [ ] Invoice produced.
 - [ ] Invoice emailed.
 - [ ] Payment receipt emailed.
-- [ ] Documents filed.
+- [ ] Documentation filed.
 
 ---
 
@@ -273,6 +305,7 @@ After Service
 
 - Obtain the pre-authorization before dispatching the technician.
 - Follow up with the customer promptly after service completion.
+- Complete the Customer Deposits Process immediately after converting the pre-authorization into the final payment.
 - Produce invoices during the same week the work was completed.
 - Keep all payment documentation organized.
 - Create a Clover customer profile whenever possible to simplify future transactions.
@@ -292,6 +325,14 @@ Always complete the required pre-authorization before dispatching a technician.
 Remember that a pre-authorization only reserves funds.
 
 It must later be converted into the final payment.
+
+---
+
+## Customer Deposit Not Processed
+
+Converting the pre-authorization into a payment does **not** complete the accounting process.
+
+Always complete the **Customer Deposits Process** to correctly record and apply the customer's payment in BMS.
 
 ---
 
