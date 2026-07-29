@@ -24,6 +24,7 @@
 - Added service assistant integration
 - Added conversation memory feature 
     - Each conversation clear leads to a clean slate
+- Added OCR capabilities
 """
 
 import os
@@ -967,42 +968,98 @@ def render_service_assistant():
     if "assistant_session_id" not in st.session_state:
         st.session_state.assistant_session_id = str(uuid.uuid4())
 
-    clear_col, _ = st.columns([1, 5])
+    if "assistant_temp_context" not in st.session_state:
+        st.session_state.assistant_temp_context = ""
+
+    if "assistant_upload_key" not in st.session_state:
+        st.session_state.assistant_upload_key = 0
+
+    upload_col, clear_col = st.columns([2, 1])
+
+    with upload_col:
+        uploaded_files = st.file_uploader(
+            "Temporary files (images, PDFs, text)",
+            type=["png", "jpg", "jpeg", "webp", "pdf", "txt", "md"],
+            accept_multiple_files=True,
+            key=f"assistant_uploads_{st.session_state.assistant_upload_key}",
+            help="These files are only used during this conversation.",
+        )
+
     with clear_col:
         if st.button("🗑️ Clear conversation", key="assistant_clear"):
             st.session_state.assistant_messages = [
                 {"role": "assistant", "content": "Bonjour — Posez une question. Hi — Ask a question."}
             ]
-            
-            # Start a brand-new conversation
+
             st.session_state.assistant_session_id = str(uuid.uuid4())
+
+            # Reset temporary context
+            st.session_state.assistant_temp_context = ""
+
+            # Force a fresh uploader
+            st.session_state.assistant_upload_key += 1
+
             st.rerun()
+
+    if uploaded_files:
+        st.caption(f"📎 Attached for this conversation: {len(uploaded_files)} file(s)")
+
+    # Avoid assigning the return value back into session_state.
+    # The widget already manages that. Otherwise error.
+    st.text_area(
+        "Optional temporary notes",
+        placeholder = "Libre à vous de prendre des notes ici :)",
+        height = 120,
+        key = "assistant_temp_context",
+    )
+
+    temp_context = st.session_state.get(
+        "assistant_temp_context",
+        ""
+    ).strip()
 
     for msg in st.session_state.assistant_messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    question = st.chat_input("Ask a service question...", key="assistant_chat_input")
+    question = st.chat_input(
+        "Ask a service question...",
+        key="assistant_chat_input",
+    )
 
     if question:
         st.session_state.assistant_messages.append(
-            {"role": "user", "content": question}
+            {
+                "role": "user",
+                "content": question,
+            }
         )
 
         with st.chat_message("assistant"):
             with st.spinner("Analyzing request..."):
                 try:
                     answer = ask_service_assistant(
-                        question = question,
-                        session_id = st.session_state.assistant_session_id,
+                        question=question,
+                        session_id=st.session_state.assistant_session_id,
+                        temporary_context=temp_context or None,
+                        uploaded_sources=uploaded_files,
                     )
+
                 except Exception as e:
-                    answer = f"Sorry — I hit an error: {type(e).__name__}: {e}"
+                    answer = (
+                        f"Sorry — I hit an error: "
+                        f"{type(e).__name__}: {e}"
+                    )
+
                 st.markdown(answer)
 
         st.session_state.assistant_messages.append(
-            {"role": "assistant", "content": answer}
+            {
+                "role": "assistant",
+                "content": answer,
+            }
         )
+
         st.rerun()
 
 # ────────────────────────────────────────────────────────────────
@@ -4186,7 +4243,7 @@ if page == "🏠 Route Optimizer":
 
     with st.expander(
         "🤖 Service Coordinator Assistant",
-        expanded=False
+        expanded = False
     ):
         render_service_assistant()
 
