@@ -17,7 +17,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 )
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-08-04-nuit-exterieur-v24"
+APP_VERSION = "2026-08-04-ot-cap-rt-only-v25"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -165,6 +165,26 @@ def infer_category(d, time_in: float, time_out: float) -> str:
             return "Double Time"
         return "Overtime"
     return "Regular Time"
+
+def rt_hours_in_span(d, time_in: float, time_out: float) -> float:
+    """
+    Retourne uniquement les heures classées RT (Regular Time) dans l'intervalle,
+    selon le jour de semaine et les plages horaires. Sert au cumul du cap
+    quotidien de 8h : seules les vraies heures RT comptent vers ce plafond,
+    PAS les heures déjà en OT (matin/soir) ou DT (nuit).
+    """
+    if time_in is None or time_out is None:
+        return 0.0
+    d = _coerce_date(d)
+    wd = d.weekday()
+    if wd == 6:   # dimanche : tout DT
+        return 0.0
+    if wd == 5:   # samedi : tout OT
+        return 0.0
+    # Semaine : RT seulement entre 8h et 17h
+    overlap_start = max(float(time_in), 8.0)
+    overlap_end   = min(float(time_out), 17.0)
+    return round(max(0.0, overlap_end - overlap_start), 4)
 
 def compute_hours(time_in, time_out, meal_hrs: float = 0.0) -> float:
     if time_in is None or time_out is None:
@@ -986,15 +1006,16 @@ def show_timesheet():
                 row_cat = row.get("category", "")
                 absence = row_cat in ("Vacances", "Maladie", "Férié", "Heures en banque")
                 if ti_ is not None and to__ is not None and not absence:
-                    raw_hrs = max(0.0, float(to__) - float(ti_))
-                    # Pour les lignes déjà soumises, seules les heures catégorisées RT
-                    # comptent vers le cap quotidien — pas les heures déjà en OT/DT
+                    # Vers le cap de 8h RT, ne compter QUE les heures réellement
+                    # en RT (plage 8h-17h en semaine), pas les heures OT/DT.
+                    rt_hrs = rt_hours_in_span(d, float(ti_), float(to__))
+                    # Pour les lignes déjà soumises, ne compter que si elles sont RT
                     if row.get("deja_bms", False):
                         if row_cat == "Regular Time" or not row_cat:
-                            rt_accumulated = min(8.0, rt_accumulated + raw_hrs)
-                        # Si déjà OT/DT, ne pas l'ajouter au cumul RT
+                            rt_accumulated = min(8.0, rt_accumulated + rt_hrs)
+                        # Si déjà OT/DT, ne rien ajouter au cumul RT
                     else:
-                        rt_accumulated = min(8.0, rt_accumulated + raw_hrs)
+                        rt_accumulated = min(8.0, rt_accumulated + rt_hrs)
                 if row.get("time_out") is not None:
                     last_time_out = row["time_out"]
 
