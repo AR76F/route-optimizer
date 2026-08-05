@@ -17,7 +17,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 )
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-08-04-mobile-labels-v23"
+APP_VERSION = "2026-08-04-nuit-exterieur-v24"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -382,6 +382,7 @@ def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[d
                     "oui" if r.get("deja_bms", False) else "",
                     str(r.get("location", "")),
                     str(r.get("location_code", "")),
+                    "oui" if r.get("nuit", False) else "",
                 ])
 
             if skipped > 0 and not new_rows:
@@ -923,7 +924,8 @@ def show_timesheet():
             st.session_state[exp_key] = (day_total == 0 and wd < 5)
 
         souper_tag = "  🍽️ Prime souper" if prime_souper else ""
-        with st.expander(f"{day_str}   {title_hrs}{line_label}{souper_tag}",
+        nuit_tag = "  🌙 Nuit à l'extérieur" if st.session_state.get(f"nuit_{state_key}_{d.isoformat()}", False) else ""
+        with st.expander(f"{day_str}   {title_hrs}{line_label}{souper_tag}{nuit_tag}",
                          expanded=st.session_state[exp_key]):
 
             if overflow_warning:
@@ -997,7 +999,7 @@ def show_timesheet():
                     last_time_out = row["time_out"]
 
             st.markdown("<div style='margin-top:6px;'>", unsafe_allow_html=True)
-            col_add, col_reset_day = st.columns([2, 1])
+            col_add, col_nuit, col_reset_day = st.columns([2, 1.3, 1])
             with col_add:
                 if st.button("➕ Ajouter une ligne", key=f"add_day_{d.isoformat()}"):
                     new_row = _blank_row(d)
@@ -1006,6 +1008,15 @@ def show_timesheet():
                     last_idx = day_rows[-1][0]
                     rows.insert(last_idx + 1, new_row)
                     st.session_state[exp_key] = True  # garder l'expander ouvert
+                    st.rerun()
+            with col_nuit:
+                nuit_key = f"nuit_{state_key}_{d.isoformat()}"
+                nuit_actif = st.session_state.get(nuit_key, False)
+                label_nuit = "🌙 Nuit à l'extérieur ✅" if nuit_actif else "🌙 Nuit à l'extérieur"
+                if st.button(label_nuit, key=f"nuit_btn_{d.isoformat()}",
+                             help="Marquer cette journée comme nuit passée à l'extérieur"):
+                    st.session_state[nuit_key] = not nuit_actif
+                    st.session_state[exp_key] = True
                     st.rerun()
             with col_reset_day:
                 if st.button("🗑️ Réinitialiser", key=f"reset_day_{d.isoformat()}",
@@ -1164,6 +1175,17 @@ def show_timesheet():
                 st.session_state["_missing_ref_msg"] = None
                 json_rows = _build_json_rows(new_rows_only)
                 valid = [r for r in json_rows if r.get("heures", 0) > 0]
+                # Attacher le marqueur "Nuit à l'extérieur" (par jour) à chaque ligne
+                _MOItoNUM = {"JAN":1,"FEB":2,"MAR":3,"APR":4,"MAY":5,"JUN":6,
+                             "JUL":7,"AUG":8,"SEP":9,"OCT":10,"NOV":11,"DEC":12}
+                for r in valid:
+                    iso = ""
+                    try:
+                        dd, mm, yy = str(r.get("date", "")).split("-")
+                        iso = f"{int(yy):04d}-{_MOItoNUM[mm.upper()]:02d}-{int(dd):02d}"
+                    except Exception:
+                        iso = ""
+                    r["nuit"] = st.session_state.get(f"nuit_{state_key}_{iso}", False)
                 if not valid:
                     st.warning("⚠️ Aucune nouvelle ligne à sauvegarder.")
                 else:
