@@ -17,7 +17,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 )
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-07-13-ottawa-autoloc-nojson-v21"
+APP_VERSION = "2026-08-04-mobile-labels-v23"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -65,8 +65,10 @@ LOCATIONS = [
 ]
 LOCATION_DEFAULT = "Candiac (Z8)"
 
-# Type de travail — '—' force un choix conscient
-JOB_TYPES = ["—", "WO (Service)", "WO Interne", "PM"]
+# Type de travail — '—' force un choix conscient.
+# Le mot distinctif est placé en PREMIER pour rester lisible sur mobile
+# (les menus déroulants tronquent la fin du texte).
+JOB_TYPES = ["—", "Service (WO)", "Interne (WO)", "PM"]
 
 def _location_pour_wo(label: str):
     """Si le WO interne est un déplacement vers une succursale, retourne la
@@ -491,7 +493,7 @@ def load_week_from_gsheet(emp_num: str, p_start: date, p_end: date) -> list[dict
                 "time_in":     ti,
                 "time_out":    to,
                 "category":    cat_map.get(pay_type, "Regular Time"),
-                "job_type":    "PM" if str(rec.get("trans_type", "WO")).strip() == "PM" else "WO (Service)",
+                "job_type":    "PM" if str(rec.get("trans_type", "WO")).strip() == "PM" else "Service (WO)",
                 "trans_type":  str(rec.get("trans_type", "WO")).strip(),
                 "order_ref":   str(rec.get("order_ref", "")).strip(),
                 "wo_interne":  "",
@@ -653,6 +655,25 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
     color: #856404;
     margin-bottom: 0.4rem;
 }
+
+/* Menus déroulants : éviter que le texte sélectionné soit coupé sur mobile.
+   On laisse le texte revenir à la ligne plutôt que d'être tronqué avec '...'. */
+div[data-baseweb="select"] > div {
+    height: auto !important;
+    min-height: 38px;
+}
+div[data-baseweb="select"] div[title],
+div[data-baseweb="select"] span {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: unset !important;
+    line-height: 1.2 !important;
+}
+/* Options ouvertes de la liste déroulante : texte complet sur plusieurs lignes */
+ul[role="listbox"] li {
+    white-space: normal !important;
+    height: auto !important;
+}
 </style>
 """
 
@@ -671,8 +692,10 @@ def show_timesheet():
     """, unsafe_allow_html=True)
 
     wo_list = load_wo_interne()
-    wo_labels = [f"{desc}  ({no})" for desc, no in wo_list]
-    wo_by_label = {f"{desc}  ({no})": no for desc, no in wo_list}
+    # Étiquette = description seule (le numéro alourdit le texte et se fait couper
+    # sur mobile). Le numéro reste associé en coulisse via wo_by_label.
+    wo_labels = [desc for desc, no in wo_list]
+    wo_by_label = {desc: no for desc, no in wo_list}
 
     with st.sidebar:
         st.markdown("### 👤 Employé")
@@ -888,11 +911,19 @@ def show_timesheet():
         rt_total_jour = hrs_by_cat.get("Regular Time", 0.0)
         overflow_warning = (wd < 5 and rt_total_jour > 8.0)
 
+        # ── Prime de souper : 10h ou plus de TRAVAIL dans la journée ──
+        # Les absences (vacances, maladie, férié) ne comptent pas — pas de travail effectué.
+        CATS_TRAVAIL = ("Regular Time", "Overtime", "Double Time",
+                        "Heures en banque", "OT en banque", "DT en banque")
+        heures_travaillees = sum(hrs_by_cat.get(c, 0.0) for c in CATS_TRAVAIL)
+        prime_souper = heures_travaillees >= 10.0
+
         exp_key = f"exp_{state_key}_{d.isoformat()}"
         if exp_key not in st.session_state:
             st.session_state[exp_key] = (day_total == 0 and wd < 5)
 
-        with st.expander(f"{day_str}   {title_hrs}{line_label}",
+        souper_tag = "  🍽️ Prime souper" if prime_souper else ""
+        with st.expander(f"{day_str}   {title_hrs}{line_label}{souper_tag}",
                          expanded=st.session_state[exp_key]):
 
             if overflow_warning:
@@ -903,6 +934,16 @@ def show_timesheet():
                     ⚠️ <b>{rt_total_jour:.2f}h RT cumulées</b> ce jour — dépasse le cap de 8h par
                     <b>{excedent:.2f}h</b>. Les {excedent:.2f}h excédentaires devraient être en
                     <b>OT</b>. Correction manuelle requise dans BMS.
+                </div>
+                """, unsafe_allow_html=True)
+
+            if prime_souper:
+                st.markdown(f"""
+                <div style="background:#1f3a2a;border:1px solid #27ae60;border-radius:8px;
+                            padding:0.7rem 1rem;margin-bottom:0.8rem;color:#a7e9c1;font-size:0.85rem;">
+                    🍽️ <b>Prime de souper</b> — {heures_travaillees:.2f}h travaillées ce jour
+                    (10h ou plus). Tu as droit à une prime de souper : n'oublie pas d'en faire
+                    la demande.
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -1083,7 +1124,7 @@ def show_timesheet():
                     missing_type_dates.append(fmt_date_fr(r.get("date")))
                     missing_ref_uids.add(r.get("uid", ""))
                     continue  # inutile de valider l'Order Ref tant que le Type n'est pas choisi
-                if not is_valid_order_ref(r.get("order_ref", ""), r.get("job_type", "") == "WO Interne"):
+                if not is_valid_order_ref(r.get("order_ref", ""), r.get("job_type", "") == "Interne (WO)"):
                     missing_ref_dates.append(fmt_date_fr(r.get("date")))
                     missing_ref_uids.add(r.get("uid", ""))
                     continue
@@ -1632,7 +1673,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
     with c5:
         if not is_absence:
             missing_ref_uids = st.session_state.get("_missing_ref_uids", set())
-            is_wo            = (job_type == "WO Interne")
+            is_wo            = (job_type == "Interne (WO)")
             needs_highlight  = (uid in missing_ref_uids) and not is_valid_order_ref(order_ref, is_wo)
             field_box = st.container(border=needs_highlight)
             with field_box:
@@ -1643,12 +1684,12 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                         f'margin-bottom:2px;">{label_txt}</div>',
                         unsafe_allow_html=True
                     )
-                if job_type == "WO Interne":
+                if job_type == "Interne (WO)":
                     try:
                         wo_idx = wo_labels.index(wo_interne_sel) + 1
                     except ValueError:
                         wo_idx = 0
-                    wo_sel = st.selectbox("WO Interne", ["— choisir —"] + wo_labels,
+                    wo_sel = st.selectbox("Interne (WO)", ["— choisir —"] + wo_labels,
                                           index=wo_idx, key=f"wo_{uid}")
                     order_ref      = wo_by_label.get(wo_sel, "") if wo_sel != "— choisir —" else ""
                     wo_interne_sel = wo_sel if wo_sel != "— choisir —" else ""
