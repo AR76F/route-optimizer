@@ -17,7 +17,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 )
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-08-04-lock-technicien-session-v29"
+APP_VERSION = "2026-08-04-cols-inout-plus-petit-v30"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -1721,7 +1721,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
     # Si une décision split a déjà été prise → heures figées
     split_decided = st.session_state.get(f"split_confirm_{uid}") is not None
 
-    c1, c2, c3, c4, c5, c8, c6 = st.columns([0.75, 0.75, 0.95, 0.95, 1.4, 1.2, 1.3])
+    c1, c2, c3, c4, c5, c8, c6 = st.columns([0.5, 0.5, 1.1, 1.1, 1.65, 1.2, 1.3])
 
     with c1:
         if split_decided:
