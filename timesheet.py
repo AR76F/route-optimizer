@@ -17,7 +17,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 )
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-08-04-retrait-case-bms-v28"
+APP_VERSION = "2026-08-04-lock-technicien-session-v29"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -764,25 +764,43 @@ def show_timesheet():
         st.markdown("### 👤 Employé")
         tech_labels = [f"{nom}  ({num})" for nom, num in TECHNICIANS]
         url_emp = st.query_params.get("emp", "").strip().upper()
-        is_tech = bool(url_emp)
-        default_idx = 0
+
+        # Mémoriser le verrouillage technicien dans la session : si l'app a été
+        # ouverte via un lien ?emp=..., on garde ce verrou même après une
+        # navigation vers une autre page (qui fait perdre le paramètre d'URL).
         if url_emp:
+            st.session_state["_locked_emp"] = url_emp
+            # Réinjecter le paramètre dans l'URL pour la cohérence
+        locked_emp = st.session_state.get("_locked_emp", "")
+        effective_emp = url_emp or locked_emp
+
+        # Réinjecter le paramètre dans l'URL si absent mais verrouillé en session
+        # (garde le contexte technicien après navigation ou rechargement).
+        if locked_emp and not url_emp:
+            try:
+                st.query_params["emp"] = locked_emp
+            except Exception:
+                pass
+
+        is_tech = bool(effective_emp)
+        default_idx = 0
+        if effective_emp:
             for i, (nom, num) in enumerate(TECHNICIANS):
-                if num.upper() == url_emp:
+                if num.upper() == effective_emp:
                     default_idx = i
                     break
 
         if is_tech:
             # Technicien — nom affiché en lecture seule, pas de dropdown
-            _nom_tech = TECHNICIANS[default_idx][0] if default_idx < len(TECHNICIANS) else url_emp
+            _nom_tech = TECHNICIANS[default_idx][0] if default_idx < len(TECHNICIANS) else effective_emp
             st.markdown(
                 f'<div style="background:#1e3a5f;border:1px solid #2d5a8e;border-radius:8px;'
                 f'padding:0.5rem 0.9rem;color:#e8f4fd;font-size:0.9rem;font-weight:500;">'
-                f'👤 {_nom_tech} <span style="color:#7eb8d4;font-size:0.78rem;">({url_emp})</span></div>',
+                f'👤 {_nom_tech} <span style="color:#7eb8d4;font-size:0.78rem;">({effective_emp})</span></div>',
                 unsafe_allow_html=True
             )
             emp_nom = _nom_tech
-            emp_num = url_emp
+            emp_num = effective_emp
         else:
             # Superviseur — dropdown complet
             sel_tech = st.selectbox("Nom", tech_labels, index=default_idx, key="sel_tech")
