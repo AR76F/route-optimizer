@@ -17,7 +17,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 )
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-08-04-cols-inout-plus-petit-v30"
+APP_VERSION = "2026-08-04-cap-rt-reel-garder-v32"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -988,10 +988,6 @@ def show_timesheet():
         n_lines    = len(day_rows)
         line_label = f"  ({n_lines} lignes)" if n_lines > 1 else ""
 
-        # ── Détection : RT cumulé > 8h en semaine (cap manqué, à corriger dans BMS) ──
-        rt_total_jour = hrs_by_cat.get("Regular Time", 0.0)
-        overflow_warning = (wd < 5 and rt_total_jour > 8.0)
-
         # ── Prime de souper : 10h ou plus de TRAVAIL dans la journée ──
         # Les absences (vacances, maladie, férié) ne comptent pas — pas de travail effectué.
         CATS_TRAVAIL = ("Regular Time", "Overtime", "Double Time",
@@ -1008,16 +1004,6 @@ def show_timesheet():
         with st.expander(f"{day_str}   {title_hrs}{line_label}{souper_tag}{nuit_tag}",
                          expanded=st.session_state[exp_key]):
 
-            if overflow_warning:
-                excedent = rt_total_jour - 8.0
-                st.markdown(f"""
-                <div style="background:#3a1f1f;border:1px solid #c0392b;border-radius:8px;
-                            padding:0.7rem 1rem;margin-bottom:0.8rem;color:#ffb3a7;font-size:0.85rem;">
-                    ⚠️ <b>{rt_total_jour:.2f}h RT cumulées</b> ce jour — dépasse le cap de 8h par
-                    <b>{excedent:.2f}h</b>. Les {excedent:.2f}h excédentaires devraient être en
-                    <b>OT</b>. Correction manuelle requise dans BMS.
-                </div>
-                """, unsafe_allow_html=True)
 
             if prime_souper:
                 st.markdown(f"""
@@ -1066,16 +1052,25 @@ def show_timesheet():
                 row_cat = row.get("category", "")
                 absence = row_cat in ("Vacances", "Maladie", "Férié", "Heures en banque")
                 if ti_ is not None and to__ is not None and not absence:
-                    # Vers le cap de 8h RT, ne compter QUE les heures réellement
-                    # en RT (plage 8h-17h en semaine), pas les heures OT/DT.
-                    rt_hrs = rt_hours_in_span(d, float(ti_), float(to__))
-                    # Pour les lignes déjà soumises, ne compter que si elles sont RT
+                    heures_ligne = max(0.0, float(to__) - float(ti_) - float(row.get("meal_hrs", 0) or 0))
+                    uid_row = row.get("uid", "")
+                    split_decide = st.session_state.get(f"split_confirm_{uid_row}")
                     if row.get("deja_bms", False):
-                        if row_cat == "Regular Time" or not row_cat:
-                            rt_accumulated = min(8.0, rt_accumulated + rt_hrs)
-                        # Si déjà OT/DT, ne rien ajouter au cumul RT
+                        # Ligne déjà soumise : compter ses heures RÉELLES si RT.
+                        if row_cat == "Regular Time":
+                            rt_accumulated = min(8.0, rt_accumulated + heures_ligne)
+                        elif not row_cat:
+                            rt_accumulated = min(8.0, rt_accumulated + rt_hours_in_span(d, float(ti_), float(to__)))
+                    elif split_decide == "non" or row_cat == "Regular Time":
+                        # Le technicien a choisi de GARDER en RT (début hâtif décidé
+                        # par lui) → toutes les heures de la ligne comptent comme RT
+                        # réel vers le cap de 8h. Ainsi la ligne suivante bascule en
+                        # OT une fois les 8h atteintes.
+                        rt_accumulated = min(8.0, rt_accumulated + heures_ligne)
                     else:
-                        rt_accumulated = min(8.0, rt_accumulated + rt_hrs)
+                        # Ligne pas encore décidée : horaire théorique (plage 8-17h).
+                        rt_theorique = rt_hours_in_span(d, float(ti_), float(to__))
+                        rt_accumulated = min(8.0, rt_accumulated + rt_theorique)
                 if row.get("time_out") is not None:
                     last_time_out = row["time_out"]
 
