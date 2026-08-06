@@ -17,7 +17,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 )
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-08-04-ot-cap-rt-only-v25"
+APP_VERSION = "2026-08-04-retrait-case-bms-v28"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -695,6 +695,48 @@ ul[role="listbox"] li {
     white-space: normal !important;
     height: auto !important;
 }
+
+/* ── Tablette / iPad (largeur intermédiaire) ──
+   Sous 1200px, les 8 colonnes de saisie deviennent serrées. On réduit la taille
+   du texte et les espacements pour que les WO internes et les textes longs
+   restent lisibles sans être coupés. Ne touche pas au grand écran ni au mobile
+   (qui empile déjà les colonnes sous ~640px). */
+@media (min-width: 641px) and (max-width: 1200px) {
+    /* Texte des menus déroulants et champs plus compact */
+    div[data-baseweb="select"] div,
+    div[data-baseweb="select"] span,
+    .stTextInput input,
+    ul[role="listbox"] li {
+        font-size: 0.78rem !important;
+    }
+    /* Étiquettes des champs plus petites */
+    .stSelectbox label, .stTextInput label {
+        font-size: 0.72rem !important;
+    }
+    /* Resserrer le padding horizontal interne des colonnes */
+    div[data-testid="column"] {
+        padding-left: 0.15rem !important;
+        padding-right: 0.15rem !important;
+    }
+    /* Menus déroulants : réduire le padding interne pour gagner de la place */
+    div[data-baseweb="select"] > div {
+        padding-left: 0.3rem !important;
+        min-height: 34px;
+    }
+}
+
+/* ── iPad étroit / paysage compact ── (encore un cran plus serré) */
+@media (min-width: 641px) and (max-width: 900px) {
+    div[data-baseweb="select"] div,
+    div[data-baseweb="select"] span,
+    .stTextInput input,
+    ul[role="listbox"] li {
+        font-size: 0.72rem !important;
+    }
+    .stSelectbox label, .stTextInput label {
+        font-size: 0.68rem !important;
+    }
+}
 </style>
 """
 
@@ -1036,7 +1078,16 @@ def show_timesheet():
                 label_nuit = "🌙 Nuit à l'extérieur ✅" if nuit_actif else "🌙 Nuit à l'extérieur"
                 if st.button(label_nuit, key=f"nuit_btn_{d.isoformat()}",
                              help="Marquer cette journée comme nuit passée à l'extérieur"):
-                    st.session_state[nuit_key] = not nuit_actif
+                    nouvel_etat = not nuit_actif
+                    st.session_state[nuit_key] = nouvel_etat
+                    # Maintenir aussi un ensemble global (indépendant de la semaine)
+                    # pour détecter les blocs de nuits consécutives à cheval sur
+                    # deux semaines de paie.
+                    nuits_globales = st.session_state.setdefault("_nuits_globales", set())
+                    if nouvel_etat:
+                        nuits_globales.add(d.isoformat())
+                    else:
+                        nuits_globales.discard(d.isoformat())
                     st.session_state[exp_key] = True
                     st.rerun()
             with col_reset_day:
@@ -1121,7 +1172,45 @@ def show_timesheet():
         </div>"""
 
     st.markdown("---")
+
+    # ── Bonus nuits consécutives (2+ nuits d'affilée = 1 bonus par bloc) ──
+    # Calculé sur l'ensemble global des nuits marquées (peut traverser 2 semaines).
+    nuits_globales = st.session_state.get("_nuits_globales", set())
+    bonus_html = ""
+    if nuits_globales:
+        from datetime import date as _date, timedelta as _td
+        dates_nuits = sorted(_date.fromisoformat(x) for x in nuits_globales)
+        # Regrouper en blocs de jours consécutifs
+        blocs = []
+        bloc_courant = [dates_nuits[0]]
+        for dd in dates_nuits[1:]:
+            if (dd - bloc_courant[-1]).days == 1:
+                bloc_courant.append(dd)
+            else:
+                blocs.append(bloc_courant)
+                bloc_courant = [dd]
+        blocs.append(bloc_courant)
+        # Ne garder que les blocs d'au moins 2 nuits, et qui touchent la semaine affichée
+        blocs_bonus = [b for b in blocs if len(b) >= 2]
+        blocs_semaine = [b for b in blocs_bonus
+                         if any(p_start <= dd <= p_end for dd in b)]
+        if blocs_semaine:
+            lignes_b = []
+            for b in blocs_semaine:
+                d1, d2 = b[0], b[-1]
+                lignes_b.append(
+                    f"{fmt_date_fr(d1)} → {fmt_date_fr(d2)} ({len(b)} nuits)")
+            détail = "  ·  ".join(lignes_b)
+            bonus_html = f"""
+            <div style="background:#1f2f3a;border:1px solid #3a7ca5;border-radius:8px;
+                        padding:0.7rem 1rem;margin-bottom:0.8rem;color:#a7d4e9;font-size:0.85rem;">
+                🌙🌙 <b>Bonus nuits consécutives</b> — {len(blocs_semaine)} bloc(s) de 2 nuits
+                ou plus cette semaine : {détail}. À noter pour la prime.
+            </div>"""
+
     with st.container():
+        if bonus_html:
+            st.markdown(bonus_html, unsafe_allow_html=True)
         st.markdown(f"""
         <div class="submit-section">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;">
@@ -1614,7 +1703,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
     # Si une décision split a déjà été prise → heures figées
     split_decided = st.session_state.get(f"split_confirm_{uid}") is not None
 
-    c1, c2, c3, c4, c5, c8, c6, c7 = st.columns([0.7, 0.7, 0.9, 0.9, 1.3, 1.1, 1.2, 0.5])
+    c1, c2, c3, c4, c5, c8, c6 = st.columns([0.75, 0.75, 0.95, 0.95, 1.4, 1.2, 1.3])
 
     with c1:
         if split_decided:
@@ -1767,11 +1856,9 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                 location = st.selectbox("Localisation", LOCATIONS, index=loc_idx, key=loc_key)
         else:
             location = row.get("location", LOCATION_DEFAULT)
-    with c7:
-        st.markdown("<div style='font-size:0.72rem;color:#888;margin-bottom:4px;'>BMS</div>",
-                    unsafe_allow_html=True)
-        deja = st.checkbox("✓", value=row.get("deja_bms", False), key=f"bms_{uid}",
-                           help="Déjà entré dans BMS")
+    # La case "✓ BMS" a été retirée (Donald/Sébastien sont gérés automatiquement
+    # par le mode scan du watcher). deja_bms reste False par défaut.
+    deja = row.get("deja_bms", False)
 
     # ── Info bar ──────────────────────────────────────────────────
     if ti is not None and to_ is not None:
