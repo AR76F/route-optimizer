@@ -77,6 +77,8 @@ The current customer ranking is maintained in the Power BI report:
 
 - **Customer Ranking — Sales & Margins (Power BI)**
 
+https://app.powerbi.com/groups/me/reports/db0e4123-a8ed-4260-a86a-18afaaf5013b/ReportSection90ce6f9fb7c0b0bd3100?ctid=b31a5d86-6dda-4457-85e5-c55bbc07923d&experience=power-bi
+
 ---
 
 ## Summary

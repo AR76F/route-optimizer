@@ -52,6 +52,7 @@ import pandas as pd
 import requests
 
 from service_assistant import ask_service_assistant
+from prioritization_engine import JobInput, determine_priority, explain_priority
 
 from timesheet import show_timesheet
 
@@ -954,6 +955,347 @@ def render_page_1():
         st.success(f"**Total distance:** {km:.1f} km • **Total time:** {mins:.0f} mins (live traffic)")
 
 
+# ────────────────────────────────────────────────────────────────
+# Prioritization Tool (modal)
+# ────────────────────────────────────────────────────────────────
+PRIORITY_JOB_TYPES = [
+    "Equipment Failure",
+    "Alarm",
+    "Service Call",
+    "Commissioning",
+    "Preventive Maintenance",
+]
+
+PRIORITY_ALARM_TYPES = ["Blocking", "Reliability", "Minor"]
+PRIORITY_CLIENT_CLASS_LABELS = {
+    "C1": "Gouvernement, centres de données, hôpitaux et infrastructure critique.",
+    "C2": "Télécommunications.",
+    "C3": "Clients avec contrat de maintenance.",
+    "C4": "Clients sans contrat, ponctuels et résidentiels.",
+}
+PRIORITY_CLIENT_CLASSES = ["C1", "C2", "C3", "C4"]
+PRIORITY_CLIENT_CLASS_OPTIONS = [
+    f"{code} — {PRIORITY_CLIENT_CLASS_LABELS[code]}"
+    for code in PRIORITY_CLIENT_CLASSES
+]
+PRIORITY_YES_NO = ["Yes", "No"]
+PRIORITY_PM_TYPES = [
+    "Quinquennial",
+    "Monthly",
+    "Customer Window",
+    "Annual CSA",
+    "Annual",
+    "Full Inspection",
+    "Generator Inspection",
+]
+
+def _priority_ensure_state() -> None:
+    if "priority_tool_open" not in st.session_state:
+        st.session_state.priority_tool_open = False
+    if "priority_step" not in st.session_state:
+        st.session_state.priority_step = 0
+    if "priority_answers" not in st.session_state:
+        st.session_state.priority_answers = {}
+    if "priority_result" not in st.session_state:
+        st.session_state.priority_result = None
+
+
+def _priority_reset_state() -> None:
+    st.session_state.priority_tool_open = False
+    st.session_state.priority_step = 0
+    st.session_state.priority_answers = {}
+    st.session_state.priority_result = None
+
+
+def _priority_bool_from_yes_no(value: str | None) -> Optional[bool]:
+    if value == "Yes":
+        return True
+    if value == "No":
+        return False
+    return None
+
+
+def _priority_answers_to_job_input(answers: dict) -> JobInput:
+    job_type = answers.get("job_type")
+    alarm_type = answers.get("alarm_type")
+    pm_type = answers.get("pm_type")
+    customer_class = answers.get("customer_class")
+    notes = (answers.get("description") or "").strip()
+    wo_number = (answers.get("wo_number") or "").strip()
+
+    payload: Dict[str, Any] = {"notes": "\n".join([x for x in [f"WO: {wo_number}" if wo_number else "", notes] if x]).strip()}
+
+    if customer_class:
+        payload["customer_class"] = customer_class
+
+    # Job type
+    if job_type == "Commissioning":
+        payload["commissioning"] = True
+    elif job_type == "Preventive Maintenance":
+        payload["is_pm"] = True
+        if pm_type:
+            payload["pm_type"] = {
+                "Quinquennial": "quinquennial",
+                "Monthly": "monthly",
+                "Customer Window": "customer_window",
+                "Annual CSA": "annual_csa",
+                "Annual": "annual",
+                "Full Inspection": "full_inspection",
+                "Generator Inspection": "generator_inspection",
+            }.get(pm_type, pm_type)
+    elif job_type == "Service Call":
+        payload["is_service_call"] = True
+    elif job_type == "Alarm":
+        payload["unit_available"] = (alarm_type != "Blocking")
+        if alarm_type:
+            payload["alarm_level"] = alarm_type.lower()
+    elif job_type == "Equipment Failure":
+        payload["unit_available"] = False
+        payload["alarm_level"] = "blocking"
+
+    no_redundancy = answers.get("no_redundancy")
+    if no_redundancy is not None:
+        payload["no_redundancy"] = bool(no_redundancy)
+
+    health = _priority_bool_from_yes_no(answers.get("health_safety"))
+    if health is not None:
+        payload["health_safety_risk"] = health
+
+    return JobInput(**payload)
+
+
+def _priority_render_result(result) -> None:
+    st.markdown("### Priority")
+    st.markdown(f"## {result.schedule_code or result.priority or 'UNDETERMINED'}")
+    if result.client_class:
+        st.markdown(f"**Customer Class:** {result.client_class}")
+    st.markdown("### Reason")
+    st.write(result.reason)
+    if result.decision_path:
+        st.markdown("### Decision Path")
+        for step in result.decision_path:
+            st.write(f"• {step}")
+    if result.missing_info:
+        st.markdown("### Missing Information")
+        st.write(", ".join(result.missing_info))
+    if result.needs_human_review:
+        st.warning("Human review recommended.")
+    st.caption(explain_priority(result))
+
+def _priority_restart():
+    st.session_state.priority_step = 1
+    st.session_state.priority_answers = {}
+    st.session_state.priority_result = None
+
+@st.dialog("Prioritization Tool", width="large", dismissible=False)
+def render_priority_dialog():
+    _priority_ensure_state()
+    answers = st.session_state.priority_answers
+    step = int(st.session_state.priority_step)
+
+    top_l, top_r = st.columns([6, 1])
+    with top_l:
+        st.markdown("**Step-by-step priority assessment**")
+    with top_r:
+        if st.button("Close", key="priority_dialog_close"):
+            _priority_reset_state()
+            st.rerun()
+
+    st.progress(int(min(max(step, 1), 7) / 7 * 100))
+
+    # Step 1: job type
+    if step == 1:
+        with st.form("priority_step_1"):
+            job_type = st.radio("What type of work is this?", PRIORITY_JOB_TYPES, index=None)
+            submitted = st.form_submit_button("Continue")
+        if submitted:
+            if not job_type:
+                st.error("Choose a job type before continuing.")
+                return
+            answers["job_type"] = job_type
+            st.session_state.priority_answers = answers
+            st.session_state.priority_step = 2
+            st.rerun()
+        return
+
+    job_type = answers.get("job_type")
+
+    # Step 2: branch selection
+    if step == 2:
+        if job_type == "Preventive Maintenance":
+            with st.form("priority_step_2_pm"):
+                pm_type = st.radio("PM Type", PRIORITY_PM_TYPES, index=None)
+                submitted = st.form_submit_button("Continue")
+            if submitted:
+                if not pm_type:
+                    st.error("Choose a PM type before continuing.")
+                    return
+                answers["pm_type"] = pm_type
+                answers["is_pm"] = True
+                st.session_state.priority_answers = answers
+                st.session_state.priority_step = 3 # jump to number of times moved
+                st.rerun()
+            return
+
+        if job_type == "Alarm":
+            with st.form("priority_step_2_alarm"):
+                alarm_type = st.radio("Alarm Type", PRIORITY_ALARM_TYPES, index=None)
+                submitted = st.form_submit_button("Continue")
+            if submitted:
+                if not alarm_type:
+                    st.error("Choose an alarm type before continuing.")
+                    return
+                answers["alarm_type"] = alarm_type
+                st.session_state.priority_answers = answers
+                st.session_state.priority_step = 3
+                st.rerun()
+            return
+
+        if job_type in {"Commissioning", "Service Call", "Equipment Failure"}:
+            # Jump to the customer class / notes screen for a final review.
+            st.session_state.priority_step = 3
+            st.rerun()
+
+        st.error("Select a job type first.")
+        return
+
+    # Step 3: customer class
+    if step == 3:      
+        with st.form("priority_step_3_customer"):
+            customer_class_choice = st.radio("Customer Class", PRIORITY_CLIENT_CLASS_OPTIONS, index=None)
+            submitted = st.form_submit_button("Continue")
+
+        if submitted:
+            if not customer_class_choice:
+                st.error("Choose a customer class before continuing.")
+                return
+
+            customer_class = customer_class_choice.split(" — ", 1)[0]
+            answers["customer_class"] = customer_class
+            st.session_state.priority_answers = answers
+
+            if job_type == "Alarm":
+
+                if answers.get("alarm_type") == "Blocking":
+                    st.session_state.priority_step = 4      # redundancy
+
+                elif answers.get("alarm_type") == "Reliability":
+                    st.session_state.priority_step = 5      # health & safety
+
+                elif answers.get("alarm_type") == "Minor":
+                    st.session_state.priority_step = 5      # health and safety
+
+                else:
+                    st.session_state.priority_step = 6      # minor alarm
+
+            elif job_type == "Equipment Failure":
+                st.session_state.priority_step = 4
+
+            elif job_type == "Service Call":
+                st.session_state.priority_step = 5          # health and safety
+
+            elif job_type == "Preventive Maintenance":
+                st.session_state.priority_step = 6
+
+            else:
+                st.session_state.priority_step = 6
+            st.rerun()
+        return
+
+    # Step 4: redundancy for blocking alarm
+    if step == 4:
+        with st.form("priority_step_4_redundancy"):
+            no_redundancy = st.radio("Is there site redundancy?", PRIORITY_YES_NO, index=None)
+            submitted = st.form_submit_button("Continue")
+        if submitted:
+            if not no_redundancy:
+                st.error("Choose Yes or No before continuing.")
+                return
+
+            # Prioritization engine expects no_redundancy == True, so invert the user's answer
+            answers["no_redundancy"] = (no_redundancy == "No")
+            st.session_state.priority_answers = answers
+            st.session_state.priority_step = 5
+            st.rerun()
+        return
+
+    # Step 5: H&S for blocking alarm
+    if step == 5:
+        with st.form("priority_step_5_health"):
+            health_safety = st.radio("Health or Safety issue?", PRIORITY_YES_NO, index=None)
+            submitted = st.form_submit_button("Generate Priority")
+        if submitted:
+            if not health_safety:
+                st.error("Choose Yes or No before generating the priority.")
+                return
+            answers["health_safety"] = health_safety
+            st.session_state.priority_answers = answers
+            payload = _priority_answers_to_job_input(answers)
+            st.session_state.priority_result = determine_priority(payload)
+            st.session_state.priority_step = 7
+            st.rerun()
+        return
+
+    # Step 6: Review and generate (non-blocking branches / optional notes)
+    if step == 6:
+        st.markdown("### Review")
+        st.write(f"**Job type:** {answers.get('job_type', '—')}")
+        st.write(f"**Customer class:** {answers.get('customer_class', '—')}")
+        if answers.get("alarm_type"):
+            st.write(f"**Alarm type:** {answers.get('alarm_type')}")
+        if answers.get("pm_type"):
+            st.write(f"**PM type:** {answers.get('pm_type')}")
+
+        with st.form("priority_step_6_notes"):
+            wo_number = st.text_input("WO number (optional)", value=answers.get("wo_number", ""))
+            description = st.text_area(
+                "Describe the request (optional)",
+                value=answers.get("description", ""),
+                height=120,
+                placeholder="Example: Customer reports generator won't start. Hospital backup generator.",
+            )
+            submitted = st.form_submit_button("Generate Priority")
+        if submitted:
+            answers["wo_number"] = wo_number
+            answers["description"] = description
+            st.session_state.priority_answers = answers
+            payload = _priority_answers_to_job_input(answers)
+            st.session_state.priority_result = determine_priority(payload)
+            st.session_state.priority_step = 7
+            st.rerun()
+        return
+
+    # Step 7: result
+    if step == 7:
+        result = st.session_state.priority_result
+        if result is None:
+            result = determine_priority(_priority_answers_to_job_input(answers))
+            st.session_state.priority_result = result
+        _priority_render_result(result)
+        st.divider()
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("Start Over", key="priority_dialog_restart"):
+                _priority_restart()
+                st.rerun()
+        with c2:
+            if st.button("Close", key="priority_dialog_close_2"):
+                _priority_reset_state()
+                st.rerun()
+        return
+
+    st.info("Use the button above to start the workflow.")
+
+
+def _priority_open_dialog():
+    _priority_ensure_state()
+    st.session_state.priority_tool_open = True
+    st.session_state.priority_step = 1
+    st.session_state.priority_answers = {}
+    st.session_state.priority_result = None
+    st.rerun()
+
+
 # Service Assistant Addition
 
 def render_service_assistant():
@@ -974,7 +1316,7 @@ def render_service_assistant():
     if "assistant_upload_key" not in st.session_state:
         st.session_state.assistant_upload_key = 0
 
-    upload_col, clear_col = st.columns([2, 1])
+    upload_col, priority_col, clear_col = st.columns([2, 1, 1])
 
     with upload_col:
         uploaded_files = st.file_uploader(
@@ -984,6 +1326,10 @@ def render_service_assistant():
             key=f"assistant_uploads_{st.session_state.assistant_upload_key}",
             help="These files are only used during this conversation.",
         )
+
+    with priority_col:
+        if st.button("⚖ Prioritize Job", key="assistant_priority_open"):
+            _priority_open_dialog()
 
     with clear_col:
         if st.button("🗑️ Clear conversation", key="assistant_clear"):
@@ -1017,6 +1363,10 @@ def render_service_assistant():
         "assistant_temp_context",
         ""
     ).strip()
+
+    # Open the priority modal when requested.
+    if st.session_state.get("priority_tool_open", False):
+        render_priority_dialog()
 
     for msg in st.session_state.assistant_messages:
         with st.chat_message(msg["role"]):
@@ -4252,5 +4602,3 @@ elif page == "📅 Planning (Page 2)":
 
 elif page == "⏱ Feuille de temps":
     show_timesheet()
-
-

@@ -87,14 +87,14 @@ If after-hours calls are not being routed correctly:
 
 ### Weekly Standby Premium
 
-The weekly standby premium has been increased from **$200** to **$235**.
+The weekly standby premium has been increased from $200 to $235.
 This weekly stanby premium is applicable to both technicians and service administrators.
 
 The standby premium consists of:
 
-- **$25** for each weekday evening.
-- **$55** for each weekend day.
-- **$55** for each statutory holiday.
+- $25 for each weekday evening.
+- $55 for each weekend day.
+- $55 for each statutory holiday.
 
 These rates reflect the cost-of-living adjustment between 2021 and 2026.
 
@@ -108,7 +108,7 @@ Administrative employees assigned to standby are also compensated for emergency 
 
 Compensation:
 
-- **$35** for each Work Order (WO) opened while on standby.
+- $35 for each Work Order (WO) opened while on standby.
 
 During each standby rotation, administrators should:
 

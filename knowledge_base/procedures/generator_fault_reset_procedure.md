@@ -13,9 +13,9 @@ v1.0.0
 
 ## Purpose
 
-This procedure provides Service Coordinators with a simple troubleshooting workflow to guide customers whose generator does not automatically start during a utility power outage.
+This procedure provides Service Coordinators with a simple troubleshooting workflow to guide customers whose generator does not automatically start during a utility power outage and especially during after-hours where sending a technician out to help implies overtime rates.
 
-The objective is to determine whether the issue can be resolved through basic operator actions before dispatching a technician.
+The objective is to determine whether the issue can be resolved through basic operator actions before dispatching a technician in regular day-hours rather than after-hours.
 
 > **Important**
 >
