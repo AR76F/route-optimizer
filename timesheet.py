@@ -17,7 +17,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 )
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-08-04-cap-rt-reel-garder-v32"
+APP_VERSION = "2026-08-09-samedi-dt-ot-v33"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -157,6 +157,10 @@ def infer_category(d, time_in: float, time_out: float) -> str:
     if wd == 6:
         return "Double Time"
     if wd == 5:
+        # Samedi : DT avant 6h et après 23h, OT le reste (pas de RT, pas de cap)
+        if time_in is not None and time_out is not None:
+            if (time_in < 6.0) or (time_out > 23.0) or (time_in >= 23.0):
+                return "Double Time"
         return "Overtime"
     if time_in is not None and time_out is not None:
         if time_in >= 8.0 and time_out <= 17.0:
@@ -1497,7 +1501,12 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         if wd == 6:
             boundaries = [(0, 24, "Double Time")]
         elif wd == 5:
-            boundaries = [(0, 24, "Overtime")]
+            # Samedi : DT avant 6h et après 23h, OT entre les deux (pas de RT)
+            boundaries = [
+                (0,  6,  "Double Time"),
+                (6,  23, "Overtime"),
+                (23, 24, "Double Time"),
+            ]
         else:
             boundaries = [
                 (0,  6,  "Double Time"),
@@ -1587,22 +1596,32 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         if confirmed_pre is None:
             wd_pre = d.weekday()
 
-            # ── Samedi / Dimanche ──────────────────────────────────
-            if wd_pre in (5, 6):
-                is_sunday_pre  = wd_pre == 6
+            # ── Dimanche : tout DT ──────────────────────────────────
+            if wd_pre == 6:
                 full_hrs_pre   = compute_hours(ti_pre, to_pre, 0.0)
-                outside_cat    = "Double Time" if is_sunday_pre else "Overtime"
-                banque_cat     = "DT en banque" if is_sunday_pre else "OT en banque"
-                label_paye_pre = "DT payé" if is_sunday_pre else "OT payé"
                 needs_split_confirmation = True
                 _pre_segments   = [{"time_in": ti_pre, "time_out": to_pre,
-                                     "category": outside_cat, "hours": round(full_hrs_pre, 4)}]
+                                     "category": "Double Time", "hours": round(full_hrs_pre, 4)}]
                 _pre_is_we      = True
-                _pre_sunday     = is_sunday_pre
-                _pre_banque_cat = banque_cat
-                _pre_label_paye = label_paye_pre
+                _pre_sunday     = True
+                _pre_banque_cat = "DT en banque"
+                _pre_label_paye = "DT payé"
                 _pre_full_hrs   = full_hrs_pre
-                _pre_outside_cat = outside_cat
+                _pre_outside_cat = "Double Time"
+
+            # ── Samedi : OT entre 6h-23h, DT avant 6h / après 23h ──
+            elif wd_pre == 5:
+                segs_pre, _ = _compute_zone_split(d, ti_pre, to_pre)
+                segs_pre = _merge_adjacent_segments(segs_pre)
+                full_hrs_pre = compute_hours(ti_pre, to_pre, 0.0)
+                needs_split_confirmation = True
+                _pre_segments   = segs_pre
+                _pre_is_we      = True
+                _pre_sunday     = False
+                _pre_banque_cat = "OT en banque"   # défaut; le banque reclasse OT→OBTI et DT→DBTI
+                _pre_label_paye = "OT/DT payé"
+                _pre_full_hrs   = full_hrs_pre
+                _pre_outside_cat = "Overtime"
 
             # ── Lundi à Vendredi ────────────────────────────────────
             else:
@@ -1700,7 +1719,13 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
             with col_b:
                 if st.button("🏦 Mettre en banque", key=f"split_banque_{uid}", use_container_width=True):
                     st.session_state[f"split_confirm_{uid}"] = "banque"
-                    _persist_split(_apply_banque(_pre_segments, _pre_outside_cat, _pre_banque_cat))
+                    if _pre_sunday:
+                        segs_banque = _apply_banque(_pre_segments, "Double Time", "DT en banque")
+                    else:
+                        # Samedi : reclasser OT→OBTI ET DT→DBTI
+                        segs_banque = _apply_banque(_pre_segments, "Overtime", "OT en banque")
+                        segs_banque = _apply_banque(segs_banque, "Double Time", "DT en banque")
+                    _persist_split(segs_banque)
                     st.rerun()
             with col_c:
                 if st.button("❌ Ne pas soumettre", key=f"split_non_{uid}", use_container_width=True):
