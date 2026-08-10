@@ -1,11 +1,16 @@
 """
 Service Coordinator Assistant
-Version 0.9.0
+Version 1.0.0
 Author: UD016
 
-Prototype AI assistant for Cummins Service Operations
+AI assistant for CSSNA Candiac
 
 Change log:
+
+v1.0.0
+- Overhaul of code structure and cleanup for futureproofing purposes. 
+    - Removed obsolete functions and added documentation for extra reference.
+- Awaiting green light for initial deployment to the Service department.
 
 v0.9.0
 - Switched temporary uploads from OCR to native OpenAI vision inputs.
@@ -47,47 +52,36 @@ v0.1.0
     - Self-contained in the terminal, not usable elsewhere.
 """
 
+##### Libraries #####
 from __future__ import annotations
+
+import base64
+import io
+import pickle
+import re
 
 from collections import Counter
 from dataclasses import dataclass
 from functools import lru_cache
 from math import log, sqrt
 from pathlib import Path
-import base64
-import io
-import pickle
-import re
-import json
-from typing import Any, Iterable, BinaryIO, Protocol
+from typing import Any, BinaryIO, Iterable, Protocol
 
+import fitz
+import pytesseract
+from PIL import Image, ImageOps
+
+# OpenAI Agents SDK
 from agents import Agent, Runner, SQLiteSession
 from openai import OpenAI
 
-try:
-    from PIL import Image, ImageOps
-except Exception:  # pragma: no cover - optional dependency import guard
-    Image = None  # type: ignore[assignment]
-    ImageOps = None  # type: ignore[assignment]
-
-try:
-    import fitz  # PyMuPDF
-except Exception:  # pragma: no cover - optional dependency import guard
-    fitz = None  # type: ignore[assignment]
-
-try:
-    import pytesseract
-except Exception:  # pragma: no cover - optional dependency import guard
-    pytesseract = None  # type: ignore[assignment]
-
-    from typing import Any, Dict
-
-# Set virtual environment (python -m venv [your environment name])
-# Set API Key (in PowerShell or PC environment)
+# Short instructions before trying to launch the assistant
+## Set virtual environment (python -m venv [your environment name])
+## Set API Key (in PowerShell or PC environment)
 
 OPENAI_CLIENT = OpenAI()
 
-EMBEDDING_MODEL = "text-embedding-3-small"
+EMBEDDING_MODEL = "text-embedding-3-large" # Small or large
 KNOWLEDGE_BASE_PATH = Path("knowledge_base")
 CACHE_DIR = Path(".cache")
 EMBEDDING_CACHE_PATH = CACHE_DIR / "service_assistant_embedding_index.pkl"
@@ -101,6 +95,8 @@ SUPPORTED_PDF_EXTENSIONS = {".pdf"}
 OCR_MAX_PAGE_PIXELS_SCALE = 2
 OCR_MIN_TEXT_LENGTH_BEFORE_FALLBACK = 40
 
+##### Hints for Querying #####
+# Besoin d'ajouter les versions françaises
 STOPWORDS = {
     "what", "does", "do", "is", "are", "the", "a", "an", "of", "for",
     "to", "in", "on", "and", "or", "by", "with", "stand", "stands",
@@ -119,7 +115,7 @@ TECHNICAL_QUERY_HINTS = {
 
 LIST_ALL_QUERY_HINTS = {
     "list", "all", "every", "show all", "which technicians", "who has",
-    "who are", "qualified", "certified", "trained"
+    "who are", "qualified", "certified", "trained", 
 }
 
 LIST_ALL_CAPABILITY_HINTS = {
@@ -128,33 +124,30 @@ LIST_ALL_CAPABILITY_HINTS = {
     "commissioning", "engine", "diagnostic", "diagnostics"
 }
 
-
-@dataclass(frozen=True)
+##### Data Classes for Embedding #####
+@dataclass(frozen = True)
 class Chunk:
     source: str
     text: str
     token_set: frozenset[str]
 
-
-@dataclass(frozen=True)
+@dataclass(frozen = True)
 class EmbeddedChunk:
     source: str
     text: str
     token_set: frozenset[str]
     vector: tuple[float, ...]
 
-
 class UploadLike(Protocol):
     """
     Minimal protocol for uploaded file objects, including Streamlit UploadedFile.
     """
-
     name: str
 
     def read(self) -> bytes | str: ...
     def seek(self, __offset: int, __whence: int = 0) -> Any: ...
 
-
+##### Embedding and Chunking Functions #####
 def normalize_text(text: str) -> str:
     """
     Normalize text for simple matching.
@@ -163,7 +156,6 @@ def normalize_text(text: str) -> str:
     text = re.sub(r"[^a-z0-9\s_-]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
-
 
 def tokenize(text: str) -> list[str]:
     """
@@ -174,17 +166,15 @@ def tokenize(text: str) -> list[str]:
         return []
     return normalized.split()
 
-
 def tokenize_for_retrieval(text: str) -> list[str]:
     """
     Tokenize text and remove common stopwords.
     """
     return [t for t in tokenize(text) if t not in STOPWORDS]
 
-
 def extract_acronym(question: str) -> str | None:
     """
-    Detect questions like:
+    Detect acronym related questions like:
     - What does FSPG stand for?
     - What is CSA?
     - Define FSPG
@@ -197,11 +187,10 @@ def extract_acronym(question: str) -> str | None:
         r"\bmeaning of\s+([A-Z]{2,12})\b",
     ]
     for pattern in patterns:
-        match = re.search(pattern, question, flags=re.IGNORECASE)
+        match = re.search(pattern, question, flags = re.IGNORECASE)
         if match:
             return match.group(1).upper()
     return None
-
 
 def is_technician_query(question: str) -> bool:
     """
@@ -209,7 +198,6 @@ def is_technician_query(question: str) -> bool:
     """
     q = normalize_text(question)
     return any(hint in q for hint in TECHNICAL_QUERY_HINTS)
-
 
 def is_list_all_query(question: str) -> bool:
     """
@@ -220,8 +208,7 @@ def is_list_all_query(question: str) -> bool:
     has_capability_language = any(hint in q for hint in LIST_ALL_CAPABILITY_HINTS)
     return has_list_language and has_capability_language
 
-
-def split_markdown_into_chunks(text: str, max_words: int = 220) -> list[str]:
+def split_markdown_into_chunks(text: str, max_words: int = 350) -> list[str]:
     """
     Split markdown into readable chunks.
 
@@ -263,14 +250,12 @@ def split_markdown_into_chunks(text: str, max_words: int = 220) -> list[str]:
 
     return chunks
 
-
 def file_signature(file_path: Path) -> tuple[str, int, int]:
     """
     A compact signature used to invalidate cached embeddings when files change.
     """
     stat = file_path.stat()
     return (str(file_path.relative_to(KNOWLEDGE_BASE_PATH)), stat.st_mtime_ns, stat.st_size)
-
 
 @lru_cache(maxsize=1)
 def build_chunk_index(path: str = "knowledge_base") -> tuple[Chunk, ...]:
@@ -285,7 +270,7 @@ def build_chunk_index(path: str = "knowledge_base") -> tuple[Chunk, ...]:
 
     for file in sorted(kb_path.rglob("*.md")):
         try:
-            text = file.read_text(encoding="utf-8")
+            text = file.read_text(encoding = "utf-8")
         except Exception:
             continue
 
@@ -296,14 +281,13 @@ def build_chunk_index(path: str = "knowledge_base") -> tuple[Chunk, ...]:
             searchable_text = f"{relative_source}\n{file_stem}\n{chunk_text}"
             chunks.append(
                 Chunk(
-                    source=relative_source,
-                    text=chunk_text,
-                    token_set=frozenset(tokenize(searchable_text)),
+                    source = relative_source,
+                    text = chunk_text,
+                    token_set = frozenset(tokenize(searchable_text)),
                 )
             )
 
     return tuple(chunks)
-
 
 def build_embedding_input(chunks: Iterable[Chunk]) -> list[str]:
     """
@@ -311,20 +295,19 @@ def build_embedding_input(chunks: Iterable[Chunk]) -> list[str]:
     """
     return [f"Source: {chunk.source}\n\n{chunk.text}" for chunk in chunks]
 
-
 def cosine_similarity(vec_a: tuple[float, ...], vec_b: tuple[float, ...]) -> float:
     """
     Cosine similarity for two vectors.
     """
+    # Sum Product Formula
     dot = sum(a * b for a, b in zip(vec_a, vec_b))
     norm_a = sqrt(sum(a * a for a in vec_a))
     norm_b = sqrt(sum(b * b for b in vec_b))
 
     if not norm_a or not norm_b:
-        return 0.0
+        return 0
 
     return dot / (norm_a * norm_b)
-
 
 def embed_texts(texts: list[str], batch_size: int = 64) -> list[tuple[float, ...]]:
     """
@@ -335,16 +318,15 @@ def embed_texts(texts: list[str], batch_size: int = 64) -> list[tuple[float, ...
     for i in range(0, len(texts), batch_size):
         batch = texts[i : i + batch_size]
         response = OPENAI_CLIENT.embeddings.create(
-            model=EMBEDDING_MODEL,
-            input=batch,
-            encoding_format="float",
+            model = EMBEDDING_MODEL,
+            input = batch,
+            encoding_format = "float",
         )
 
-        ordered = sorted(response.data, key=lambda item: item.index)
+        ordered = sorted(response.data, key = lambda item: item.index)
         vectors.extend(tuple(item.embedding) for item in ordered)
 
     return vectors
-
 
 def read_embedding_cache() -> tuple[tuple[tuple[str, int, int], ...], tuple[EmbeddedChunk, ...]] | None:
     """
@@ -367,7 +349,6 @@ def read_embedding_cache() -> tuple[tuple[tuple[str, int, int], ...], tuple[Embe
 
     return signature, chunks
 
-
 def write_embedding_cache(
     signature: tuple[tuple[str, int, int], ...],
     chunks: tuple[EmbeddedChunk, ...],
@@ -375,7 +356,7 @@ def write_embedding_cache(
     """
     Persist the embedding index for faster startup on future runs.
     """
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    CACHE_DIR.mkdir(parents = True, exist_ok = True)
 
     payload = {
         "signature": signature,
@@ -386,8 +367,7 @@ def write_embedding_cache(
     with EMBEDDING_CACHE_PATH.open("wb") as f:
         pickle.dump(payload, f)
 
-
-@lru_cache(maxsize=1)
+@lru_cache(maxsize = 1)
 def build_embedding_index(path: str = "knowledge_base") -> tuple[EmbeddedChunk, ...]:
     """
     Load or build the embedding index for all active knowledge base Markdown files.
@@ -416,10 +396,10 @@ def build_embedding_index(path: str = "knowledge_base") -> tuple[EmbeddedChunk, 
 
     embedded_chunks = tuple(
         EmbeddedChunk(
-            source=chunk.source,
-            text=chunk.text,
-            token_set=chunk.token_set,
-            vector=vector,
+            source = chunk.source,
+            text = chunk.text,
+            token_set = chunk.token_set,
+            vector = vector,
         )
         for chunk, vector in zip(base_chunks, vectors)
     )
@@ -427,11 +407,10 @@ def build_embedding_index(path: str = "knowledge_base") -> tuple[EmbeddedChunk, 
     try:
         write_embedding_cache(current_signature, embedded_chunks)
     except Exception:
-        # Cache failure should not break the assistant.
+        # A cache failure alone should not break the assistant.
         pass
 
     return embedded_chunks
-
 
 def score_chunk_embedding(
     question: str,
@@ -439,7 +418,7 @@ def score_chunk_embedding(
     chunk: EmbeddedChunk,
 ) -> float:
     """
-    Score a chunk using semantic similarity plus a small keyword boost.
+    Score a chunk using semantic (cosine) similarity plus a small keyword boost.
     """
     similarity = cosine_similarity(question_vector, chunk.vector)
 
@@ -456,7 +435,6 @@ def score_chunk_embedding(
         score += 0.12
 
     return score
-
 
 def retrieve_relevant_chunks(
     question: str,
@@ -477,9 +455,8 @@ def retrieve_relevant_chunks(
         score = score_chunk_embedding(question, question_vector, chunk)
         scored.append((score, chunk))
 
-    scored.sort(key=lambda item: item[0], reverse=True)
+    scored.sort(key = lambda item: item[0], reverse = True)
     return [chunk for _, chunk in scored[:top_k]]
-
 
 def format_retrieved_context(chunks: list[EmbeddedChunk], max_chars: int = 12000) -> str:
     """
@@ -500,7 +477,7 @@ def format_retrieved_context(chunks: list[EmbeddedChunk], max_chars: int = 12000
 
     return "\n\n---\n\n".join(sections)
 
-
+##### Temporary File and Vision Functions #####
 def _read_source_bytes(source: Any) -> tuple[bytes, str, str]:
     """
     Return raw bytes, a lower-case file suffix, and a display name for an input source.
@@ -522,7 +499,7 @@ def _read_source_bytes(source: Any) -> tuple[bytes, str, str]:
     if hasattr(source, "read"):
         raw = source.read()
         if isinstance(raw, str):
-            raw_bytes = raw.encode("utf-8", errors="ignore")
+            raw_bytes = raw.encode("utf-8", errors = "ignore")
         else:
             raw_bytes = bytes(raw)
 
@@ -558,7 +535,6 @@ def _bytes_to_data_url(raw_bytes: bytes, suffix: str) -> str:
     encoded = base64.b64encode(raw_bytes).decode("ascii")
     return f"data:{mime};base64,{encoded}"
 
-
 def _pdf_pages_to_vision_items(raw_bytes: bytes, display_name: str, max_pages: int = 8) -> list[dict[str, Any]]:
     """
     Convert a PDF into a small set of image input items for native vision processing.
@@ -570,7 +546,7 @@ def _pdf_pages_to_vision_items(raw_bytes: bytes, display_name: str, max_pages: i
 
     items: list[dict[str, Any]] = []
     try:
-        doc = fitz.open(stream=raw_bytes, filetype="pdf")
+        doc = fitz.open(stream = raw_bytes, filetype = "pdf")
     except Exception as exc:
         raise RuntimeError(f"Could not open PDF source {display_name!r}: {exc}") from exc
 
@@ -579,7 +555,7 @@ def _pdf_pages_to_vision_items(raw_bytes: bytes, display_name: str, max_pages: i
             if page_number > int(max_pages):
                 break
             try:
-                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+                pix = page.get_pixmap(matrix = fitz.Matrix(2, 2), alpha = False)
                 png_bytes = pix.tobytes("png")
             except Exception as exc:
                 raise RuntimeError(
@@ -595,6 +571,7 @@ def _pdf_pages_to_vision_items(raw_bytes: bytes, display_name: str, max_pages: i
         doc.close()
 
     return items
+
 def _normalize_ocr_image(image: Any) -> Any:
     """
     Light preprocessing to improve OCR quality.
@@ -610,7 +587,6 @@ def _normalize_ocr_image(image: Any) -> Any:
         return image
     except Exception:
         return image
-
 
 def extract_text_from_image_source(source: Any) -> str:
     """
@@ -631,7 +607,7 @@ def extract_text_from_image_source(source: Any) -> str:
     image = _normalize_ocr_image(image)
 
     try:
-        text = pytesseract.image_to_string(image, lang="eng")
+        text = pytesseract.image_to_string(image, lang = "eng")
     except Exception as exc:
         raise RuntimeError(
             f"OCR failed for image source {display_name!r}: {exc}"
@@ -639,23 +615,6 @@ def extract_text_from_image_source(source: Any) -> str:
 
     cleaned = text.strip()
     return cleaned
-
-
-def _render_pdf_page_for_ocr(page: Any) -> Any:
-    """
-    Render a PDF page to an image for OCR.
-    """
-    if Image is None or fitz is None:
-        raise RuntimeError("PDF OCR is unavailable because Pillow or PyMuPDF is not installed.")
-
-    matrix = fitz.Matrix(OCR_MAX_PAGE_PIXELS_SCALE, OCR_MAX_PAGE_PIXELS_SCALE)
-    pix = page.get_pixmap(matrix=matrix, alpha=False)
-
-    mode = "RGB"
-    image = Image.frombytes(mode, [pix.width, pix.height], pix.samples)
-    image = _normalize_ocr_image(image)
-    return image
-
 
 def extract_text_from_pdf_source(source: Any) -> str:
     """
@@ -672,14 +631,14 @@ def extract_text_from_pdf_source(source: Any) -> str:
     raw_bytes, _, display_name = _read_source_bytes(source)
 
     try:
-        doc = fitz.open(stream=raw_bytes, filetype="pdf")
+        doc = fitz.open(stream = raw_bytes, filetype = "pdf")
     except Exception as exc:
         raise RuntimeError(f"Could not open PDF source {display_name!r}: {exc}") from exc
 
     page_texts: list[str] = []
 
     try:
-        for page_number, page in enumerate(doc, start=1):
+        for page_number, page in enumerate(doc, start = 1):
             extracted = page.get_text("text").strip()
             if extracted:
                 page_texts.append(f"[Page {page_number}]\n{extracted}")
@@ -697,14 +656,13 @@ def extract_text_from_text_source(source: Any) -> str:
     try:
         text = raw_bytes.decode("utf-8")
     except UnicodeDecodeError:
-        text = raw_bytes.decode("utf-8", errors="ignore")
+        text = raw_bytes.decode("utf-8", errors = "ignore")
 
     cleaned = text.strip()
     if not cleaned:
         raise RuntimeError(f"Text source {display_name!r} was empty.")
 
     return cleaned
-
 
 def extract_text_from_uploaded_source(source: Any) -> str:
     """
@@ -740,7 +698,6 @@ def extract_text_from_uploaded_source(source: Any) -> str:
             f"Unsupported file type for {display_name!r}. Supported types are images, PDFs, and text files."
         ) from exc
 
-
 def build_temporary_context(
     temporary_context: str | None = None,
     uploaded_sources: Iterable[Any] | None = None,
@@ -749,6 +706,8 @@ def build_temporary_context(
     Build a temporary context block from direct text and/or uploaded sources.
 
     This context is for the current conversation only and is never stored in the knowledge base.
+
+    This avoid user uploaded files to contaminate knowledge_base files.
     """
     sections: list[str] = []
 
@@ -771,7 +730,6 @@ def build_temporary_context(
         return None
 
     return "\n\n---\n\n".join(sections)
-
 
 def build_uploaded_vision_input_items(uploaded_sources: Iterable[Any] | None = None) -> list[dict[str, Any]]:
     """
@@ -801,13 +759,12 @@ def build_uploaded_vision_input_items(uploaded_sources: Iterable[Any] | None = N
 
         if suffix in SUPPORTED_PDF_EXTENSIONS:
             try:
-                items.extend(_pdf_pages_to_vision_items(raw_bytes, display_name, max_pages=8))
+                items.extend(_pdf_pages_to_vision_items(raw_bytes, display_name, max_pages = 10))
             except Exception:
                 # If a PDF cannot be rendered, fall back to text context only.
                 continue
 
     return items
-
 
 def build_user_input(
     question: str,
@@ -829,7 +786,7 @@ def build_user_input(
     ]
     return [{"role": "user", "content": content}]
 
-
+##### Session Memory #####
 def get_session(session_id: str = "default_service_chat") -> SQLiteSession:
     """
     Return a stable SQLiteSession for a given conversation ID.
@@ -838,6 +795,7 @@ def get_session(session_id: str = "default_service_chat") -> SQLiteSession:
         _SESSION_CACHE[session_id] = SQLiteSession(session_id, str(SESSION_DB_PATH))
     return _SESSION_CACHE[session_id]
 
+##### Agent Build and Instructions #####
 def build_agent(
     question: str,
     temporary_context: str | None = None,
@@ -846,8 +804,10 @@ def build_agent(
     """
     Build an agent with only the most relevant knowledge excerpts.
     """
+    # Database link (current version is just a folder)
     kb_index = build_embedding_index("knowledge_base")
 
+    # Chunk scoring system
     if is_list_all_query(question):
         top_k = 15
     elif is_technician_query(question):
@@ -862,6 +822,7 @@ def build_agent(
         uploaded_sources=uploaded_sources,
     )
 
+    # Instructions (to be changed as the chatbot could evolve into a true agent)
     human_instructions = f"""
 You are the Service Coordinator Assistant for the Cummins service department.
 
@@ -910,13 +871,12 @@ Temporary uploaded-file context:
 """.strip()
 
     return Agent(
-        name="Service Coordinator Assistant",
-        model="gpt-5.6-luna",
-        instructions=human_instructions,
+        name = "Service Coordinator Assistant",
+        model = "gpt-5.6-luna", # Luna is 80% less expensive
+        instructions = human_instructions,
     )
 
-
-# Public function used by the Streamlit application
+##### Public function used by the Streamlit application #####
 def ask_service_assistant(
     question: str,
     session_id: str = "default_service_chat",
@@ -927,30 +887,31 @@ def ask_service_assistant(
     Send a question to the Service Coordinator Assistant
     and return the response.
 
-    Use temporary_context for OCR text or other transient evidence.
+    Use temporary_context for user-provided notes or other transient text evidence.
     Use uploaded_sources for file-like objects or uploaded file handles.
     """
 
     # Normal assistant path for everything else
     agent = build_agent(
         question,
-        temporary_context=temporary_context,
-        uploaded_sources=uploaded_sources,
+        temporary_context = temporary_context,
+        uploaded_sources = uploaded_sources,
     )
-    session = get_session(session_id=session_id)
+    session = get_session(session_id = session_id)
     user_input = build_user_input(
         question,
-        uploaded_sources=uploaded_sources,
+        uploaded_sources = uploaded_sources,
     )
 
     result = Runner.run_sync(
         agent,
         user_input,
-        session=session,
+        session = session,
     )
 
     return result.final_output
 
+##### Terminal Use Only #####
 if __name__ == "__main__":
     print("Service Coordinator Assistant")
     print("Type 'quit' to exit.\n")
@@ -967,5 +928,5 @@ if __name__ == "__main__":
             continue
 
         print()
-        print(ask_service_assistant(question, session_id=terminal_session_id))
+        print(ask_service_assistant(question, session_id = terminal_session_id))
         print()

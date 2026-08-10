@@ -25,6 +25,7 @@
 - Added conversation memory feature 
     - Each conversation clear leads to a clean slate
 - Added OCR capabilities
+- Added dispatch prioritization system integration
 """
 
 import os
@@ -954,10 +955,8 @@ def render_page_1():
 
         st.success(f"**Total distance:** {km:.1f} km • **Total time:** {mins:.0f} mins (live traffic)")
 
-
-# ────────────────────────────────────────────────────────────────
 # Prioritization Tool (modal)
-# ────────────────────────────────────────────────────────────────
+
 PRIORITY_JOB_TYPES = [
     "Equipment Failure",
     "Alarm",
@@ -1019,11 +1018,15 @@ def _priority_answers_to_job_input(answers: dict) -> JobInput:
     job_type = answers.get("job_type")
     alarm_type = answers.get("alarm_type")
     pm_type = answers.get("pm_type")
+    pm_move_count = answers.get("pm_move_count")
     customer_class = answers.get("customer_class")
     notes = (answers.get("description") or "").strip()
     wo_number = (answers.get("wo_number") or "").strip()
 
     payload: Dict[str, Any] = {"notes": "\n".join([x for x in [f"WO: {wo_number}" if wo_number else "", notes] if x]).strip()}
+
+    if pm_move_count is not None:
+        payload["pm_move_count"] = int(pm_move_count)
 
     if customer_class:
         payload["customer_class"] = customer_class
@@ -1160,7 +1163,31 @@ def render_priority_dialog():
         return
 
     # Step 3: customer class
-    if step == 3:      
+    if step == 3:
+        if job_type == "Preventive Maintenance" and "pm_move_count" not in answers:
+            with st.form("priority_step_3_pm_moves"):
+                pm_move_count = st.radio(
+                    "How many times has this PM been moved?",
+                    ["Never moved", "Moved once", "Moved twice or more"],
+                    index=None,
+                )
+                submitted = st.form_submit_button("Continue")
+
+            if submitted:
+                if not pm_move_count:
+                    st.error("Choose one option before continuing.")
+                    return
+
+                answers["pm_move_count"] = {
+                    "Never moved": 0,
+                    "Moved once": 1,
+                    "Moved twice or more": 2,
+                }[pm_move_count]
+
+                st.session_state.priority_answers = answers
+                st.rerun()
+            return
+
         with st.form("priority_step_3_customer"):
             customer_class_choice = st.radio("Customer Class", PRIORITY_CLIENT_CLASS_OPTIONS, index=None)
             submitted = st.form_submit_button("Continue")
@@ -1175,30 +1202,25 @@ def render_priority_dialog():
             st.session_state.priority_answers = answers
 
             if job_type == "Alarm":
-
                 if answers.get("alarm_type") == "Blocking":
-                    st.session_state.priority_step = 4      # redundancy
-
-                elif answers.get("alarm_type") == "Reliability":
-                    st.session_state.priority_step = 5      # health & safety
-
-                elif answers.get("alarm_type") == "Minor":
-                    st.session_state.priority_step = 5      # health and safety
-
+                    st.session_state.priority_step = 4
+                elif answers.get("alarm_type") in {"Reliability", "Minor"}:
+                    st.session_state.priority_step = 5
                 else:
-                    st.session_state.priority_step = 6      # minor alarm
+                    st.session_state.priority_step = 6
 
             elif job_type == "Equipment Failure":
                 st.session_state.priority_step = 4
 
             elif job_type == "Service Call":
-                st.session_state.priority_step = 5          # health and safety
+                st.session_state.priority_step = 5
 
             elif job_type == "Preventive Maintenance":
                 st.session_state.priority_step = 6
 
             else:
                 st.session_state.priority_step = 6
+
             st.rerun()
         return
 
@@ -1300,7 +1322,7 @@ def _priority_open_dialog():
 
 def render_service_assistant():
     st.markdown("### 🤖 Service Coordinator Assistant")
-    st.caption("Ask dispatch, technician selection, booking, troubleshooting, and invoicing questions.")
+    st.caption("Posez des questions sur la répartition, la sélection des techniciens, la prise de rendez-vous, le dépannage et la facturation. Ask dispatch, technician selection, booking, troubleshooting, and invoicing questions.")
 
     if "assistant_messages" not in st.session_state:
         st.session_state.assistant_messages = [
@@ -1320,19 +1342,19 @@ def render_service_assistant():
 
     with upload_col:
         uploaded_files = st.file_uploader(
-            "Temporary files (images, PDFs, text)",
+            "Fichiers temporaires - Temporary files (images, PDFs, text)",
             type=["png", "jpg", "jpeg", "webp", "pdf", "txt", "md"],
             accept_multiple_files=True,
             key=f"assistant_uploads_{st.session_state.assistant_upload_key}",
-            help="These files are only used during this conversation.",
+            help="Ces fichiers sont utilisés seulement dans cette conversation. These files are only used during this conversation.",
         )
 
     with priority_col:
-        if st.button("⚖ Prioritize Job", key="assistant_priority_open"):
+        if st.button("⚖ Système de priorisation - Dispatch prioritization system", key="assistant_priority_open"):
             _priority_open_dialog()
 
     with clear_col:
-        if st.button("🗑️ Clear conversation", key="assistant_clear"):
+        if st.button("🗑️ Effacer la conversation - Clear conversation", key="assistant_clear"):
             st.session_state.assistant_messages = [
                 {"role": "assistant", "content": "Bonjour — Posez une question. Hi — Ask a question."}
             ]
@@ -1348,12 +1370,12 @@ def render_service_assistant():
             st.rerun()
 
     if uploaded_files:
-        st.caption(f"📎 Attached for this conversation: {len(uploaded_files)} file(s)")
+        st.caption(f"📎Attaché/s dans cette conversation - Attached in this conversation: {len(uploaded_files)} fichier(s)/file(s)")
 
     # Avoid assigning the return value back into session_state.
     # The widget already manages that. Otherwise error.
     st.text_area(
-        "Optional temporary notes",
+        "Notes temporaires optionnelles - Optional temporary notes",
         placeholder = "Libre à vous de prendre des notes ici :)",
         height = 120,
         key = "assistant_temp_context",
@@ -1373,7 +1395,7 @@ def render_service_assistant():
             st.markdown(msg["content"])
 
     question = st.chat_input(
-        "Ask a service question...",
+        "Posez une question sur le service - Ask a service question...",
         key="assistant_chat_input",
     )
 
@@ -1386,7 +1408,7 @@ def render_service_assistant():
         )
 
         with st.chat_message("assistant"):
-            with st.spinner("Analyzing request..."):
+            with st.spinner("En mode analyse - Analyzing request..."):
                 try:
                     answer = ask_service_assistant(
                         question=question,

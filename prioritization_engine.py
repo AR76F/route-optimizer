@@ -1,3 +1,17 @@
+"""
+Prioritization Engine
+Version 1.0.0
+Author: UD016
+
+Dispatch Prioritization System for CSSNA Candiac
+
+Change log:
+
+v1.0.0
+- Initial logic build.
+    - Based on the original document from Administration FSPG.
+"""
+
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, fields as dataclass_fields
@@ -19,7 +33,7 @@ ALARM_LEVELS = {"blocking", "reliability", "minor"}
 # Lower number = higher priority
 PM_TYPE_RANK = {
     "quinquennial": 1,
-    "monthly": 2,
+    "monthly/customer_window": 2,
     "annual_csa": 3,
     "annual": 4,
     "full_inspection": 5,
@@ -31,6 +45,8 @@ PM_TYPE_ALIASES = {
     "annual_csa": "annual_csa",
     "annualcsa": "annual_csa",
     "monthly": "monthly",
+    "customer_window": "customer_window",
+    "customerwindow": "customer_window",
     "annual": "annual",
     "full_inspection": "full_inspection",
     "fullinspection": "full_inspection",
@@ -121,7 +137,6 @@ INT_FIELDS = {"client_rank", "pm_move_count", "tech_count"}
 FLOAT_FIELDS = {"request_age_hours"}
 TEXT_FIELDS = {"customer_class", "alarm_level", "pm_type", "notes"}
 
-
 @dataclass
 class JobInput:
     """
@@ -142,7 +157,7 @@ class JobInput:
 
     # Service / alarm state
     unit_available: Optional[bool] = None
-    alarm_level: Optional[str] = None  # blocking | reliability | minor | None
+    alarm_level: Optional[str] = None  # blocking, reliability, minor
     no_redundancy: Optional[bool] = None
     health_safety_risk: Optional[bool] = None
 
@@ -168,9 +183,7 @@ class JobInput:
     has_maintenance_contract: Optional[bool] = None
     is_residential: Optional[bool] = None
 
-
 JOB_INPUT_FIELD_NAMES = {f.name for f in dataclass_fields(JobInput)}
-
 
 @dataclass
 class PriorityResult:
@@ -186,7 +199,6 @@ class PriorityResult:
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
-
 def _normalize_token(value: Any) -> Optional[str]:
     if value is None:
         return None
@@ -198,13 +210,11 @@ def _normalize_token(value: Any) -> Optional[str]:
     text = re.sub(r"_+", "_", text).strip("_")
     return text or None
 
-
 def _normalize_customer_class(value: Any) -> Optional[str]:
     if value is None:
         return None
     text = str(value).strip().upper()
     return text if text in CLIENT_CLASSES else text or None
-
 
 def _normalize_bool(value: Any) -> Optional[bool]:
     if value is None:
@@ -221,7 +231,6 @@ def _normalize_bool(value: Any) -> Optional[bool]:
             return False
     return None
 
-
 def _normalize_int(value: Any) -> Optional[int]:
     if value is None:
         return None
@@ -229,7 +238,6 @@ def _normalize_int(value: Any) -> Optional[int]:
         return int(value)
     except (TypeError, ValueError):
         return None
-
 
 def _normalize_float(value: Any) -> Optional[float]:
     if value is None:
@@ -239,20 +247,17 @@ def _normalize_float(value: Any) -> Optional[float]:
     except (TypeError, ValueError):
         return None
 
-
 def _normalize_alarm_level(value: Any) -> Optional[str]:
     token = _normalize_token(value)
     if token is None:
         return None
     return ALARM_ALIASES.get(token, token)
 
-
 def _normalize_pm_type(value: Any) -> Optional[str]:
     token = _normalize_token(value)
     if token is None:
         return None
     return PM_TYPE_ALIASES.get(token, token)
-
 
 def normalize_job(job: Any) -> JobInput:
     """Accept either a JobInput instance or a plain dict."""
@@ -290,9 +295,8 @@ def normalize_job(job: Any) -> JobInput:
 
     return JobInput(**payload)
 
-
 def determine_client_class(job: JobInput) -> Tuple[Optional[str], List[str]]:
-    """Infer or validate C1..C4."""
+    """Infer or validate from C1 to C4."""
     missing: List[str] = []
 
     if job.customer_class in CLIENT_CLASSES:
@@ -325,7 +329,6 @@ def determine_client_class(job: JobInput) -> Tuple[Optional[str], List[str]]:
     missing.append("customer_class")
     return None, missing
 
-
 def determine_alarm_level(job: JobInput) -> Tuple[Optional[str], List[str]]:
     """
     Determine alarm type.
@@ -335,7 +338,7 @@ def determine_alarm_level(job: JobInput) -> Tuple[Optional[str], List[str]]:
     - reliability
     - minor
 
-    In structured inputs, unit_available=False is treated as blocking.
+    In structured inputs, unit_available = False is treated as blocking.
     """
     missing: List[str] = []
 
@@ -355,17 +358,14 @@ def determine_alarm_level(job: JobInput) -> Tuple[Optional[str], List[str]]:
     missing.append("alarm_level")
     return None, missing
 
-
 def determine_pm_type_rank(pm_type: Optional[str]) -> Optional[int]:
     if pm_type is None:
         return None
     return PM_TYPE_RANK.get(pm_type)
 
-
 def _schedule_code(priority: str, client_class: str) -> Tuple[str, str]:
     compact = f"{priority}{client_class}"
     return f"{priority}-{client_class}", compact
-
 
 def _job_category_rank(job: JobInput) -> int:
     """
@@ -381,23 +381,22 @@ def _job_category_rank(job: JobInput) -> int:
         return 2
     return 9
 
-
 def _job_subtype_rank(job: JobInput) -> Tuple[int, float]:
     """
     Within a category, apply the documented tie-breaks.
 
-    - PMs: quinquennial > annual CSA > annual > full inspection > generator inspection
+    - PMs: quinquennial > monthly/customer window > annual CSA > annual > full inspection > generator inspection
     - Services: older request wins
     - Commissioning: no further tie-break is documented, so it stays ahead of other categories only
     """
     if job.commissioning is True:
-        return (0, 0.0)
+        return (0, 0)
 
     if job.is_pm is True or job.pm_type is not None or job.pm_move_count is not None:
         pm_rank = determine_pm_type_rank(job.pm_type)
         if pm_rank is None:
             pm_rank = 99
-        return (pm_rank, 0.0)
+        return (pm_rank, 0)
 
     if job.is_service_call is True or job.non_urgent is True or job.alarm_level == "minor":
         if job.request_age_hours is None:
@@ -406,7 +405,6 @@ def _job_subtype_rank(job: JobInput) -> Tuple[int, float]:
         return (0, -float(job.request_age_hours))
 
     return (99, inf)
-
 
 def _sort_key(job: Any) -> Tuple[int, int, int, int, int, float]:
     result = determine_priority(job)
@@ -422,7 +420,6 @@ def _sort_key(job: Any) -> Tuple[int, int, int, int, int, float]:
     subtype_rank, subtype_tiebreak = _job_subtype_rank(normalized)
 
     return (priority_num, client_num, client_rank, category_rank, subtype_rank, subtype_tiebreak)
-
 
 def determine_priority(job: Any) -> PriorityResult:
     """
@@ -467,16 +464,17 @@ def determine_priority(job: Any) -> PriorityResult:
         else:
             schedule_code, compact = None, None
         return PriorityResult(
-            priority=priority,
-            client_class=client_class,
-            schedule_code=schedule_code,
-            compact_schedule_code=compact,
-            reason=reason,
+            priority = priority,
+            client_class = client_class,
+            schedule_code = schedule_code,
+            compact_schedule_code = compact,
+            reason = reason,
             decision_path=decision_steps or decision_path,
-            missing_info=missing,
-            needs_human_review=needs_review or bool(missing),
+            missing_info = missing,
+            needs_human_review = needs_review or bool(missing),
         )
 
+    ##### Rules #####
     # R1: Health and safety always wins.
     if job.health_safety_risk is True:
         decision_path.append("health_safety_risk -> P1")
@@ -493,6 +491,7 @@ def determine_priority(job: Any) -> PriorityResult:
             "Commissioning / mise en service is P1 by default.",
         )
 
+    ##### Decision Tree #####
     # Q1: Unit down / blocking alarm.
     if alarm_level == "blocking":
         decision_path.append("blocking condition detected")
@@ -512,8 +511,8 @@ def determine_priority(job: Any) -> PriorityResult:
             return build_result(
                 None,
                 "Need redundancy status to distinguish P1 from P2 for a C1/C2 outage.",
-                needs_review=True,
-                extra_missing=["no_redundancy"],
+                needs_review = True,
+                extra_missing = ["no_redundancy"],
             )
 
         if client_class in {"C3", "C4"}:
@@ -526,8 +525,8 @@ def determine_priority(job: Any) -> PriorityResult:
         return build_result(
             None,
             "Need customer class to distinguish P1 from P2 for a blocking outage.",
-            needs_review=True,
-            extra_missing=["customer_class"],
+            needs_review = True,
+            extra_missing = ["customer_class"],
         )
 
     # Q2: Reliability alarm, unit still available.
@@ -540,8 +539,8 @@ def determine_priority(job: Any) -> PriorityResult:
         return build_result(
             None,
             "Need customer class to distinguish P2 from P3 for a reliability alarm.",
-            needs_review=True,
-            extra_missing=["customer_class"],
+            needs_review = True,
+            extra_missing = ["customer_class"],
         )
 
     # Q4: PM already moved?
@@ -550,8 +549,8 @@ def determine_priority(job: Any) -> PriorityResult:
             return build_result(
                 None,
                 "PM move count cannot be negative.",
-                needs_review=True,
-                extra_missing=["pm_move_count"],
+                needs_review = True,
+                extra_missing = ["pm_move_count"],
             )
         if job.pm_move_count >= 2:
             decision_path.append("PM moved 2+ times -> P3")
@@ -570,39 +569,38 @@ def determine_priority(job: Any) -> PriorityResult:
         return build_result(
             None,
             "Need customer class to distinguish P3 from P5 for a non-urgent service call.",
-            needs_review=True,
-            extra_missing=["customer_class"],
+            needs_review = True,
+            extra_missing = ["customer_class"],
         )
 
     # Q6: PM classification.
     if job.is_pm is True or job.pm_type is not None or job.p1_breakdown_waiting is not None:
-        if job.pm_type in {"quinquennial", "monthly", "annual_csa"}:
+        if job.pm_type in {"quinquennial", "monthly", "customer_window", "annual_csa"}:
             decision_path.append("critical PM type -> P4")
-            return build_result("P4", "Critical PM type per the document.")
+            return build_result("P4", "Critical PM type per documentation.")
         if job.pm_type in {"annual", "full_inspection", "generator_inspection"}:
             decision_path.append("regular PM -> P6")
-            return build_result("P6", "Regular PM per the document.")
+            return build_result("P6", "Regular PM per documentation.")
         if job.is_pm is True and job.pm_type is None:
             return build_result(
                 None,
                 "Need PM type to distinguish P4 from P6.",
-                needs_review=True,
-                extra_missing=["pm_type"],
+                needs_review = True,
+                extra_missing = ["pm_type"],
             )
 
     return build_result(
         None,
         "Could not determine a dispatch priority from the provided structured inputs.",
-        needs_review=True,
-        extra_missing=["job_category"],
+        needs_review = True,
+        extra_missing = ["job_category"],
     )
-
 
 def priority_key(job: Any) -> Tuple[int, int, int, int, int, float]:
     """Sorting key for schedule ordering; lower is more urgent."""
     return _sort_key(job)
 
-
+# Not used on Streamlit yet
 def compare_jobs(job_a: Any, job_b: Any) -> int:
     """
     Compare two jobs.
@@ -620,7 +618,6 @@ def compare_jobs(job_a: Any, job_b: Any) -> int:
     if ka > kb:
         return 1
     return 0
-
 
 def higher_priority_job(
     job_a: Any, job_b: Any
@@ -679,7 +676,7 @@ def higher_priority_job(
         "Jobs are tied by the current inputs.",
     )
 
-
+# Not used on Streamlit yet
 def should_pull_technician_from_commissioning(
     commissioning_job: Any,
     pending_p1_job: Any,
@@ -705,7 +702,6 @@ def should_pull_technician_from_commissioning(
 
     pending_priority = determine_priority(pj)
     return pending_priority.priority == "P1"
-
 
 def explain_priority(value: Any) -> str:
     """
@@ -733,7 +729,7 @@ def explain_priority(value: Any) -> str:
         lines.append("Human review recommended.")
     return "\n".join(lines)
 
-
+##### Terminal Use Only #####
 if __name__ == "__main__":
     samples = [
         {
