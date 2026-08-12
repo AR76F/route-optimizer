@@ -51,17 +51,6 @@ Current rates effective:
 
 ---
 
-# Quick Comparison
-
-| Branch | Service Type | Standard Hours | Standard Rate | Mileage | Minimum Labor |
-|---------|--------------|----------------|---------------|----------|---------------|
-| Candiac | Mobile | 08:00–17:00 | Tier A: **$233.26/hr**<br>Tier B: **$239.80/hr**<br>Tier C: **$252.88/hr** | **$3.25/km** | **4 hours** |
-| Candiac | In-Shop | 08:00–17:00 | ISPG: **$196.20/hr**<br>BEV: **$218.00/hr**<br>Expanded Service: **$185.30/hr** | N/A | N/A |
-| Ottawa | Mobile | 08:00–17:00 | Tier A: **$215.07/hr**<br>Tier B: **$221.10/hr**<br>Tier C: **$233.16/hr** | **$3.25/km** | **4 hours** |
-| Ottawa | In-Shop | 07:00–15:30 | ISPG: **$181.00/hr**<br>BEV: **$201.00/hr**<br>Expanded Service: **$170.85/hr** | N/A | N/A |
-
-> **Note:** Refer to the detailed branch sections below for after-hours rates, overtime rates, travel expenses, BMS labor types, and service-specific billing rules.
-
 # Candiac
 
 ## Mobile Service

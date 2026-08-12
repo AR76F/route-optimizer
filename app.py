@@ -1321,7 +1321,7 @@ def _priority_open_dialog():
 # Service Assistant Addition
 
 def render_service_assistant():
-    st.markdown("### 🤖 Service Coordinator Assistant")
+    st.markdown("### 🤖 Allo, je suis Bob, prêt à vous aider au sein du service.")
     st.caption("Posez des questions sur la répartition, la sélection des techniciens, la prise de rendez-vous, le dépannage et la facturation. Ask dispatch, technician selection, booking, troubleshooting, and invoicing questions.")
 
     if "assistant_messages" not in st.session_state:
@@ -4614,7 +4614,7 @@ if page == "🏠 Route Optimizer":
     st.divider()
 
     with st.expander(
-        "🤖 Service Coordinator Assistant",
+        "🤖 Service Assistant",
         expanded = False
     ):
         render_service_assistant()

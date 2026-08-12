@@ -56,20 +56,16 @@ v0.1.0
 from __future__ import annotations
 
 import base64
-import io
 import pickle
 import re
 
-from collections import Counter
 from dataclasses import dataclass
 from functools import lru_cache
-from math import log, sqrt
+from math import sqrt
 from pathlib import Path
-from typing import Any, BinaryIO, Iterable, Protocol
+from typing import Any, Iterable, Protocol
 
 import fitz
-import pytesseract
-from PIL import Image, ImageOps
 
 # OpenAI Agents SDK
 from agents import Agent, Runner, SQLiteSession
@@ -91,9 +87,6 @@ _SESSION_CACHE: dict[str, SQLiteSession] = {}
 SUPPORTED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
 SUPPORTED_TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".log", ".json", ".xml", ".yaml", ".yml"}
 SUPPORTED_PDF_EXTENSIONS = {".pdf"}
-
-OCR_MAX_PAGE_PIXELS_SCALE = 2
-OCR_MIN_TEXT_LENGTH_BEFORE_FALLBACK = 40
 
 ##### Hints for Querying #####
 # Besoin d'ajouter les versions françaises
@@ -572,50 +565,6 @@ def _pdf_pages_to_vision_items(raw_bytes: bytes, display_name: str, max_pages: i
 
     return items
 
-def _normalize_ocr_image(image: Any) -> Any:
-    """
-    Light preprocessing to improve OCR quality.
-    """
-    if Image is None or ImageOps is None:
-        return image
-
-    try:
-        if image.mode not in {"RGB", "L"}:
-            image = image.convert("RGB")
-        image = ImageOps.grayscale(image)
-        image = ImageOps.autocontrast(image)
-        return image
-    except Exception:
-        return image
-
-def extract_text_from_image_source(source: Any) -> str:
-    """
-    OCR an image source into plain text.
-    """
-    if pytesseract is None or Image is None:
-        raise RuntimeError(
-            "OCR is unavailable because Pillow or pytesseract is not installed."
-        )
-
-    raw_bytes, _, display_name = _read_source_bytes(source)
-
-    try:
-        image = Image.open(io.BytesIO(raw_bytes))
-    except Exception as exc:
-        raise RuntimeError(f"Could not open image source {display_name!r}: {exc}") from exc
-
-    image = _normalize_ocr_image(image)
-
-    try:
-        text = pytesseract.image_to_string(image, lang = "eng")
-    except Exception as exc:
-        raise RuntimeError(
-            f"OCR failed for image source {display_name!r}: {exc}"
-        ) from exc
-
-    cleaned = text.strip()
-    return cleaned
-
 def extract_text_from_pdf_source(source: Any) -> str:
     """
     Extract text from a PDF source using native PDF text extraction only.
@@ -872,7 +821,7 @@ Temporary uploaded-file context:
 
     return Agent(
         name = "Service Coordinator Assistant",
-        model = "gpt-5.6-luna", # Luna is 80% less expensive
+        model = "gpt-5.6-terra", # Sol best, Terra mid, Luna is worse, being 80% less expensive
         instructions = human_instructions,
     )
 

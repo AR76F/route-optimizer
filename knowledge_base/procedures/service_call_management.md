@@ -550,6 +550,10 @@ Save the job.
 
 Confirm that the job appears correctly on the scheduler.
 
+## Priority Code
+
+Assign and display the appropriate priority code in the Schedule Priority field.
+
 ---
 
 # Step 10 - Final Pre-Dispatch Review
