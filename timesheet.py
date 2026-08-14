@@ -17,7 +17,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 )
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-08-09-samedi-dt-ot-v33"
+APP_VERSION = "2026-08-14-nuit-visible-no-souper-v34"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -994,20 +994,31 @@ def show_timesheet():
 
         # ── Prime de souper : 10h ou plus de TRAVAIL dans la journée ──
         # Les absences (vacances, maladie, férié) ne comptent pas — pas de travail effectué.
+        # Exception : PAS de prime de souper les jours de nuit à l'extérieur.
         CATS_TRAVAIL = ("Regular Time", "Overtime", "Double Time",
                         "Heures en banque", "OT en banque", "DT en banque")
         heures_travaillees = sum(hrs_by_cat.get(c, 0.0) for c in CATS_TRAVAIL)
-        prime_souper = heures_travaillees >= 10.0
+        nuit_ext = st.session_state.get(f"nuit_{state_key}_{d.isoformat()}", False)
+        prime_souper = (heures_travaillees >= 10.0) and not nuit_ext
 
         exp_key = f"exp_{state_key}_{d.isoformat()}"
         if exp_key not in st.session_state:
             st.session_state[exp_key] = (day_total == 0 and wd < 5)
 
         souper_tag = "  🍽️ Prime souper" if prime_souper else ""
-        nuit_tag = "  🌙 Nuit à l'extérieur" if st.session_state.get(f"nuit_{state_key}_{d.isoformat()}", False) else ""
+        nuit_tag = "  🌙 Nuit à l'extérieur" if nuit_ext else ""
         with st.expander(f"{day_str}   {title_hrs}{line_label}{souper_tag}{nuit_tag}",
                          expanded=st.session_state[exp_key]):
 
+
+            if nuit_ext:
+                st.markdown(f"""
+                <div style="background:#1f2f3a;border:1px solid #3a7ca5;border-radius:8px;
+                            padding:0.7rem 1rem;margin-bottom:0.8rem;color:#a7d4e9;font-size:0.85rem;">
+                    🌙 <b>Nuit à l'extérieur activée</b> pour cette journée. (Pas de prime
+                    de souper les jours de nuit à l'extérieur.)
+                </div>
+                """, unsafe_allow_html=True)
 
             if prime_souper:
                 st.markdown(f"""
@@ -1092,9 +1103,11 @@ def show_timesheet():
             with col_nuit:
                 nuit_key = f"nuit_{state_key}_{d.isoformat()}"
                 nuit_actif = st.session_state.get(nuit_key, False)
-                label_nuit = "🌙 Nuit à l'extérieur ✅" if nuit_actif else "🌙 Nuit à l'extérieur"
+                label_nuit = "🌙 Nuit à l'extérieur : OUI" if nuit_actif else "🌙 Nuit à l'extérieur"
                 if st.button(label_nuit, key=f"nuit_btn_{d.isoformat()}",
-                             help="Marquer cette journée comme nuit passée à l'extérieur"):
+                             type=("primary" if nuit_actif else "secondary"),
+                             use_container_width=True,
+                             help="Cliquer pour activer/désactiver la nuit passée à l'extérieur"):
                     nouvel_etat = not nuit_actif
                     st.session_state[nuit_key] = nouvel_etat
                     # Maintenir aussi un ensemble global (indépendant de la semaine)
