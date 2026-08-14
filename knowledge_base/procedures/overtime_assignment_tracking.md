@@ -42,6 +42,9 @@ The overtime tracking file is located at:
 
 ```text
 Team / Candiac branch / Liste overtime et outils Candiac
+
+https://cummins365.sharepoint.com/:x:/r/sites/GRP_CC40846-AdminServicePGCandiac/Shared%20Documents/Admin%20Service%20PG%20Candiac/Liste%20d%27overtime%20.xlsx?d=w2543ce45a25540c0991c667b238de49a&csf=1&web=1&e=KaeOwh
+
 ```
 
 The file must be updated after **every evening or weekend job**.
