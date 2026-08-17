@@ -13,3 +13,4 @@ gspread==6.2.1
 google-auth==2.55.2
 pymupdf==1.26.0
 openai-agents==0.x.x
+openai==1.x.x
