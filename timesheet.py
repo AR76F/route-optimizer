@@ -17,7 +17,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 )
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-06-19-wo-desc-readonly-v19"
+APP_VERSION = "2026-08-14-nuit-visible-no-souper-v34"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -65,8 +65,24 @@ LOCATIONS = [
 ]
 LOCATION_DEFAULT = "Candiac (Z8)"
 
-# Type de travail — '—' force un choix conscient
-JOB_TYPES = ["—", "WO (Service)", "WO Interne", "PM"]
+# Type de travail — '—' force un choix conscient.
+# Le mot distinctif est placé en PREMIER pour rester lisible sur mobile
+# (les menus déroulants tronquent la fin du texte).
+JOB_TYPES = ["—", "Service (WO)", "Interne (WO)", "PM"]
+
+def _location_pour_wo(label: str):
+    """Si le WO interne est un déplacement vers une succursale, retourne la
+    localisation correspondante ('Ottawa (AK)', etc.), sinon None."""
+    u = str(label or "").upper()
+    if "DÉPLACEMENT" not in u and "DEPLACEMENT" not in u:
+        return None
+    if "OTTAWA" in u:
+        return "Ottawa (AK)"
+    if "QUÉBEC" in u or "QUEBEC" in u:
+        return "Quebec (AQ)"
+    if "VAL-D'OR" in u or "VAL D'OR" in u or "VAL DOR" in u:
+        return "Val-d'Or (AX)"
+    return None
 
 HARDCODED_WO = [
     ("MAINTENANCE BATIMENT",                       "352661"),
@@ -141,6 +157,10 @@ def infer_category(d, time_in: float, time_out: float) -> str:
     if wd == 6:
         return "Double Time"
     if wd == 5:
+        # Samedi : DT avant 6h et après 23h, OT le reste (pas de RT, pas de cap)
+        if time_in is not None and time_out is not None:
+            if (time_in < 6.0) or (time_out > 23.0) or (time_in >= 23.0):
+                return "Double Time"
         return "Overtime"
     if time_in is not None and time_out is not None:
         if time_in >= 8.0 and time_out <= 17.0:
@@ -149,6 +169,26 @@ def infer_category(d, time_in: float, time_out: float) -> str:
             return "Double Time"
         return "Overtime"
     return "Regular Time"
+
+def rt_hours_in_span(d, time_in: float, time_out: float) -> float:
+    """
+    Retourne uniquement les heures classées RT (Regular Time) dans l'intervalle,
+    selon le jour de semaine et les plages horaires. Sert au cumul du cap
+    quotidien de 8h : seules les vraies heures RT comptent vers ce plafond,
+    PAS les heures déjà en OT (matin/soir) ou DT (nuit).
+    """
+    if time_in is None or time_out is None:
+        return 0.0
+    d = _coerce_date(d)
+    wd = d.weekday()
+    if wd == 6:   # dimanche : tout DT
+        return 0.0
+    if wd == 5:   # samedi : tout OT
+        return 0.0
+    # Semaine : RT seulement entre 8h et 17h
+    overlap_start = max(float(time_in), 8.0)
+    overlap_end   = min(float(time_out), 17.0)
+    return round(max(0.0, overlap_end - overlap_start), 4)
 
 def compute_hours(time_in, time_out, meal_hrs: float = 0.0) -> float:
     if time_in is None or time_out is None:
@@ -364,6 +404,9 @@ def submit_timesheet(emp_num: str, emp_nom: str, periode_fin: date, rows: list[d
                     str(r.get("commentaire", "")),
                     str(r.get("pay_type", "")),
                     "oui" if r.get("deja_bms", False) else "",
+                    str(r.get("location", "")),
+                    str(r.get("location_code", "")),
+                    "oui" if r.get("nuit", False) else "",
                 ])
 
             if skipped > 0 and not new_rows:
@@ -475,7 +518,7 @@ def load_week_from_gsheet(emp_num: str, p_start: date, p_end: date) -> list[dict
                 "time_in":     ti,
                 "time_out":    to,
                 "category":    cat_map.get(pay_type, "Regular Time"),
-                "job_type":    "PM" if str(rec.get("trans_type", "WO")).strip() == "PM" else "WO (Service)",
+                "job_type":    "PM" if str(rec.get("trans_type", "WO")).strip() == "PM" else "Service (WO)",
                 "trans_type":  str(rec.get("trans_type", "WO")).strip(),
                 "order_ref":   str(rec.get("order_ref", "")).strip(),
                 "wo_interne":  "",
@@ -637,6 +680,67 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
     color: #856404;
     margin-bottom: 0.4rem;
 }
+
+/* Menus déroulants : éviter que le texte sélectionné soit coupé sur mobile.
+   On laisse le texte revenir à la ligne plutôt que d'être tronqué avec '...'. */
+div[data-baseweb="select"] > div {
+    height: auto !important;
+    min-height: 38px;
+}
+div[data-baseweb="select"] div[title],
+div[data-baseweb="select"] span {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: unset !important;
+    line-height: 1.2 !important;
+}
+/* Options ouvertes de la liste déroulante : texte complet sur plusieurs lignes */
+ul[role="listbox"] li {
+    white-space: normal !important;
+    height: auto !important;
+}
+
+/* ── Tablette / iPad (largeur intermédiaire) ──
+   Sous 1200px, les 8 colonnes de saisie deviennent serrées. On réduit la taille
+   du texte et les espacements pour que les WO internes et les textes longs
+   restent lisibles sans être coupés. Ne touche pas au grand écran ni au mobile
+   (qui empile déjà les colonnes sous ~640px). */
+@media (min-width: 641px) and (max-width: 1200px) {
+    /* Texte des menus déroulants et champs plus compact */
+    div[data-baseweb="select"] div,
+    div[data-baseweb="select"] span,
+    .stTextInput input,
+    ul[role="listbox"] li {
+        font-size: 0.78rem !important;
+    }
+    /* Étiquettes des champs plus petites */
+    .stSelectbox label, .stTextInput label {
+        font-size: 0.72rem !important;
+    }
+    /* Resserrer le padding horizontal interne des colonnes */
+    div[data-testid="column"] {
+        padding-left: 0.15rem !important;
+        padding-right: 0.15rem !important;
+    }
+    /* Menus déroulants : réduire le padding interne pour gagner de la place */
+    div[data-baseweb="select"] > div {
+        padding-left: 0.3rem !important;
+        min-height: 34px;
+    }
+}
+
+/* ── iPad étroit / paysage compact ── (encore un cran plus serré) */
+@media (min-width: 641px) and (max-width: 900px) {
+    div[data-baseweb="select"] div,
+    div[data-baseweb="select"] span,
+    .stTextInput input,
+    ul[role="listbox"] li {
+        font-size: 0.72rem !important;
+    }
+    .stSelectbox label, .stTextInput label {
+        font-size: 0.68rem !important;
+    }
+}
 </style>
 """
 
@@ -655,32 +759,52 @@ def show_timesheet():
     """, unsafe_allow_html=True)
 
     wo_list = load_wo_interne()
-    wo_labels = [f"{desc}  ({no})" for desc, no in wo_list]
-    wo_by_label = {f"{desc}  ({no})": no for desc, no in wo_list}
+    # Étiquette = description seule (le numéro alourdit le texte et se fait couper
+    # sur mobile). Le numéro reste associé en coulisse via wo_by_label.
+    wo_labels = [desc for desc, no in wo_list]
+    wo_by_label = {desc: no for desc, no in wo_list}
 
     with st.sidebar:
         st.markdown("### 👤 Employé")
         tech_labels = [f"{nom}  ({num})" for nom, num in TECHNICIANS]
         url_emp = st.query_params.get("emp", "").strip().upper()
-        is_tech = bool(url_emp)
-        default_idx = 0
+
+        # Mémoriser le verrouillage technicien dans la session : si l'app a été
+        # ouverte via un lien ?emp=..., on garde ce verrou même après une
+        # navigation vers une autre page (qui fait perdre le paramètre d'URL).
         if url_emp:
+            st.session_state["_locked_emp"] = url_emp
+            # Réinjecter le paramètre dans l'URL pour la cohérence
+        locked_emp = st.session_state.get("_locked_emp", "")
+        effective_emp = url_emp or locked_emp
+
+        # Réinjecter le paramètre dans l'URL si absent mais verrouillé en session
+        # (garde le contexte technicien après navigation ou rechargement).
+        if locked_emp and not url_emp:
+            try:
+                st.query_params["emp"] = locked_emp
+            except Exception:
+                pass
+
+        is_tech = bool(effective_emp)
+        default_idx = 0
+        if effective_emp:
             for i, (nom, num) in enumerate(TECHNICIANS):
-                if num.upper() == url_emp:
+                if num.upper() == effective_emp:
                     default_idx = i
                     break
 
         if is_tech:
             # Technicien — nom affiché en lecture seule, pas de dropdown
-            _nom_tech = TECHNICIANS[default_idx][0] if default_idx < len(TECHNICIANS) else url_emp
+            _nom_tech = TECHNICIANS[default_idx][0] if default_idx < len(TECHNICIANS) else effective_emp
             st.markdown(
                 f'<div style="background:#1e3a5f;border:1px solid #2d5a8e;border-radius:8px;'
                 f'padding:0.5rem 0.9rem;color:#e8f4fd;font-size:0.9rem;font-weight:500;">'
-                f'👤 {_nom_tech} <span style="color:#7eb8d4;font-size:0.78rem;">({url_emp})</span></div>',
+                f'👤 {_nom_tech} <span style="color:#7eb8d4;font-size:0.78rem;">({effective_emp})</span></div>',
                 unsafe_allow_html=True
             )
             emp_nom = _nom_tech
-            emp_num = url_emp
+            emp_num = effective_emp
         else:
             # Superviseur — dropdown complet
             sel_tech = st.selectbox("Nom", tech_labels, index=default_idx, key="sel_tech")
@@ -868,25 +992,41 @@ def show_timesheet():
         n_lines    = len(day_rows)
         line_label = f"  ({n_lines} lignes)" if n_lines > 1 else ""
 
-        # ── Détection : RT cumulé > 8h en semaine (cap manqué, à corriger dans BMS) ──
-        rt_total_jour = hrs_by_cat.get("Regular Time", 0.0)
-        overflow_warning = (wd < 5 and rt_total_jour > 8.0)
+        # ── Prime de souper : 10h ou plus de TRAVAIL dans la journée ──
+        # Les absences (vacances, maladie, férié) ne comptent pas — pas de travail effectué.
+        # Exception : PAS de prime de souper les jours de nuit à l'extérieur.
+        CATS_TRAVAIL = ("Regular Time", "Overtime", "Double Time",
+                        "Heures en banque", "OT en banque", "DT en banque")
+        heures_travaillees = sum(hrs_by_cat.get(c, 0.0) for c in CATS_TRAVAIL)
+        nuit_ext = st.session_state.get(f"nuit_{state_key}_{d.isoformat()}", False)
+        prime_souper = (heures_travaillees >= 10.0) and not nuit_ext
 
         exp_key = f"exp_{state_key}_{d.isoformat()}"
         if exp_key not in st.session_state:
             st.session_state[exp_key] = (day_total == 0 and wd < 5)
 
-        with st.expander(f"{day_str}   {title_hrs}{line_label}",
+        souper_tag = "  🍽️ Prime souper" if prime_souper else ""
+        nuit_tag = "  🌙 Nuit à l'extérieur" if nuit_ext else ""
+        with st.expander(f"{day_str}   {title_hrs}{line_label}{souper_tag}{nuit_tag}",
                          expanded=st.session_state[exp_key]):
 
-            if overflow_warning:
-                excedent = rt_total_jour - 8.0
+
+            if nuit_ext:
                 st.markdown(f"""
-                <div style="background:#3a1f1f;border:1px solid #c0392b;border-radius:8px;
-                            padding:0.7rem 1rem;margin-bottom:0.8rem;color:#ffb3a7;font-size:0.85rem;">
-                    ⚠️ <b>{rt_total_jour:.2f}h RT cumulées</b> ce jour — dépasse le cap de 8h par
-                    <b>{excedent:.2f}h</b>. Les {excedent:.2f}h excédentaires devraient être en
-                    <b>OT</b>. Correction manuelle requise dans BMS.
+                <div style="background:#1f2f3a;border:1px solid #3a7ca5;border-radius:8px;
+                            padding:0.7rem 1rem;margin-bottom:0.8rem;color:#a7d4e9;font-size:0.85rem;">
+                    🌙 <b>Nuit à l'extérieur activée</b> pour cette journée. (Pas de prime
+                    de souper les jours de nuit à l'extérieur.)
+                </div>
+                """, unsafe_allow_html=True)
+
+            if prime_souper:
+                st.markdown(f"""
+                <div style="background:#1f3a2a;border:1px solid #27ae60;border-radius:8px;
+                            padding:0.7rem 1rem;margin-bottom:0.8rem;color:#a7e9c1;font-size:0.85rem;">
+                    🍽️ <b>Prime de souper</b> — {heures_travaillees:.2f}h travaillées ce jour
+                    (10h ou plus). Tu as droit à une prime de souper : n'oublie pas d'en faire
+                    la demande.
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -927,20 +1067,30 @@ def show_timesheet():
                 row_cat = row.get("category", "")
                 absence = row_cat in ("Vacances", "Maladie", "Férié", "Heures en banque")
                 if ti_ is not None and to__ is not None and not absence:
-                    raw_hrs = max(0.0, float(to__) - float(ti_))
-                    # Pour les lignes déjà soumises, seules les heures catégorisées RT
-                    # comptent vers le cap quotidien — pas les heures déjà en OT/DT
+                    heures_ligne = max(0.0, float(to__) - float(ti_) - float(row.get("meal_hrs", 0) or 0))
+                    uid_row = row.get("uid", "")
+                    split_decide = st.session_state.get(f"split_confirm_{uid_row}")
                     if row.get("deja_bms", False):
-                        if row_cat == "Regular Time" or not row_cat:
-                            rt_accumulated = min(8.0, rt_accumulated + raw_hrs)
-                        # Si déjà OT/DT, ne pas l'ajouter au cumul RT
+                        # Ligne déjà soumise : compter ses heures RÉELLES si RT.
+                        if row_cat == "Regular Time":
+                            rt_accumulated = min(8.0, rt_accumulated + heures_ligne)
+                        elif not row_cat:
+                            rt_accumulated = min(8.0, rt_accumulated + rt_hours_in_span(d, float(ti_), float(to__)))
+                    elif split_decide == "non" or row_cat == "Regular Time":
+                        # Le technicien a choisi de GARDER en RT (début hâtif décidé
+                        # par lui) → toutes les heures de la ligne comptent comme RT
+                        # réel vers le cap de 8h. Ainsi la ligne suivante bascule en
+                        # OT une fois les 8h atteintes.
+                        rt_accumulated = min(8.0, rt_accumulated + heures_ligne)
                     else:
-                        rt_accumulated = min(8.0, rt_accumulated + raw_hrs)
+                        # Ligne pas encore décidée : horaire théorique (plage 8-17h).
+                        rt_theorique = rt_hours_in_span(d, float(ti_), float(to__))
+                        rt_accumulated = min(8.0, rt_accumulated + rt_theorique)
                 if row.get("time_out") is not None:
                     last_time_out = row["time_out"]
 
             st.markdown("<div style='margin-top:6px;'>", unsafe_allow_html=True)
-            col_add, col_reset_day = st.columns([2, 1])
+            col_add, col_nuit, col_reset_day = st.columns([2, 1.3, 1])
             with col_add:
                 if st.button("➕ Ajouter une ligne", key=f"add_day_{d.isoformat()}"):
                     new_row = _blank_row(d)
@@ -949,6 +1099,26 @@ def show_timesheet():
                     last_idx = day_rows[-1][0]
                     rows.insert(last_idx + 1, new_row)
                     st.session_state[exp_key] = True  # garder l'expander ouvert
+                    st.rerun()
+            with col_nuit:
+                nuit_key = f"nuit_{state_key}_{d.isoformat()}"
+                nuit_actif = st.session_state.get(nuit_key, False)
+                label_nuit = "🌙 Nuit à l'extérieur : OUI" if nuit_actif else "🌙 Nuit à l'extérieur"
+                if st.button(label_nuit, key=f"nuit_btn_{d.isoformat()}",
+                             type=("primary" if nuit_actif else "secondary"),
+                             use_container_width=True,
+                             help="Cliquer pour activer/désactiver la nuit passée à l'extérieur"):
+                    nouvel_etat = not nuit_actif
+                    st.session_state[nuit_key] = nouvel_etat
+                    # Maintenir aussi un ensemble global (indépendant de la semaine)
+                    # pour détecter les blocs de nuits consécutives à cheval sur
+                    # deux semaines de paie.
+                    nuits_globales = st.session_state.setdefault("_nuits_globales", set())
+                    if nouvel_etat:
+                        nuits_globales.add(d.isoformat())
+                    else:
+                        nuits_globales.discard(d.isoformat())
+                    st.session_state[exp_key] = True
                     st.rerun()
             with col_reset_day:
                 if st.button("🗑️ Réinitialiser", key=f"reset_day_{d.isoformat()}",
@@ -1032,7 +1202,45 @@ def show_timesheet():
         </div>"""
 
     st.markdown("---")
+
+    # ── Bonus nuits consécutives (2+ nuits d'affilée = 1 bonus par bloc) ──
+    # Calculé sur l'ensemble global des nuits marquées (peut traverser 2 semaines).
+    nuits_globales = st.session_state.get("_nuits_globales", set())
+    bonus_html = ""
+    if nuits_globales:
+        from datetime import date as _date, timedelta as _td
+        dates_nuits = sorted(_date.fromisoformat(x) for x in nuits_globales)
+        # Regrouper en blocs de jours consécutifs
+        blocs = []
+        bloc_courant = [dates_nuits[0]]
+        for dd in dates_nuits[1:]:
+            if (dd - bloc_courant[-1]).days == 1:
+                bloc_courant.append(dd)
+            else:
+                blocs.append(bloc_courant)
+                bloc_courant = [dd]
+        blocs.append(bloc_courant)
+        # Ne garder que les blocs d'au moins 2 nuits, et qui touchent la semaine affichée
+        blocs_bonus = [b for b in blocs if len(b) >= 2]
+        blocs_semaine = [b for b in blocs_bonus
+                         if any(p_start <= dd <= p_end for dd in b)]
+        if blocs_semaine:
+            lignes_b = []
+            for b in blocs_semaine:
+                d1, d2 = b[0], b[-1]
+                lignes_b.append(
+                    f"{fmt_date_fr(d1)} → {fmt_date_fr(d2)} ({len(b)} nuits)")
+            détail = "  ·  ".join(lignes_b)
+            bonus_html = f"""
+            <div style="background:#1f2f3a;border:1px solid #3a7ca5;border-radius:8px;
+                        padding:0.7rem 1rem;margin-bottom:0.8rem;color:#a7d4e9;font-size:0.85rem;">
+                🌙🌙 <b>Bonus nuits consécutives</b> — {len(blocs_semaine)} bloc(s) de 2 nuits
+                ou plus cette semaine : {détail}. À noter pour la prime.
+            </div>"""
+
     with st.container():
+        if bonus_html:
+            st.markdown(bonus_html, unsafe_allow_html=True)
         st.markdown(f"""
         <div class="submit-section">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;">
@@ -1042,15 +1250,6 @@ def show_timesheet():
             {breakdown_rows_html}
         </div>
         """, unsafe_allow_html=True)
-
-    with st.expander("🔍 Aperçu JSON (bms_watcher)"):
-        preview_rows = _build_json_rows([r for r in rows if not r.get("_synced", False)])
-        st.json({
-            "employe_num": emp_num,
-            "employe_nom": emp_nom,
-            "periode_fin": fmt_period(p_end),
-            "lignes": preview_rows,
-        })
 
     col_sub, _ = st.columns([2, 1])
     with col_sub:
@@ -1064,6 +1263,7 @@ def show_timesheet():
             missing_ref_dates = []
             missing_ref_uids  = set()
             missing_type_dates = []
+            wrong_loc_dates = []
             for r in new_rows_only:
                 if r.get("time_in") is None or r.get("time_out") is None:
                     continue
@@ -1075,11 +1275,17 @@ def show_timesheet():
                     missing_type_dates.append(fmt_date_fr(r.get("date")))
                     missing_ref_uids.add(r.get("uid", ""))
                     continue  # inutile de valider l'Order Ref tant que le Type n'est pas choisi
-                if not is_valid_order_ref(r.get("order_ref", ""), r.get("job_type", "") == "WO Interne"):
+                if not is_valid_order_ref(r.get("order_ref", ""), r.get("job_type", "") == "Interne (WO)"):
                     missing_ref_dates.append(fmt_date_fr(r.get("date")))
                     missing_ref_uids.add(r.get("uid", ""))
+                    continue
+                # Un WO commençant par 1 = Ottawa → la localisation doit être Ottawa (AK)
+                oref = str(r.get("order_ref", "")).strip()
+                if oref.startswith("1") and r.get("location", "") != "Ottawa (AK)":
+                    wrong_loc_dates.append(fmt_date_fr(r.get("date")))
+                    missing_ref_uids.add(r.get("uid", ""))
 
-            if missing_type_dates or missing_ref_dates:
+            if missing_type_dates or missing_ref_dates or wrong_loc_dates:
                 msg_parts = []
                 if missing_type_dates:
                     jours_t = "\n".join(f"- {d}" for d in sorted(set(missing_type_dates)))
@@ -1092,6 +1298,12 @@ def show_timesheet():
                         "⚠️ Le champ **Order Ref** doit contenir un numéro de **6 chiffres** "
                         f"(ou une **sélection WO Interne** valide) pour :\n\n{jours}"
                     )
+                if wrong_loc_dates:
+                    jours_l = "\n".join(f"- {d}" for d in sorted(set(wrong_loc_dates)))
+                    msg_parts.append(
+                        "⚠️ Un WO commençant par **1** est un WO d'**Ottawa** — la "
+                        f"**Localisation** doit être «Ottawa (AK)» pour :\n\n{jours_l}"
+                    )
                 st.session_state["_missing_ref_uids"] = missing_ref_uids
                 st.session_state["_missing_ref_msg"] = (
                     "\n\n".join(msg_parts) +
@@ -1103,6 +1315,17 @@ def show_timesheet():
                 st.session_state["_missing_ref_msg"] = None
                 json_rows = _build_json_rows(new_rows_only)
                 valid = [r for r in json_rows if r.get("heures", 0) > 0]
+                # Attacher le marqueur "Nuit à l'extérieur" (par jour) à chaque ligne
+                _MOItoNUM = {"JAN":1,"FEB":2,"MAR":3,"APR":4,"MAY":5,"JUN":6,
+                             "JUL":7,"AUG":8,"SEP":9,"OCT":10,"NOV":11,"DEC":12}
+                for r in valid:
+                    iso = ""
+                    try:
+                        dd, mm, yy = str(r.get("date", "")).split("-")
+                        iso = f"{int(yy):04d}-{_MOItoNUM[mm.upper()]:02d}-{int(dd):02d}"
+                    except Exception:
+                        iso = ""
+                    r["nuit"] = st.session_state.get(f"nuit_{state_key}_{iso}", False)
                 if not valid:
                     st.warning("⚠️ Aucune nouvelle ligne à sauvegarder.")
                 else:
@@ -1291,7 +1514,12 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         if wd == 6:
             boundaries = [(0, 24, "Double Time")]
         elif wd == 5:
-            boundaries = [(0, 24, "Overtime")]
+            # Samedi : DT avant 6h et après 23h, OT entre les deux (pas de RT)
+            boundaries = [
+                (0,  6,  "Double Time"),
+                (6,  23, "Overtime"),
+                (23, 24, "Double Time"),
+            ]
         else:
             boundaries = [
                 (0,  6,  "Double Time"),
@@ -1381,22 +1609,32 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         if confirmed_pre is None:
             wd_pre = d.weekday()
 
-            # ── Samedi / Dimanche ──────────────────────────────────
-            if wd_pre in (5, 6):
-                is_sunday_pre  = wd_pre == 6
+            # ── Dimanche : tout DT ──────────────────────────────────
+            if wd_pre == 6:
                 full_hrs_pre   = compute_hours(ti_pre, to_pre, 0.0)
-                outside_cat    = "Double Time" if is_sunday_pre else "Overtime"
-                banque_cat     = "DT en banque" if is_sunday_pre else "OT en banque"
-                label_paye_pre = "DT payé" if is_sunday_pre else "OT payé"
                 needs_split_confirmation = True
                 _pre_segments   = [{"time_in": ti_pre, "time_out": to_pre,
-                                     "category": outside_cat, "hours": round(full_hrs_pre, 4)}]
+                                     "category": "Double Time", "hours": round(full_hrs_pre, 4)}]
                 _pre_is_we      = True
-                _pre_sunday     = is_sunday_pre
-                _pre_banque_cat = banque_cat
-                _pre_label_paye = label_paye_pre
+                _pre_sunday     = True
+                _pre_banque_cat = "DT en banque"
+                _pre_label_paye = "DT payé"
                 _pre_full_hrs   = full_hrs_pre
-                _pre_outside_cat = outside_cat
+                _pre_outside_cat = "Double Time"
+
+            # ── Samedi : OT entre 6h-23h, DT avant 6h / après 23h ──
+            elif wd_pre == 5:
+                segs_pre, _ = _compute_zone_split(d, ti_pre, to_pre)
+                segs_pre = _merge_adjacent_segments(segs_pre)
+                full_hrs_pre = compute_hours(ti_pre, to_pre, 0.0)
+                needs_split_confirmation = True
+                _pre_segments   = segs_pre
+                _pre_is_we      = True
+                _pre_sunday     = False
+                _pre_banque_cat = "OT en banque"   # défaut; le banque reclasse OT→OBTI et DT→DBTI
+                _pre_label_paye = "OT/DT payé"
+                _pre_full_hrs   = full_hrs_pre
+                _pre_outside_cat = "Overtime"
 
             # ── Lundi à Vendredi ────────────────────────────────────
             else:
@@ -1494,7 +1732,13 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
             with col_b:
                 if st.button("🏦 Mettre en banque", key=f"split_banque_{uid}", use_container_width=True):
                     st.session_state[f"split_confirm_{uid}"] = "banque"
-                    _persist_split(_apply_banque(_pre_segments, _pre_outside_cat, _pre_banque_cat))
+                    if _pre_sunday:
+                        segs_banque = _apply_banque(_pre_segments, "Double Time", "DT en banque")
+                    else:
+                        # Samedi : reclasser OT→OBTI ET DT→DBTI
+                        segs_banque = _apply_banque(_pre_segments, "Overtime", "OT en banque")
+                        segs_banque = _apply_banque(segs_banque, "Double Time", "DT en banque")
+                    _persist_split(segs_banque)
                     st.rerun()
             with col_c:
                 if st.button("❌ Ne pas soumettre", key=f"split_non_{uid}", use_container_width=True):
@@ -1510,7 +1754,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
     # Si une décision split a déjà été prise → heures figées
     split_decided = st.session_state.get(f"split_confirm_{uid}") is not None
 
-    c1, c2, c3, c4, c5, c8, c6, c7 = st.columns([0.7, 0.7, 0.9, 0.9, 1.3, 1.1, 1.2, 0.5])
+    c1, c2, c3, c4, c5, c8, c6 = st.columns([0.5, 0.5, 1.1, 1.1, 1.65, 1.2, 1.3])
 
     with c1:
         if split_decided:
@@ -1612,7 +1856,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
     with c5:
         if not is_absence:
             missing_ref_uids = st.session_state.get("_missing_ref_uids", set())
-            is_wo            = (job_type == "WO Interne")
+            is_wo            = (job_type == "Interne (WO)")
             needs_highlight  = (uid in missing_ref_uids) and not is_valid_order_ref(order_ref, is_wo)
             field_box = st.container(border=needs_highlight)
             with field_box:
@@ -1623,15 +1867,24 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                         f'margin-bottom:2px;">{label_txt}</div>',
                         unsafe_allow_html=True
                     )
-                if job_type == "WO Interne":
+                if job_type == "Interne (WO)":
                     try:
                         wo_idx = wo_labels.index(wo_interne_sel) + 1
                     except ValueError:
                         wo_idx = 0
-                    wo_sel = st.selectbox("WO Interne", ["— choisir —"] + wo_labels,
+                    wo_sel = st.selectbox("Interne (WO)", ["— choisir —"] + wo_labels,
                                           index=wo_idx, key=f"wo_{uid}")
                     order_ref      = wo_by_label.get(wo_sel, "") if wo_sel != "— choisir —" else ""
                     wo_interne_sel = wo_sel if wo_sel != "— choisir —" else ""
+                    # ── Auto-sélection de la succursale pour les WO de déplacement ──
+                    # (s'applique seulement quand la sélection CHANGE, pour ne pas
+                    #  écraser un choix manuel de localisation à chaque rerun)
+                    prev_key = f"_wo_prev_{uid}"
+                    if wo_sel != st.session_state.get(prev_key):
+                        st.session_state[prev_key] = wo_sel
+                        loc_auto = _location_pour_wo(wo_sel)
+                        if loc_auto:
+                            st.session_state[f"loc_{uid}"] = loc_auto
                 else:
                     order_ref      = st.text_input("Order Ref", value=order_ref,
                                                    key=f"or_{uid}", placeholder="Ex: 345924")
@@ -1654,11 +1907,9 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                 location = st.selectbox("Localisation", LOCATIONS, index=loc_idx, key=loc_key)
         else:
             location = row.get("location", LOCATION_DEFAULT)
-    with c7:
-        st.markdown("<div style='font-size:0.72rem;color:#888;margin-bottom:4px;'>BMS</div>",
-                    unsafe_allow_html=True)
-        deja = st.checkbox("✓", value=row.get("deja_bms", False), key=f"bms_{uid}",
-                           help="Déjà entré dans BMS")
+    # La case "✓ BMS" a été retirée (Donald/Sébastien sont gérés automatiquement
+    # par le mode scan du watcher). deja_bms reste False par défaut.
+    deja = row.get("deja_bms", False)
 
     # ── Info bar ──────────────────────────────────────────────────
     if ti is not None and to_ is not None:
