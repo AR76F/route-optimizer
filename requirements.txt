@@ -12,5 +12,5 @@ ortools==9.15.6755
 gspread==6.2.1
 google-auth==2.55.2
 pymupdf==1.26.0
-openai-agents==0.x.x
-openai==1.x.x
+openai-agents==0.21.1
+openai==3.1.0
