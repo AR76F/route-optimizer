@@ -7,7 +7,7 @@ requests==2.34.2
 mygeotab==0.9.6
 pandas==3.0.3
 openpyxl==3.1.5
-numpy==2.5.1
+numpy==2.3.5
 ortools==9.15.6755
 gspread==6.2.1
 google-auth==2.55.2
