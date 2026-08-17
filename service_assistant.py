@@ -1,11 +1,16 @@
 """
 Service Coordinator Assistant
-Version 1.0.0
+Version 1.0.1
 Author: UD016
 
 AI assistant for CSSNA Candiac
 
 Change log:
+
+v1.0.1
+- Fixed OpenAI client initialization to reliably read the API key from
+  Streamlit Cloud Secrets in addition to the environment, preventing
+  OpenAIError: Missing credentials on deploy.
 
 v1.0.0
 - Overhaul of code structure and cleanup for futureproofing purposes. 
@@ -56,6 +61,7 @@ v0.1.0
 from __future__ import annotations
 
 import base64
+import os
 import pickle
 import re
 
@@ -66,6 +72,7 @@ from pathlib import Path
 from typing import Any, Iterable, Protocol
 
 import fitz
+import streamlit as st
 
 # OpenAI Agents SDK
 from agents import Agent, Runner, SQLiteSession
@@ -73,9 +80,25 @@ from openai import OpenAI
 
 # Short instructions before trying to launch the assistant
 ## Set virtual environment (python -m venv [your environment name])
-## Set API Key (in PowerShell or PC environment)
+## Set API Key (in PowerShell/PC environment, or in Streamlit Cloud Secrets
+## as OPENAI_API_KEY = "sk-...")
 
-OPENAI_CLIENT = OpenAI()
+def _resolve_openai_api_key() -> str | None:
+    """
+    Resolve the OpenAI API key from the environment first, falling back to
+    Streamlit secrets. This avoids failures when Streamlit Cloud secrets are
+    not yet mirrored into os.environ at import time.
+    """
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if api_key:
+        return api_key
+
+    try:
+        return st.secrets.get("OPENAI_API_KEY")
+    except Exception:
+        return None
+
+OPENAI_CLIENT = OpenAI(api_key = _resolve_openai_api_key())
 
 EMBEDDING_MODEL = "text-embedding-3-large" # Small or large
 KNOWLEDGE_BASE_PATH = Path("knowledge_base")
