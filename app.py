@@ -42,7 +42,6 @@ from typing import List, Optional, Tuple, Dict, Any
 
 import numpy as np
 import streamlit as st
-st.write("🔑 Secrets visibles :", list(st.secrets.keys()))
 import googlemaps
 import polyline
 import folium
