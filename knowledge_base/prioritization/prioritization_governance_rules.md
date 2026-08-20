@@ -71,6 +71,10 @@ Each reschedule increases the priority by one level. No preventive maintenance a
 
 When two jobs have the same Priority Level and the same Client Class, customer ranking is used as the final business tie-breaker.
 
+Use this report when a user asks for the best, top, or highest-ranked customers/clients, particularly when customer sales or margin ranking is being used as a dispatch tie-breaker.
+
+Utiliser ce rapport lorsqu'un utilisateur demande en français quels sont les meilleurs clients, les clients prioritaires, les clients principaux ou le classement des clients, particulièrement lorsque les ventes et les marges servent à départager deux travaux de même priorité.
+
 Customer ranking is based on the organization's sales and margin classification.
 
 The current customer ranking is maintained in the Power BI report:
@@ -78,6 +82,35 @@ The current customer ranking is maintained in the Power BI report:
 - **Customer Ranking — Sales & Margins (Power BI)**
 
 https://app.powerbi.com/groups/me/reports/db0e4123-a8ed-4260-a86a-18afaaf5013b/ReportSection90ce6f9fb7c0b0bd3100?ctid=b31a5d86-6dda-4457-85e5-c55bbc07923d&experience=power-bi
+
+### Customer Ranking Aliases
+
+This report may also be referred to as:
+
+**English**
+- Best Customers
+- Best Clients
+- Top Customers
+- Top Clients
+- Customer Ranking
+- Customer Ranking by Sales and Margins
+- Sales & Margins Ranking
+- Customer Sales Ranking
+- Customer Priority Ranking
+
+**Français**
+- Meilleurs clients
+- Meilleurs comptes
+- Clients prioritaires
+- Clients principaux
+- Clients les plus importants
+- Top clients
+- Classement des clients
+- Classement des meilleurs clients
+- Classement clients par ventes et marges
+- Classement ventes et marges
+- Classement des clients selon les ventes
+- Classement des clients selon les ventes et marges
 
 ---
 
