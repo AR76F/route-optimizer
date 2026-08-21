@@ -17,7 +17,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 )
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-08-14-orderref-avant-split-v35"
+APP_VERSION = "2026-08-14-loc-avant-split-v36"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -1667,7 +1667,7 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         st.markdown('<div style="color:#7eb8d4;font-size:0.8rem;margin-bottom:4px;">'
                     '📝 Remplis Type et Order Ref d\'abord — ils seront copiés sur les lignes découpées.</div>',
                     unsafe_allow_html=True)
-        pc1, pc2, pc3 = st.columns([1.0, 1.1, 1.6])
+        pc1, pc2, pc3, pc4 = st.columns([0.9, 1.0, 1.4, 1.1])
         with pc1:
             _abs_opts = ["—", "Vacances", "Maladie", "Férié", "Heures en banque"]
             _abs_cur = row.get("category", "—")
@@ -1697,6 +1697,11 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
                 _ref_val = st.text_input("Order Ref", value=row.get("order_ref", ""),
                                          key=f"preref_{uid}", placeholder="Ex: 345924")
                 row["order_ref"] = _ref_val
+        with pc4:
+            _loc_cur = row.get("location", LOCATION_DEFAULT)
+            _loc_idx = LOCATIONS.index(_loc_cur) if _loc_cur in LOCATIONS else 0
+            _loc_sel = st.selectbox("Localisation", LOCATIONS, index=_loc_idx, key=f"preloc_{uid}")
+            row["location"] = _loc_sel
 
         if not _pre_is_we:
             # Weekday split
