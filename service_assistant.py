@@ -66,7 +66,6 @@ import pickle
 import re
 
 from dataclasses import dataclass
-from functools import lru_cache
 from math import sqrt
 from pathlib import Path
 from typing import Any, Iterable, Protocol
@@ -273,7 +272,6 @@ def file_signature(file_path: Path) -> tuple[str, int, int]:
     stat = file_path.stat()
     return (str(file_path.relative_to(KNOWLEDGE_BASE_PATH)), stat.st_mtime_ns, stat.st_size)
 
-@lru_cache(maxsize=1)
 def build_chunk_index(path: str = "knowledge_base") -> tuple[Chunk, ...]:
     """
     Load and chunk all Markdown documents in the active knowledge base.
@@ -383,7 +381,6 @@ def write_embedding_cache(
     with EMBEDDING_CACHE_PATH.open("wb") as f:
         pickle.dump(payload, f)
 
-@lru_cache(maxsize = 1)
 def build_embedding_index(path: str = "knowledge_base") -> tuple[EmbeddedChunk, ...]:
     """
     Load or build the embedding index for all active knowledge base Markdown files.

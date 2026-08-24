@@ -19,3 +19,4 @@ build/
 
 # User profile folders (avoid accidental adds)
 AppData/
+.cache/
