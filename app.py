@@ -1350,10 +1350,11 @@ def render_service_assistant():
         )
 
     with priority_col:
-        if st.button("⚖ Système de priorisation - Dispatch prioritization system", key="assistant_priority_open"):
+        if st.button("⚖ Système de priorisation - Dispatch prioritization system", key = "assistant_priority_open"):
             _priority_open_dialog()
 
     with feedback_col:
+        # Choice between Streamlit secret or hardcoded link
         feedback_form_url = secret(
             "FEEDBACK_FORM_URL",
             "https://cummins365-my.sharepoint.com/:x:/r/personal/ud016_cummins_com/Documents/service_assistant_formulaire_commentaires_fr.xlsx?d=w165966739bde45cfba28c3e3afafb18c&csf=1&web=1&e=4OxdGY",
@@ -1361,11 +1362,11 @@ def render_service_assistant():
         st.link_button(
             "📝 Soumettre un commentaire",
             feedback_form_url,
-            help="Ouvrir le formulaire français de commentaires dans SharePoint.",
+            help = "Ouvrir le formulaire de commentaires dans SharePoint.",
         )
 
     with clear_col:
-        if st.button("🗑️ Effacer la conversation - Clear conversation", key="assistant_clear"):
+        if st.button("🗑️ Effacer la conversation - Clear conversation", key = "assistant_clear"):
             st.session_state.assistant_messages = [
                 {"role": "assistant", "content": "Bonjour — Posez une question. Hi — Ask a question."}
             ]
