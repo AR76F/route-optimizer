@@ -17,7 +17,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 )
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-08-14-nuit-visible-no-souper-v34"
+APP_VERSION = "2026-08-14-loc-avant-split-v36"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -1661,6 +1661,48 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
 
     # ── Afficher la bannière de confirmation EN PREMIER si nécessaire ──────
     if needs_split_confirmation:
+        # Avant de demander le découpage, laisser le technicien remplir Absence,
+        # Type et Order Ref UNE SEULE FOIS. Ces valeurs sont copiées sur chaque
+        # ligne dédoublée par _split_into_rows — pas besoin de les retaper.
+        st.markdown('<div style="color:#7eb8d4;font-size:0.8rem;margin-bottom:4px;">'
+                    '📝 Remplis Type et Order Ref d\'abord — ils seront copiés sur les lignes découpées.</div>',
+                    unsafe_allow_html=True)
+        pc1, pc2, pc3, pc4 = st.columns([0.9, 1.0, 1.4, 1.1])
+        with pc1:
+            _abs_opts = ["—", "Vacances", "Maladie", "Férié", "Heures en banque"]
+            _abs_cur = row.get("category", "—")
+            _abs_idx = _abs_opts.index(_abs_cur) if _abs_cur in _abs_opts else 0
+            _abs_sel = st.selectbox("Absence", _abs_opts, index=_abs_idx, key=f"preabs_{uid}")
+            if _abs_sel != "—":
+                row["category"] = _abs_sel
+        with pc2:
+            _type_cur = row.get("job_type", "—")
+            _type_idx = JOB_TYPES.index(_type_cur) if _type_cur in JOB_TYPES else 0
+            _type_sel = st.selectbox("Type", JOB_TYPES, index=_type_idx, key=f"pretype_{uid}")
+            row["job_type"] = _type_sel
+            row["trans_type"] = "PM" if _type_sel == "PM" else "WO"
+        with pc3:
+            if row.get("job_type", "") == "Interne (WO)":
+                _wo_cur = row.get("wo_interne", "")
+                _wo_idx = (wo_labels.index(_wo_cur) + 1) if _wo_cur in wo_labels else 0
+                _wo_sel = st.selectbox("Interne (WO)", ["— choisir —"] + wo_labels,
+                                       index=_wo_idx, key=f"prewo_{uid}")
+                if _wo_sel != "— choisir —":
+                    row["wo_interne"] = _wo_sel
+                    row["order_ref"] = wo_by_label.get(_wo_sel, "")
+                    loc_auto = _location_pour_wo(_wo_sel)
+                    if loc_auto:
+                        row["location"] = loc_auto
+            else:
+                _ref_val = st.text_input("Order Ref", value=row.get("order_ref", ""),
+                                         key=f"preref_{uid}", placeholder="Ex: 345924")
+                row["order_ref"] = _ref_val
+        with pc4:
+            _loc_cur = row.get("location", LOCATION_DEFAULT)
+            _loc_idx = LOCATIONS.index(_loc_cur) if _loc_cur in LOCATIONS else 0
+            _loc_sel = st.selectbox("Localisation", LOCATIONS, index=_loc_idx, key=f"preloc_{uid}")
+            row["location"] = _loc_sel
+
         if not _pre_is_we:
             # Weekday split
             _rt_pre = sum(s["hours"] for s in _pre_segments if s["category"] == "Regular Time")
