@@ -246,6 +246,7 @@ The generated WOQT will be used throughout the remainder of the process.
 > **Best Practice**
 >
 > Review all customer information before saving. Correcting customer, billing, or complaint information is much easier before additional work is completed.
+> Never flip from WO to WOQT if you have already created a WO, it may double the SRT hours as they merge.
 
 ---
 

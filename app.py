@@ -1338,7 +1338,7 @@ def render_service_assistant():
     if "assistant_upload_key" not in st.session_state:
         st.session_state.assistant_upload_key = 0
 
-    upload_col, priority_col, clear_col = st.columns([2, 1, 1])
+    upload_col, priority_col, feedback_col, clear_col = st.columns([2, 1, 1, 1])
 
     with upload_col:
         uploaded_files = st.file_uploader(
@@ -1350,11 +1350,23 @@ def render_service_assistant():
         )
 
     with priority_col:
-        if st.button("⚖ Système de priorisation - Dispatch prioritization system", key="assistant_priority_open"):
+        if st.button("⚖ Système de priorisation - Dispatch prioritization system", key = "assistant_priority_open"):
             _priority_open_dialog()
 
+    with feedback_col:
+        # Choice between Streamlit secret or hardcoded link
+        feedback_form_url = secret(
+            "FEEDBACK_FORM_URL",
+            "https://cummins365-my.sharepoint.com/:x:/r/personal/ud016_cummins_com/Documents/service_assistant_formulaire_commentaires_fr.xlsx?d=w165966739bde45cfba28c3e3afafb18c&csf=1&web=1&e=4OxdGY",
+        )
+        st.link_button(
+            "📝 Soumettre un commentaire",
+            feedback_form_url,
+            help = "Ouvrir le formulaire de commentaires dans SharePoint.",
+        )
+
     with clear_col:
-        if st.button("🗑️ Effacer la conversation - Clear conversation", key="assistant_clear"):
+        if st.button("🗑️ Effacer la conversation - Clear conversation", key = "assistant_clear"):
             st.session_state.assistant_messages = [
                 {"role": "assistant", "content": "Bonjour — Posez une question. Hi — Ask a question."}
             ]
