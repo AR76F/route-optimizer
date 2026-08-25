@@ -1357,7 +1357,7 @@ def render_service_assistant():
         # Choice between Streamlit secret or hardcoded link
         feedback_form_url = secret(
             "FEEDBACK_FORM_URL",
-            "https://cummins365-my.sharepoint.com/:x:/r/personal/ud016_cummins_com/Documents/service_assistant_formulaire_commentaires_fr.xlsx?d=w165966739bde45cfba28c3e3afafb18c&csf=1&web=1&e=4OxdGY",
+            "https://cummins365-my.sharepoint.com/:x:/g/personal/ud016_cummins_com/IQBzZlkW3pvPRboow-Ovr7GMATf7-Kzrp1kIZrJHa7ZhPcE?e=ZuMRMQ",
         )
         st.link_button(
             "📝 Soumettre un commentaire",
