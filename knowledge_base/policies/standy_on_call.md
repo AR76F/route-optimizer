@@ -1,26 +1,14 @@
 # Standby (On-Call) Procedure
 
-# Version 1.0.1
+# Last Updated: 2026-08-28
 
-# Last Updated: 2026-07-15
-
-# Updated By: Jipeng Li
-
-# Change Log:
-
-v1.0.1
-- Added specification that both technicians and service administrators are eligible for the on-call compensation.
-
-v1.0.0
-- Creation of initial document.
-
-## Purpose
+# Purpose
 
 This procedure explains how the after-hours standby (on-call) process operates, including call routing, responsibilities, compensation, and escalation procedures.
 
 ---
 
-## Overview
+# Overview
 
 Outside normal business hours, customer service calls are managed through the company's third-party answering service.
 
@@ -39,6 +27,33 @@ Calls received:
 are automatically routed to the **OnCall Centre**, which screens the call and dispatches it to the appropriate on-call employee.
 
 ---
+
+## Quick Reference / Référence rapide
+
+**Standby / On-Call / Garde / Sur appel**
+
+Outside normal business hours, customer calls are routed through the **OnCall Centre** to the employee assigned to standby.
+
+En dehors des heures normales de travail, les appels clients sont acheminés par le **OnCall Centre** à l'employé assigné à la garde.
+
+### Compensation / Rémunération
+
+- **Weekly standby premium / Prime hebdomadaire de garde:** $235
+- **Weekday evening / Soir de semaine:** $25
+- **Weekend day / Jour de fin de semaine:** $55
+- **Statutory holiday / Jour férié:** $55
+- **Service Administrator:** Additional $35 for each emergency Work Order opened while on standby.
+- **Administrateur de service:** 35 $ supplémentaires pour chaque bon de travail d'urgence ouvert pendant la garde.
+
+The $235 weekly standby premium applies to both **technicians and service administrators**.
+
+La prime hebdomadaire de 235 $ s'applique aux **techniciens et aux administrateurs de service**.
+
+### Search Terms / Termes de recherche
+
+**English:** Standby, on-call, standby compensation, on-call compensation, standby premium, after-hours, on-call phone, emergency Work Order.
+
+**Français:** Garde, sur appel, service de garde, rémunération de garde, prime de garde, après les heures, téléphone de garde, bon de travail d'urgence.
 
 ## Company On-Call Phone
 
@@ -79,7 +94,7 @@ If after-hours calls are not being routed correctly:
 1. Confirm the issue is not related to the company on-call phone.
 2. Contact the OnCall Centre using the contact information available on their website.
 3. If the issue cannot be resolved, submit an IT Service Ticket.
-4. Request escalation to **Mark Tully** for additional support.
+4. Request escalation to Mark Tully for additional support.
 
 ---
 
@@ -87,7 +102,7 @@ If after-hours calls are not being routed correctly:
 
 ### Weekly Standby Premium
 
-The weekly standby premium has been increased from $200 to $235.
+The weekly standby premium is **$235**.
 This weekly stanby premium is applicable to both technicians and service administrators.
 
 The standby premium consists of:
@@ -108,7 +123,7 @@ Administrative employees assigned to standby are also compensated for emergency 
 
 Compensation:
 
-- $35 for each Work Order (WO) opened while on standby.
+- **$35 for each Work Order (WO) opened while on standby.**
 
 During each standby rotation, administrators should:
 

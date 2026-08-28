@@ -1,5 +1,18 @@
 # FieldAware Integration
 
+## Official Source Document
+
+The original source document for the FieldAware Prioritization Integration is available on SharePoint.
+
+**Original FieldAware Prioritization Integration / Source Document**
+
+https://cummins365-my.sharepoint.com/:w:/g/personal/ud016_cummins_com/IQBWPhr57J7PRK3RYekQaE5WAfPnub33entt1UPj2xZnRj0
+
+When a user asks for the original, official, or SharePoint version of the FieldAware Prioritization Integration procedure, provide the link above and mention that the FA Integration section
+is on the last section of the document.
+
+---
+
 ## Overview
 
 The Prioritization Engine assigns each job a standardized priority code (for example, `P1-C1`).

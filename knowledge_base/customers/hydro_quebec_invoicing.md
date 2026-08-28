@@ -1,19 +1,10 @@
-# Coordinator - Hydro-Québec Invoicing Requirements
+# Hydro-Québec Invoicing Requirements
 
-# Version 1.0.0
+# Last Updated: 2026-08-28
 
-# Last Updated: 2026-07-15
+# Purpose
 
-# Updated By: Jipeng Li
-
-# Change Log:
-
-v1.0.0
-- Creation of initial document.
-
-## Purpose
-
-This document outlines the invoicing requirements specific to Hydro-Québec work orders.
+This document outlines the invoicing requirements specific to **Hydro-Québec** work orders.
 
 Failure to include the required information will result in the invoice being automatically rejected by Hydro-Québec's invoice processing system.
 
@@ -27,7 +18,27 @@ Every Hydro-Québec invoice must include the following information:
 - Hydro-Québec Work Order Number
 - Hydro-Québec Approver Code (CII)
 
-All three pieces of information are mandatory.
+All three pieces of information are **mandatory**.
+
+---
+
+## Objectif
+
+Ce document présente les exigences de facturation spécifiques aux bons de travail de **Hydro-Québec**.
+
+L’absence de l’une des informations obligatoires entraînera le rejet automatique de la facture par le système de traitement des factures de Hydro-Québec.
+
+---
+
+# Informations obligatoires
+
+Chaque facture Hydro-Québec doit contenir les informations suivantes :
+
+- Numéro de bon de commande (PO)
+- Numéro d’ordre de travail Hydro-Québec
+- Code d’approbation Hydro-Québec (CII)
+
+Ces trois informations sont **obligatoires**.
 
 ---
 
@@ -97,9 +108,9 @@ Example:
 
 Verify that the invoice contains:
 
-- ✅ Purchase Order (PO)
-- ✅ Hydro-Québec Work Order Number
-- ✅ Hydro-Québec Approver Code (CII)
+- Purchase Order (PO)
+- Hydro-Québec Work Order Number
+- Hydro-Québec Approver Code (CII)
 
 If any of these items are missing, the invoice should **not** be sent.
 
@@ -142,8 +153,3 @@ The approver code (CII) must always accompany the work order number.
 The Work Order Number and Approver Code must be entered in the **COMPLAINT** section of the BMS work order.
 
 ---
-
-## Related Documents
-
-- coordinator_invoicing.md
-- coordinator_customer_invoice_credit.md

@@ -1,5 +1,33 @@
 # Prioritization Engine
 
+## Official Source Document
+
+The original source document for the Prioritization Engine is available on SharePoint.
+
+**Original Prioritization Procedure / Source Document**
+
+https://cummins365-my.sharepoint.com/:w:/g/personal/ud016_cummins_com/IQBWPhr57J7PRK3RYekQaE5WAfPnub33entt1UPj2xZnRj0
+
+When a user asks for the original, official, or SharePoint version of the Prioritization Engine, provide the link above.
+
+---
+
+This document may be referred to as:
+
+- Prioritization Engine
+- Prioritization Procedure
+- Dispatch Prioritization
+- Dispatch Priority Procedure
+- Prioritization Rules
+- Dispatch Priority Rules
+- Système de priorisation
+- Système de priorisation du dispatch
+- Procédure de priorisation
+- Priorisation du dispatch
+- Règles de priorisation
+
+---
+
 ## Overview
 
 The **Prioritization Engine** defines a single, shared prioritization logic used by both the **Service** and **Project Management (PM)** organizations.
@@ -19,6 +47,32 @@ The goal of the Prioritization Engine is to:
 - Allow any two jobs to be compared instantly.
 - Remove ambiguity from scheduling decisions.
 - Provide the foundation for an interactive tool that determines job urgency automatically.
+
+---
+
+# Moteur de priorisation
+
+## Vue d'ensemble
+
+Le **moteur de priorisation** définit une logique de priorisation unique et commune utilisée par les départements de **Service** et de **Gestion de projets (PM)**.
+
+Chaque travail — qu'il s'agisse d'un appel de service, d'une panne d'équipement, d'une mise en service (commissioning) ou d'une maintenance préventive — reçoit un code de priorité standardisé.
+
+Ce code permet de comparer les différents travaux de façon cohérente dans l'ensemble de l'organisation et garantit que les décisions de planification reposent sur un ensemble de règles communes.
+
+Le moteur est conçu pour être **déterministe** : avec les mêmes données d'entrée, il produira toujours la même priorité.
+
+---
+
+## Objectif
+
+Le moteur de priorisation a pour objectif de :
+
+- Établir un modèle de priorisation uniforme entre les départements de Service et de PM.
+- Attribuer un code de priorité standardisé à chaque travail.
+- Permettre de comparer instantanément deux travaux.
+- Éliminer l'ambiguïté dans les décisions de planification.
+- Servir de fondation à un outil interactif permettant de déterminer automatiquement le niveau d'urgence d'un travail.
 
 ---
 

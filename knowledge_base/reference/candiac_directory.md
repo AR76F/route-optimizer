@@ -50,7 +50,7 @@ If both a mobile number and an office number with an extension are available,  l
 | Lily Denenault Deshaie | — | AX24Q | 450-638-6863 ext. 9399 |
 | Rhéal Doiron | — | BB44Y | 450-638-6863 ext. 1012 |
 | Genevieve Ducap | 514-915-0224 | TH796 | 450-638-6863 ext. 1014 |
-| Byanka Emond | — | UC036 | 450-638-6863 ext. 1002 |
+| Byanka Emond | 450-368-6535 | UC036 | 450-638-6863 ext. 1002 |
 | Dan Epure | 514-217-9809 | FA058 | 450-638-6863 ext. 1009 |
 | Rouzbeh Fattahi Ghazi | — | AZ06C | — |
 | Bob Fyfe | 438-334-0668 | HK474 | 450-638-6863 ext. 2057 |

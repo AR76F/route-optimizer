@@ -1,25 +1,20 @@
-# Policy - Absence and Vacation Management
+# Absence and Vacation Management
 
-# Version 1.0.0
+# Last Updated: 2026-08-28
 
-# Last Updated: 2026-08-13
+# Purpose
 
-# Updated By: Jipeng Li
-
-# Change Log:
-
-v1.0.0
-- Creation of initial document.
-- Added absence request procedure.
-- Added last-minute absence procedure.
-- Added Candiac Branch shared calendar instructions.
-- Added holiday vacation planning requirements.
-
-## Purpose
-
-This document defines the process for communicating and managing employee absences and vacations within the Candiac branch.
+This document defines the process for communicating and managing **employee absences and vacations** within the Candiac branch.
 
 The objective is to ensure absences are properly requested, communicated, and visible to the team so that staffing and daily operations can be planned accordingly.
+
+---
+
+## Objectif
+
+Ce document définit le processus de communication et de gestion des **absences et des vacances des employés** de la succursale de Candiac.
+
+L’objectif est de s’assurer que les absences sont correctement demandées, communiquées et visibles par l’équipe afin de permettre une planification adéquate des effectifs et des opérations quotidiennes.
 
 ---
 
@@ -34,7 +29,7 @@ The employee must submit the absence request through:
 ```text
 OnePay
 
-https://portal.people.adp.com/oneux/ui/#/dashboard
+https://onepay.cummins.com/
 
 ```
 
