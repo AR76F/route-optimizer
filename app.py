@@ -67,6 +67,15 @@ try:
 except ImportError:
     ORTOOLS_AVAILABLE = False
 
+# Test access internal Candiac server
+from pathlib import Path
+
+test_file = Path(
+    r"\\cidcsdfs01\ca.cnd.dcec\LocalSharedFolders\common\access_test.pdf"
+)
+
+st.write("Candiac server accessible:", test_file.exists())
+
 # ────────────────────────────────────────────────────────────────
 # Optional myGeotab import
 # ────────────────────────────────────────────────────────────────
