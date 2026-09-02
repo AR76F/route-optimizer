@@ -1,135 +1,186 @@
-# Service Department Directory
+# Candiac Z8 Directory
 
-# Version 1.0.0
+# Last Updated: 2026-09-01
 
-# Last Updated: 2026-08-19
+# Purpose
 
-# Updated By: Jipeng Li
+This document is the centralized directory for CSSNA's Candiac Z8 branch personnel and contacts.
 
-# Source Updated: 2026-05-13
+It contains employees across Service, PM, administration, sales, management, technicians, technician agents, operational contacts, and branch locations.
 
-# Change Log:
+Use this directory as the primary source when a user asks about:
+- an employee's name
+- an employee's WWID
+- an employee's role or function
+- an employee's phone number or extension
+- an employee's branch or location
+- technician or technician-agent contact information
+- operational or branch contact numbers
 
-v1.0.0
-- Creation of initial document.
-- Converted Candiac telephone directory into a structured Markdown reference.
+When a user asks for a person's role, contact information, or other directory details, retrieve the information from this document regardless of whether the person is a technician, manager, administrator, salesperson, or other personnel.
 
-## Purpose
+Do not restrict directory lookups to technician profiles.
 
-This document provides a centralized directory of Service Department personnel, technicians, agents, branch contacts, and commonly used operational phone numbers.
+# Objectif
 
-The directory is structured so personnel can be added, removed, or updated easily as staffing changes occur.
+Ce document constitue le répertoire centralisé du personnel et des contacts de la succursale de Candiac Z8 de CSSNA.
+
+Il contient les employés des équipes de service, d'entretien préventif (PM), d'administration, des ventes, de la gestion, les techniciens, les agents techniques, ainsi que les contacts opérationnels et les succursales.
+
+Utiliser ce répertoire comme source principale lorsqu'un utilisateur recherche :
+- le nom d'un employé
+- le WWID d'un employé
+- le rôle, le poste ou la fonction d'un employé
+- le numéro de téléphone ou le poste téléphonique d'un employé
+- la succursale ou l'emplacement d'un employé
+- les coordonnées d'un technicien ou d'un agent technique
+- les coordonnées d'un contact opérationnel ou d'une succursale
+
+Lorsqu'un utilisateur demande le rôle, les coordonnées ou d'autres informations figurant dans le répertoire concernant une personne, récupérer l'information dans ce document, qu'il s'agisse d'un technicien, d'un gestionnaire, d'un administrateur, d'un représentant des ventes ou de tout autre membre du personnel.
+
+Ne pas limiter les recherches dans ce répertoire aux profils des techniciens.
 
 > **Maintenance Note**
 >
 > When personnel changes occur, update the applicable row rather than creating a new section.
 >
-> Keep personnel grouped according to their current function or location.
+> Keep personnel grouped according to their current role or location.
 
-## Phone Number Rule
+# Phone Number Rule
 
 If both a mobile number and an office number with an extension are available,  list **both** numbers.
 
 ---
 
-# Office Personnel
+# Office / Administration
 
-| Name | Mobile | WWID | Office |
+| Name | WWID | Role | Mobile | Office | Main Location |
 |---|---|---|---:|
-| Marquis Alain | — | PX684 | 450-638-6863 ext. 1016 |
-| Mathieu Angers | 514-704-3322 | MX107 | 450-638-6863 ext. 1033 |
-| Samuel Archambault | — | MA339 | 450-638-6863 ext. 1049 |
-| Joe Barone | 514-912-0046 | IY750 | — |
-| Santo Barone | 514-234-0731 | FM981 | 450-638-6863 ext. 1003 |
-| David Beaudry | 514-234-6674 | RL433 | 450-638-6863 ext. 1004 |
-| Kevin Belanger | 418-929-2898 | LM073 | — |
-| Steven Campeau | — | NS234 | 450-638-6863 ext. 1018 |
-| Véronique Carrier | — | AX07Y | 450-638-6863 ext. 1000 |
-| Morgan Cowdy | 343-597-0753 | AH53S | 613-736-1146 ext. 1604 |
-| Charles Décary | 514-235-6374 | BR273 | 450-638-6863 ext. 1007 |
-| Lily Denenault Deshaie | — | AX24Q | 450-638-6863 ext. 9399 |
-| Rhéal Doiron | — | BB44Y | 450-638-6863 ext. 1012 |
-| Genevieve Ducap | 514-915-0224 | TH796 | 450-638-6863 ext. 1014 |
-| Byanka Emond | — | UC036 | 450-638-6863 ext. 1002 |
-| Dan Epure | 514-217-9809 | FA058 | 450-638-6863 ext. 1009 |
-| Rouzbeh Fattahi Ghazi | — | AZ06C | — |
-| Bob Fyfe | 438-334-0668 | HK474 | 450-638-6863 ext. 2057 |
-| André Gadoury | 514-234-2942 | ND893 | 450-638-6863 ext. 1001 |
-| Olivier Gendron-Celebre | 438-334-7303 | SS600 | 450-638-6863 ext. 1025 |
-| Jean-Francois Germain | — | JS375 | 450-638-6863 ext. 1013 |
-| Soulaiman Imrani | 514-229-6884 | UD845 | 450-638-6863 ext. 1147 |
-| Adrian James-Mirolla | — | AY10V | 450-638-6863 ext. 9562 |
-| Elizabeth Kuznetsova | — | VT716 | 450-638-6863 ext. 1021 |
-| Andréane Laflamme | 514-951-1310 | VL502 | 450-638-6863 ext. 1148 |
-| Michel Latulippe | 514-912-0685 | FW689 | 450-638-6863 ext. 1018 |
-| Guillaume Lemelin | 418-570-2320 | ME533 | — |
-| Genevieve Levesque | — | GL061 | 450-638-6863 ext. 2020 |
-| Myriame Lortie | — | QU005 | 450-638-6863 ext. 1021 |
-| Kassendra Maigar-Patenaude | 438-468-6511 | SR018 | 450-638-6863 ext. 1015 |
-| Hakim Mehmel | 514-249-8862 | CQ725 | 450-638-6863 ext. 1020 |
-| Pier-Jean Morin | 438-341-0430 | IR180 | 450-638-6863 ext. 1026 |
-| Karolanne Ouellet St-Jules| — | BA74I | 450-638-6863 ext. 1053 |
-| Tom Owens | 514-603-9331 | IS275 | 450-638-6863 ext. 1052 |
-| Michel Parent | 514-415-8723 | FL114 | 450-638-6863 ext. 2019 |
-| Patrice Pépin | 263-363-1495 | AR76F | 450-638-6863 ext. 1017 |
-| Kurtis Plante | 613-898-9491 | QL725 | 613-736-1146 ext. 1614 |
-| Alain Pomerleau | 514-984-8190 | BS858 | 450-638-6863 ext. 1027 |
-| Jean-Carl Prescott | — | UF140 | 450-638-6863 ext. 1019 |
-| Cassandra Rhéaume | 438-459-5319 | UF231 | 450-638-6863 ext. 1151 |
-| Mario Soucy | — | FK000 | 450-638-6863 ext. 1032 |
-| Gabriel Tremblay | 514-246-3438 | KZ413 | 450-638-6863 ext. 1011 |
-| Annabelle Yaseti | — | HJ473 | 450-638-6863 ext. 1046 |
+| Marquis Alain | PX684 | Service Administrator | — | 450-638-6863 ext. 1016 | Candiac |
+| Mathieu Angers | MX107 | PEM Sales Consultant |514-704-3322 | 450-638-6863 ext. 1033 | Candiac |
+| Francesco Barone | GW630 | Commissioning Leader | 514-705-2958  | — | Home |
+| Joseph Barone | IY750 | PEM Sales Consultant | 514-912-0046  | — | Candiac |
+| Santo Barone | FM981 | PG Sales Consultant | 514-234-0731 | 450-638-6863 ext. 1003 | Home |
+| David Beaudry | RL433 | Project Manager | 514-234-6674 | 450-638-6863 ext. 1004 | Candiac |
+| Kevin Bélanger | LM073 | Field Service Supervisor | 418-929-2898 | — | Quebec City |
+| Steven Campeau | NS234 | Parts Clerk | — | 450-638-6863 ext. 1018 | Candiac |
+| Morgan Cowdy | AH53S | Service Administrator | 343-597-0753 | 613-736-1146 ext. 1604 | Ottawa |
+| Charles Décary | BR273 | PG Sales Director | 514-235-6374 | 450-638-6863 ext. 1007 | Home |
+| Rhéal Doiron | BB44Y | Service Administrator | — | 450-638-6863 ext. 1012 | Candiac |
+| Geneviève Ducap | TH796 | Contracts Administrator | 514-915-0224 | 450-638-6863 ext. 1014 | Candiac |
+| Byanka Émond | UC036 | Project Coordinator | 450-368-6535 | 450-638-6863 ext. 1002 | Candiac |
+| Dan Epure | FA058 | Field Service Engineering Senior Specialist | 514-217-9809 | 450-638-6863 ext. 1009 | Candiac 
+| Rouzbeh Fattahi Ghazi | AZ06C | Service Advisor | — | — | Ottawa |
+| Bob Fyfe | HK474 | PMR Inside Sales Consultant | 438-334-0668 | 450-638-6863 ext. 2057 | Home |
+| André Gadoury | ND893 | PG Sales Director, QC & ATL | 514-234-2942 | 450-638-6863 ext. 1001 | Home |
+| Olivier Gendron-Célèbre | SS600 | Project Coordinator - PEM Sales | 438-334-7303 | 450-638-6863 ext. 1025 | Home |
+| Jean-Francois Germain | JS375 | Lead Hand - Parts Clerk | — | 450-638-6863 ext. 1013 | Candiac |
+| Soulaiman Imrani | UD845 | Project Manager | 514-229-6884 | 450-638-6863 ext. 1147 | Candiac |
+| Adrian James-Mirolla | AY10V | Service Administrator | — | 450-638-6863 ext. 9562 | Candiac |
+| Elizabeth Kuznetsova | VT716 | Customer Order Management Representative | — | 450-638-6863 ext. 1021 | Candiac |
+| Andréane Laflamme | VL502 | Inside Sales - Renewal Consultant | 514-951-1310 | 450-638-6863 ext. 1148 | Home |
+| Guillaume Lemelin | ME533 | Service Manager | 418-570-2320 | — | Quebec City |
+| Geneviève Lévesque | GL061 | Service Administrator | — | 450-638-6863 ext. 2020 | Candiac |
+| Myriame Lortie | QU005 | Office Clerk - Parts | — | 450-638-6863 ext. 1021 | Candiac |
+| Kassendra Maigar-Patenaude | SR018 | Parts Supervisor | 438-468-6511 | 450-638-6863 ext. 1015 | Candiac |
+| Justin Mbaye | AM63H | Warehouse Operator | — | — | Candiac |
+| Hakim Mehmel | CQ725 | Project Management Leader | 514-249-8862 | 450-638-6863 ext. 1020 | Home |
+| Éric Ménard | CI690 | Service Administrator - Team Lead | — | — | Pointe-Claire |
+| Pier-Jean Morin | IR180 | Parts Manager | 438-341-0430 | 450-638-6863 ext. 1026 | Candiac |
+| Karolanne Ouellet St-Jules | BA74I | Service Administrator | — | 450-638-6863 ext. 1053 | Candiac |
+| Tomas Owens | IS275 | General Manager | 514-603-9331 | 450-638-6863 ext. 1052 | Candiac |
+| Michel Parent | FL114 | Project Assistant - Team Lead | 514-415-8723 | 450-638-6863 ext. 2019 | Pointe-Claire |
+| Patrice Pépin | AR76F | Service Manager | 263-363-1495 | 450-638-6863 ext. 1017 | Candiac |
+| Alain Pomerleau | BS858 | PG Sales Consultant | 514-984-8190 | 450-638-6863 ext. 1027 | Home |
+| Jean-Carl Prescott | UF140 | Parts Clerk | — | 450-638-6863 ext. 1019 | Candiac |
+| Cassandra Rhéaume | UF231 | Service Supervisor | 438-459-5319 | 450-638-6863 ext. 1151 | Candiac |
+| Mario Soucy | FK000 | Parts Clerk | — | 450-638-6863 ext. 1032 | Candiac |
+| Gabriel Tremblay | KZ413 | Service Supervisor | 514-246-3438 | 450-638-6863 ext. 1011 | Candiac |
+| Annabelle Yaseti | HJ473 | Service Administrator | — | 450-638-6863 ext. 1046 | Candiac |
+
+---
+
+# Candiac Service & PM
+
+## Service
+
+| Name | WWID | Office | Mobile | Territory |
+|---|---|---|---|---|---|
+| Marquis Alain | PX684 | 450-638-6863 ext. 1016 | — | Rive-Sud/Rive-Nord |
+| Rhéal Doiron | BB44Y | 450-638-6863 ext. 1012 | — | Rive-Sud/Rive-Nord |
+| Adrian James-Mirolla | AY10V | 450-638-6863 ext. 9562 | — | Montreal |
+| Karolanne Ouellet St-Jules | BA74I | 450-638-6863 ext. 1053 | — | Rive-Sud/Rive-Nord |
+
+## PM
+
+| Name | WWID | Office | Mobile | Territory |
+|---|---|---|---|---|---|
+| Geneviève Lévesque | GL061 | 450-638-6863 ext. 2020 | — | Montreal/Rive-Sud/Rive-Nord |
+| Annabelle Yaseti | HJ473 | 450-638-6863 ext. 1046 | — | Montreal/Rive-Sud/Rive-Nord |
 
 ---
 
 # Candiac Technicians
 
-| Name | Mobile | WWID | Office |
+| Name | WWID | Mobile | Office |
 |---|---|---|---:|
-| Francesco Barone | 514-705-2958 | GW630 | — |
-| Patrick Bellefleur | 514-346-4491 | GW573 | — |
-| Martin Bourbonniere | 514-915-2351 | GW574 | — |
-| Benoît Charrette-Gosselin | 514-943-7401 | HG848 | — |
-| Pier-Luc Côté | 514-792-0909 | MA213 | — |
-| Fredy Diaz | 438-340-4026 | MA470 | — |
-| Christian Dubreuil | 438-337-9524 | IW666 | — |
-| Alain Duguay | 514-912-8895 | GW636 | — |
-| Kevin Duranceau | 514-260-8908 | KP275 | — |
-| Donald Lagacé | 514-912-8905 | IW667 | 450-638-6863 ext. 1006 |
-| Benoit Laramée | 514-218-7244 | SQ740 | — |
-| Louis Lauzon | 514-912-0061 | FW688 | — |
-| Sergio Mendoza-Caron | 263-363-1303 | AT12D | — |
-| Alexandre Pelletier-Guay | 438-341-7969 | ME964 | — |
-| Sebastien Pepin-Milette | 514-912-8893 | WX094 | — |
-| François Racine | 514-912-8897 | GW629 | — |
-| Elie Rajotte-Lemay | 514-912-0446 | XE270 | — |
-| Ali Reza-Sabour | 514-912-8904 | KO424 | — |
-| David Robitaille | 438-342-8087 | UZ895 | — |
-| Patrick Robitaille | 514-912-8885 | HA414 | — |
-| Maxime Roy | 514-217-9791 | S0763 | — |
-| Mike Sulte | 438-451-0326 | XY100 | — |
-| Georges Yamna Nghuedieu | 514-236-4874 | TC808 | — |
+| Patrick Bellefleur | GW573 | 514-346-4491 | — |
+| Martin Bourbonniere | GW574 | 514-915-2351 | — |
+| Benoît Charrette-Gosselin | HG848 | 514-943-7401 | — |
+| Pier-Luc Côté | MA213 | 514-792-0909 | — |
+| Fredy Diaz | MA470 | 438-340-4026 | — |
+| Christian Dubreuil | IW666 | 438-337-9524 | — |
+| Alain Duguay | GW636 | 514-912-8895 | — |
+| Kevin Duranceau | KP275 | 514-260-8908 | — |
+| Donald Lagacé | IW667 | 514-912-8905 | 450-638-6863 ext. 1006 |
+| Benoit Laramée | SQ740 |  514-218-7244 | — |
+| Louis Lauzon | FW688 | 514-912-0061 | — |
+| Sergio Mendoza-Caron | AT12D | 263-363-1303 | — |
+| Alexandre Pelletier-Guay | ME964 | 438-341-7969 | — |
+| Sebastien Pepin-Milette | WX094 | 514-912-8893 | — |
+| François Racine | GW629 | 514-912-8897  | — |
+| Elie Rajotte-Lemay | XE270 | 514-912-0446 | — |
+| Ali Reza-Sabour | KO424 | 514-912-8904 | — |
+| Patrick Robitaille | HA414 |514-912-8885 | — |
+| Maxime Roy | S0763 | 514-217-9791 | — |
+| Michael Sulte | XY100 | 438-451-0326 | — |
+| Georges Yamna Nghuedieu | TC808 | 514-236-4874 | — |
 
 ---
+
+# Ottawa Service & PM
+
+## Service
+
+| Name | WWID | Office | Mobile | Territory | 
+|---|---|---|---|---|---|
+| Morgan Cowdy | AH53S | 613-736-1146 ext. 1604 | 343-597-0753 | Ottawa |
+| Rouzbeh Fattahi Ghazi | AZ06C | — | — | Ottawa |
+| Adrian James-Mirolla | AY10V | 450-638-6863 ext. 9562 | — | Ottawa |
+
+## PM
+
+| Name | WWID | Office | Mobile | Territory |
+|---|---|---|---|---|---|
+| Geneviève Ducap | TH796 | 450-638-6863 ext. 1014 | 514-915-0224 | Ottawa |
 
 # Ottawa Technicians
 
-| Name | Mobile | WWID | Office |
+| Name | WWID | Mobile | Office |
 |---|---|---|---:|
-| Arthur Bedford | 343-597-9971 | TP901 | — |
-| Colin Barnes | 613-227-9354 | AR52R | — |
-| Mike Bennett | 613-295-0542 | BV958 | — |
-| Connor Coxon | 613-223-5520 | AZ14K | — |
-| Patrick O'Connor | 613-295-6088 | TQ055 | — |
+| Arthur Bedford | TP901 | 343-597-9971 | — |
+| Colin Barnes | AR52R | 613-227-9354 | — |
+| Connor Coxon | AZ14K | 613-223-5520 | — |
+| Patrick O'Connor | TQ055 | 613-295-6088 | — |
 
 ---
 
-# Agents
+# Technician Agents
 
 | Name | Mobile | Territory |
 |---|---|---|
-| Bernard Martineau | 819-829-0965 | Rive-Sud |
-| Alain Tremblay | 418-570-7023 | Québec |
+| Bernard Martineau | 819-829-0965 | Estrie / Cantons-de-l'Est |
+| Alain Tremblay | 418-570-7023 | Quebec City |
 
 ---
 
@@ -137,12 +188,12 @@ If both a mobile number and an office number with an extension are available,  l
 
 | Contact | Phone | Notes |
 |---|---|---|
-| Z8 - Salle Emerald | — | Extension 2769 |
-| Ottawa On Call | 343-576-3891 | On-call support |
+| Z8 - Salle Emerald | 450-638-6863 ext. 2769 | Meeting room |
+| Ottawa On-Call | 343-576-3891 | On-Call support for Ottawa |
 | Service Urgence | 514-951-8260 | 24-hour service |
 | Pièces Urgence | 514-912-8903 | 24-hour parts support |
 | Centre d'Appel Pièces | 866-220-2716 | Parts Call Centre |
-| Ligne Interne | 450-638-6920 | Internal line |
+| Ligne Interne | 450-638-6920 | Internal line for Candiac |
 | Work Alone | 1-855-248-2303 | Work Alone service |
 | CRC | 1-866-685-4313 | CRC |
 | CSOC | 812-377-1111 | CSOC |

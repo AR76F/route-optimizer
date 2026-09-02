@@ -1,18 +1,8 @@
-# Customer - CN Rail Generator Operation
+# CN Rail Generator Operation
 
-# Version 1.0.0
+# Last Updated: 2026-08-28
 
-# Last Updated: 2026-07-23
-
-# Updated By: Jipeng Li
-
-# Change Log:
-
-v1.0.0
-- Creation of initial document based on the customer operating guide.
-- Initial version to be refined as additional site information becomes available.
-
-## Purpose
+# Purpose
 
 This document outlines the normal operating procedure for the CN Rail dual-generator installation.
 
@@ -21,6 +11,18 @@ It is intended to assist operators and Service Coordinators with the normal star
 > **Important**
 >
 > This procedure applies only to the documented CN Rail generator installation and should not be assumed to apply to other customer sites.
+
+---
+
+## Objectif
+
+Ce document décrit la procédure normale d’utilisation de l’installation à deux génératrices de **CN Rail**.
+
+Il vise à aider les opérateurs et les coordonnateurs de service à suivre les procédures normales de démarrage, d’arrêt et de réinitialisation des défauts pour cette installation spécifique.
+
+> **Important**
+>
+> Cette procédure s’applique uniquement à l’installation de génératrices CN Rail documentée et ne doit pas être considérée comme applicable aux autres sites clients.
 
 ---
 

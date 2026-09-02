@@ -1,248 +1,132 @@
-# Cash Customers - Service Call Procedure
+# Cash Customers - Service Call
 
-# Version 2.1.0
-
-# Last Updated: 2026-07-23
-
-# Updated By: Jipeng Li
-
-# Change Log:
-
-v2.1.0
-- Removed duplicated Order Entry (OE) instructions.
-- Added Customer Deposit processing section.
-- Referenced the Customer Deposits Process as the authoritative procedure.
-- Updated coordinator responsibilities, checklist, best practices, and common mistakes.
-
-v2.0.0
-- Completely redesigned procedure.
-- Added pre-authorization workflow.
-- Added supervisor follow-up.
-- Added customer follow-up process.
-- Added same-week invoicing requirements.
-- Added final payment workflow.
-- Added coordinator checklist.
-- Added best practices and common mistakes.
-
-v1.0.0
-- Creation of initial document.
+# Last Updated: 2026-09-02
 
 ## Purpose
 
-This procedure describes the complete workflow for managing **cash customers requiring a mobile service call**.
+This procedure describes the payment and follow-up process for **cash customers requiring a mobile service call**.
 
-Unlike charge customers, cash customers present a higher financial risk because payment is not protected by an approved credit account. Proper payment handling, follow-up, and timely invoicing are essential to minimize financial exposure.
+For standard cash customer service calls, a **$750 Clover pre-authorization must be completed before dispatching the technician**.
+
+## Objectif
+
+Cette procédure décrit le processus de paiement et de suivi pour les **clients cash nécessitant un appel de service mobile**.
+
+Pour un appel de service standard d'un client cash, une **préautorisation Clover de 750 $ doit être effectuée avant d'envoyer le technicien sur le site**.
 
 ---
 
-# Workflow Overview
+## Quick Reference / Référence rapide
 
-```text
-Customer Calls
-        ↓
-Collect Credit Card Information
-        ↓
-Complete Clover Pre-Authorization ($750)
-        ↓
-Dispatch Technician
-        ↓
-Technician Completes Work
-        ↓
-Supervisor Follow-Up
-        ↓
-Contact Customer
-        ↓
-Confirm Final Charges
-        ↓
-Convert Pre-Authorization to Payment
-        ↓
-Process Customer Deposit (OE)
-        ↓
-Generate Invoice
-        ↓
-Send Invoice & Receipt
-        ↓
-File Documentation
-```
+**Cash Customer / Service Call / Client cash / Appel de service**
+
+For a standard cash customer service call:
+
+- Obtain the customer's payment information.
+- Complete a **$750 Clover pre-authorization before dispatch**.
+- Record the Clover Authorization ID as the PO number on the BMS Work Order.
+- Dispatch the technician after the pre-authorization is complete.
+- Follow up with the supervisor after service.
+- Review the completed work and final amount with the customer.
+- Convert the pre-authorization into the final payment.
+- Process the payment through the applicable **Customer Deposit / Order Entry (OE)** procedure.
+- Produce and send the final invoice during the same week as the completed work.
+- Send the final invoice and payment receipt to the customer.
+- File the required documentation.
+
+### French Retrieval Concepts
+
+- Client cash
+- Client comptant
+- Appel de service cash
+- Appel de service client cash
+- Préautorisation
+- Préautorisation Clover
+- Préautorisation 750 $
+- Paiement client cash
+- Paiement final
+- Convertir préautorisation en paiement
+- Dépôt client
+- OE client cash
+- Facturation client cash
+- Paiement avant dispatch
+- Paiement avant technicien
 
 ---
 
 # Before Dispatch
 
-Before dispatching a technician, complete the following steps.
+Before dispatching the technician:
 
-## Collect Customer Payment Information
+1. Obtain the customer's payment information.
+2. Complete a **$750 pre-authorization in Clover**.
+3. Retrieve the Clover Authorization ID.
+4. Enter the Authorization ID as the **PO number on the BMS Work Order**.
 
-Obtain:
+A pre-authorization is **not the final payment**. It reserves funds before the technician is dispatched.
 
-- Credit card information
-- Cardholder name
-- Customer authorization to process payment
-
-Determine whether the payment method is:
-
-- Personal credit card
-- Commercial credit card
-
-Customer payment information must be stored securely according to branch procedures until payment has been completed.
-
----
-
-## Standard Pre-Authorization
-
-For standard service calls:
-
-Obtain a **$750 pre-authorization** using Clover.
-
-This pre-authorization must be completed **before dispatching the technician**.
-
-> **Important**
->
-> A pre-authorization is **not** a payment.
->
-> It only reserves funds on the customer's credit card.
-
----
-
-# Processing the Pre-Authorization
-
-Using Clover:
-
-1. Open the Virtual Terminal.
-2. Select **Pre-Authorization**.
-3. Enter the pre-authorization amount.
-4. Complete the transaction.
-5. Retrieve the payment receipt.
-6. Record the Authorization ID.
-7. Enter the Authorization ID as the Purchase Order (PO) number on the BMS Work Order.
-8. Save the payment receipt.
-
-Refer to the **Clover Training** procedure for detailed instructions.
+Refer to **Clover Training** for the detailed Clover procedure.
 
 ---
 
 # Technician Dispatch
 
-Once the pre-authorization has been successfully completed:
+Once the required pre-authorization has been successfully completed, the technician may be dispatched.
 
-- Dispatch the technician.
-- Complete the Work Order following the standard dispatch procedure.
-
----
-
-# Post-Service Supervisor Review
-
-The day after the service call, or as soon as practical:
-
-Follow up with the assigned supervisor.
-
-Confirm:
-
-- Technician labor has been entered.
-- Technician punch has been completed.
-- Work Order information is complete.
-- The Work Order is identified as a **Cash Customer**.
+Continue using the standard Service and Work Order procedures.
 
 ---
 
-# Customer Follow-Up
+# Post-Service Follow-Up
 
-Contact the customer once the technician has completed the work.
+After the service call:
 
-During the call:
+- Follow up with the assigned supervisor.
+- Verify that the technician's labor/punch has been entered.
+- Confirm that the Work Order is identified as a **cash customer**.
 
-- Confirm the service has been completed.
+Contact the customer to:
+
+- Confirm that the service has been completed.
 - Explain the work performed.
-- Answer any customer questions.
-- Review the final invoice amount.
-- Confirm customer approval to complete the payment.
+- Review the final amount.
+- Answer any questions.
+- Obtain approval to complete the final payment.
 
-Whenever possible, send a preview of the invoice before requesting final payment.
+Whenever possible, provide the customer with a preview of the invoice before completing payment.
 
 ---
 
 # Final Payment
 
-Once customer approval has been received:
+Once the final amount has been confirmed:
 
 1. Convert the Clover pre-authorization into the final payment.
-2. Verify that the payment has been successfully processed.
-3. Generate the payment receipt.
-4. Record the Authorization ID if required.
-5. Save a copy of the payment receipt.
+2. Generate and save the payment receipt.
+3. Process the payment through the applicable **Customer Deposit / Order Entry (OE)** procedure.
+
+Refer to the **Customer Deposits Process** for the complete BMS deposit workflow.
 
 ---
 
-# Processing the Customer Deposit
+# Final Invoice and Documentation
 
-After the final payment has been completed:
+The final invoice should be produced and sent during the **same week the work was completed**.
 
-Process the customer's payment by creating an **Order Entry (OE)** in BMS.
-
-The Customer Deposit process includes:
-
-- Creating the Order Entry.
-- Recording the customer deposit.
-- Applying the correct Tax District.
-- Linking the payment to the Work Order.
-- Applying the deposit to the final invoice.
-- Following the appropriate sales tax rules.
-
-> **Important**
->
-> Follow the **Customer Deposits Process** procedure for the complete Order Entry workflow.
->
-> The customer deposit should be completed as soon as the payment has been successfully processed.
-
----
-
-# Invoice Completion
-
-The final invoice should be:
-
-- Prepared during the same week the work was completed.
-- Sent during the same week.
-
-Prompt invoicing reduces payment delays and minimizes financial risk.
-
----
-
-# Sending Documents
-
-After payment has been completed:
-
-Email the customer:
+Send the customer:
 
 - Final invoice.
 - Payment receipt.
 
-Verify that both documents have been successfully delivered.
+File the required payment and invoice documentation according to the established branch process.
 
 ---
 
-# Filing Documentation
+# Pre-Authorization Expiration
 
-Print or save copies of:
+If the work or required parts extend beyond the Clover pre-authorization period, contact the customer before the authorization expires and arrange the required payment.
 
-- Final invoice.
-- Payment receipt.
-- Order Entry documentation.
-
-File the documents in the designated payment drawer located at the front of the Parts Department.
-
----
-
-# Special Situations
-
-## Parts Delay
-
-If required parts will not arrive before the Clover pre-authorization expires:
-
-- Contact the customer before expiration.
-- Obtain payment again when the order is ready.
-- Add a reminder in the Work Order.
-
-Example:
+When appropriate, add a reminder such as:
 
 ```text
 Contact customer for payment once the order is ready.
@@ -250,104 +134,44 @@ Contact customer for payment once the order is ready.
 
 ---
 
-## Customer Questions
+## Official SharePoint Guide / Guide SharePoint officiel
 
-If the customer questions the invoice:
+The official SharePoint document for **Cash Customer Management** contains the complete visual procedure for cash customer service calls, including the pre-authorization, post-service follow-up, final payment, invoicing, and filing process.
 
-- Explain the completed work.
-- Review technician findings.
-- Answer all billing questions before completing payment.
+Le document SharePoint officiel de **gestion des clients cash** contient la procédure visuelle complète pour les appels de service des clients cash.
 
----
+For this knowledge-base procedure, refer specifically to the **Credit Card / Service Call** portion of the SharePoint document.
 
-# Coordinator Responsibilities
+**Official SharePoint Link:**
 
-Service Coordinators are responsible for:
+[Open the Cash Customer Management Guide](https://cummins365.sharepoint.com/:p:/s/GRP_CC40846-AdministrationFSPG/IQDGYk25suYwQqXqvmBGVVPfAYmb9nw3KGR4zpkCTKXmVTE)
 
-- Obtaining the customer's payment information.
-- Processing the $750 pre-authorization before dispatch.
-- Recording the Clover Authorization ID on the Work Order.
-- Following up with the supervisor after service completion.
-- Contacting the customer to review the completed work.
-- Converting the pre-authorization into the final payment.
-- Processing the customer deposit following the Customer Deposits Process.
-- Producing and sending the invoice during the same week.
-- Sending the payment receipt.
-- Filing all required documentation.
+### Link Retrieval Rule / Règle de récupération du lien
 
----
+When a user asks for the **cash customer service call procedure, $750 pre-authorization procedure, SharePoint link, source document, original document, official guide, visual guide, screenshots, or cash customer training material**, provide the **Official SharePoint Link above**.
 
-# Coordinator Checklist
+Lorsqu'un utilisateur demande la **procédure d'appel de service pour un client cash, la procédure de préautorisation de 750 $, le lien SharePoint, le document source, le document original, le guide officiel, le guide visuel ou les captures d'écran**, fournir le **lien SharePoint officiel ci-dessus**.
 
-## Before Dispatch
+Examples of requests that should return this link:
 
-- [ ] Credit card information collected.
-- [ ] $750 pre-authorization completed.
-- [ ] Authorization ID entered on the BMS Work Order.
-- [ ] Technician dispatched.
+**English**
+- Give me the cash customer service call procedure.
+- Do you have the $750 pre-authorization procedure?
+- Give me the SharePoint link.
+- Show me the cash customer source document.
+- Where is the visual cash service call guide?
 
-## After Service
-
-- [ ] Technician punch verified.
-- [ ] Supervisor follow-up completed.
-- [ ] Customer contacted.
-- [ ] Final amount confirmed.
-- [ ] Pre-authorization converted to payment.
-- [ ] Customer deposit processed.
-- [ ] Invoice produced.
-- [ ] Invoice emailed.
-- [ ] Payment receipt emailed.
-- [ ] Documentation filed.
+**Français**
+- Donne-moi la procédure pour un appel de service client cash.
+- Quelle est la procédure pour la préautorisation de 750 $?
+- As-tu le lien SharePoint?
+- Donne-moi le document source pour les clients cash.
+- Où est le guide visuel pour les appels de service cash?
 
 ---
 
-# Best Practices
+## Search Terms / Termes de recherche
 
-- Obtain the pre-authorization before dispatching the technician.
-- Follow up with the customer promptly after service completion.
-- Complete the Customer Deposits Process immediately after converting the pre-authorization into the final payment.
-- Produce invoices during the same week the work was completed.
-- Keep all payment documentation organized.
-- Create a Clover customer profile whenever possible to simplify future transactions.
+**English:** cash customer, cash service call, cash customer service call, $750 pre-authorization, Clover pre-authorization, payment before dispatch, cash customer payment, final payment, customer deposit, Order Entry, OE, cash customer invoice.
 
----
-
-# Common Mistakes
-
-## Technician Dispatched Before Payment
-
-Always complete the required pre-authorization before dispatching a technician.
-
----
-
-## Treating a Pre-Authorization as Final Payment
-
-Remember that a pre-authorization only reserves funds.
-
-It must later be converted into the final payment.
-
----
-
-## Customer Deposit Not Processed
-
-Converting the pre-authorization into a payment does **not** complete the accounting process.
-
-Always complete the **Customer Deposits Process** to correctly record and apply the customer's payment in BMS.
-
----
-
-## Delayed Customer Follow-Up
-
-Delaying customer contact increases the likelihood of payment issues or disputes.
-
----
-
-## Delayed Invoicing
-
-Invoices should always be produced and sent during the same week that the work was completed.
-
----
-
-## Expired Pre-Authorization
-
-If parts or repairs extend beyond the authorization period, contact the customer before the authorization expires to arrange payment again.
+**Français:** client cash, client comptant, appel de service cash, appel de service client cash, préautorisation 750 $, préautorisation Clover, paiement avant dispatch, paiement avant technicien, paiement client cash, paiement final, dépôt client, OE, facturation client cash.

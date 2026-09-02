@@ -1,292 +1,199 @@
-# Cash Customers - Accepted Quotation Procedure
+# cash Customers - Accepted Quotation
 
-# Version 1.1.0
-
-# Last Updated: 2026-07-23
-
-# Updated By: Jipeng Li
-
-# Change Log:
-
-v1.1.0
-- Simplified Order Entry section.
-- Removed duplicated Order Entry instructions.
-- Referenced the Customer Deposits Process as the authoritative procedure.
-
-v1.0.0
-- Creation of initial document.
+# Last Updated: 2026-09-02
 
 ## Purpose
 
-This procedure describes the complete payment workflow for **cash customers who have accepted a quotation**.
+This procedure describes the payment and follow-up process for * cash customers who have accepted a quotation**.
 
-Unlike standard service calls, accepted quotations require **full payment before any parts are ordered or work begins**. This policy protects the branch from financial risk and ensures customer commitment before purchasing parts or scheduling work.
+For accepted cash quotations, the **full quotation amount must be collected before ordering parts, scheduling work, or dispatching a technician**.
+
+A pre-authorization is not used.
+
+## Objectif
+
+Cette procédure décrit le processus de paiement et de suivi lorsqu'un **client cash accepte une soumission**.
+
+Pour une soumission cash acceptée, le **montant total de la soumission doit être prélevé avant de commander les pièces, planifier les travaux ou envoyer un technicien**.
+
+Il ne s'agit pas d'une préautorisation.
 
 ---
 
-# Workflow Overview
+## Quick Reference / Référence rapide
+
+* cash Customer / Accepted Quotation / Client cash / Soumission acceptée**
+
+For an accepted cash quotation:
+
+- Collect the **full quotation amount**.
+- Do **not** perform a pre-authorization.
+- Send the payment receipt to the customer.
+- Process the payment through the applicable **Customer Deposit / Order Entry (OE)** procedure.
+- Do not order parts or proceed with work until payment has been received.
+- Follow up with the supervisor and customer after the work is completed.
+- Verify the final amount.
+- Produce and send the final invoice during the same week as the completed work.
+- Send the final invoice and payment receipt to the customer.
+- File the required documentation.
+
+### French Retrieval Concepts
+
+- Client cash
+- Client comptant
+- Soumission cash
+- Soumission acceptée
+- Soumission client cash acceptée
+- Paiement soumission
+- Paiement complet
+- Montant total de la soumission
+- Paiement avant commande de pièces
+- Paiement avant technicien
+- OE client cash
+- Dépôt client
+- Facturation client cash
+- Suivi client cash
+
+---
+
+# Before Dispatch / Before Ordering Parts
+
+Before ordering parts, scheduling work, or dispatching a technician:
+
+1. Obtain the customer's payment information.
+2. Collect the **entire quotation amount**.
+3. Do **not** perform a pre-authorization.
+4. Send the payment receipt to the customer.
+5. Process the payment through the applicable **Customer Deposit / Order Entry (OE)** procedure.
+
+No parts should be ordered and work should not proceed until the required payment has been received.
+
+---
+
+# Clover Payment
+
+For an accepted cash quotation:
 
 ```text
-Customer Accepts Quotation
-        ↓
-Collect Credit Card Information
-        ↓
-Collect Full Payment in Clover
-        ↓
-Send Payment Receipt
-        ↓
-Process Customer Deposit (OE)
-        ↓
-Order Parts
-        ↓
-Technician Performs Work
-        ↓
-Supervisor Follow-Up
-        ↓
-Customer Follow-Up
-        ↓
-Generate Final Invoice
-        ↓
-Send Final Invoice
-        ↓
-File Documentation
+Full Quotation Amount = Payment
 ```
 
----
+Do **not** use a Clover pre-authorization.
 
-# Before Ordering Parts
+Collect the full amount of the accepted quotation.
 
-No parts should be ordered until the customer's payment has been received.
+After processing the payment:
 
----
+- Retrieve the payment receipt.
+- Send the receipt to the customer.
 
-## Collect Customer Payment Information
-
-Obtain:
-
-- Credit card information
-- Cardholder name
-- Customer authorization
-
-Customer payment information must be stored securely according to branch procedures.
+Refer to **Clover Training** for the detailed Clover payment procedure.
 
 ---
 
-# Full Payment Required
+# Customer Deposit / Order Entry
 
-For accepted quotations:
+After the full payment has been received, process the amount using the applicable **Customer Deposit / Order Entry (OE)** procedure.
 
-**Do not perform a pre-authorization.**
+The OE is used to reserve and apply the customer's payment against the Work Order.
 
-Instead:
-
-- Collect the **entire quoted amount** using Clover.
-
-This payment must be completed before:
-
-- Ordering parts.
-- Scheduling work.
-- Dispatching a technician.
+Refer to the **Customer Deposits Process** for the complete BMS deposit and OE workflow.
 
 ---
 
-# Processing the Payment
+# Dispatch and Work
 
-Using Clover:
+Parts may be ordered and work may proceed once:
 
-1. Open the Virtual Terminal.
-2. Select **Purchase**.
-3. Enter the full quoted amount.
-4. Complete the transaction.
-5. Retrieve the payment receipt.
-6. Record the Authorization ID.
-7. Enter the Authorization ID as the Purchase Order (PO) number on the corresponding BMS Work Order.
-8. Email the payment receipt to the customer.
+- The full quotation amount has been received.
+- The required customer deposit / OE process has been completed.
 
-Refer to the **Clover Training** procedure for detailed instructions.
+Continue using the standard Work Order and scheduling procedures.
 
 ---
 
-# Processing the Customer Deposit
+# Post-Service Follow-Up
 
-After full payment has been received:
+After the work has been completed:
 
-Process the customer's payment by creating an **Order Entry (OE)** in BMS.
+- Follow up with the assigned supervisor.
+- Verify that the technician's labor/punch has been entered.
+- Confirm that the Work Order is identified as a * cash customer**.
 
-The Customer Deposit process includes:
+Contact the customer to:
 
-- Creating the Order Entry.
-- Recording the customer deposit.
-- Applying the correct Tax District.
-- Linking the payment to the Work Order.
-- Applying the deposit to the final invoice.
-- Following the appropriate sales tax rules.
-
-> **Important**
->
-> Follow the **Customer Deposits Process** procedure for the complete Order Entry workflow.
->
-> The customer deposit must be processed before ordering parts or scheduling the work.
-
----
-
-# Ordering Parts
-
-Once the customer deposit has been successfully processed:
-
-- Order the required parts.
-- Continue with the normal scheduling process.
-
-Parts should **never** be ordered before payment has been secured.
-
----
-
-# Technician Scheduling
-
-Schedule the work only after:
-
-- Full payment has been received.
-- The customer deposit has been processed.
-- Required parts have been confirmed.
-
-Proceed with the standard Work Order scheduling process.
-
----
-
-# Post-Service Supervisor Review
-
-After the technician has completed the work:
-
-Follow up with the assigned supervisor.
-
-Confirm:
-
-- Technician labor has been entered.
-- Technician punch has been completed.
-- The Work Order is ready for invoicing.
-
----
-
-# Customer Follow-Up
-
-Contact the customer once after the work has been completed.
-
-During the call:
-
-- Confirm the work has been completed.
-- Explain the repairs performed.
-- Review the final invoice.
+- Confirm that the service has been completed.
+- Explain the work performed.
+- Review the final amount.
 - Answer any customer questions.
 - Confirm customer satisfaction.
 
-Because payment has already been collected, no additional payment authorization is normally required unless additional billable work has been approved.
+---
+
+# Final Payment
+
+For an accepted cash quotation, the quoted amount has **already been paid before the work begins**.
+
+After the work is completed:
+
+- Verify the final amount.
+- Confirm that the previously collected payment has been properly applied.
+- Address any additional approved billable amount when applicable.
+
+Unlike a standard cash service call, there is no pre-authorization to convert into payment.
 
 ---
 
-# Final Invoice
+# Final Invoice and Documentation
 
-Prepare the final invoice.
+The final invoice should be produced and sent during the **same week the work was completed**.
 
-The invoice should be:
-
-- Produced during the same week the work was completed.
-- Sent during the same week.
-
-Prompt invoicing keeps customer records current and closes the Work Order efficiently.
-
----
-
-# Sending Documents
-
-Email the customer:
+Send the customer:
 
 - Final invoice.
-- Payment receipt (if not previously provided).
+- Payment receipt, if not previously provided.
 
-Verify successful delivery.
-
----
-
-# Filing Documentation
-
-Print or save copies of:
-
-- Payment receipt.
-- Final invoice.
-- Order Entry documentation.
-
-File the documents in the designated payment drawer located at the front of the Parts Department.
+File the required invoice and payment documentation according to the established branch process.
 
 ---
 
-# Coordinator Responsibilities
+## Official SharePoint Guide / Guide SharePoint officiel
 
-Service Coordinators are responsible for:
+The official SharePoint document for * cash Customer Management** contains the complete visual procedure for cash customers, including the accepted quotation workflow.
 
-- Collecting full payment before ordering parts.
-- Processing payment through Clover.
-- Recording the Authorization ID on the Work Order.
-- Processing the customer deposit following the Customer Deposits Process.
-- Scheduling work only after payment has been secured.
-- Following up with the supervisor.
-- Contacting the customer after service completion.
-- Producing and sending the final invoice.
-- Filing all supporting documentation.
+Le document SharePoint officiel de **gestion des clients cash** contient la procédure visuelle complète, incluant le processus pour les soumissions cash acceptées.
 
----
+For this knowledge-base procedure, refer specifically to the **Accepted Quotation / Soumission acceptée** portion of the SharePoint document.
 
-# Coordinator Checklist
+**Official SharePoint Link:**
 
-## Before Ordering Parts
+[Open the cash Customer Management Guide](https://cummins365.sharepoint.com/:p:/s/GRP_CC40846-AdministrationFSPG/IQDGYk25suYwQqXqvmBGVVPfAYmb9nw3KGR4zpkCTKXmVTE?e=n5nFLB)
 
-- [ ] Credit card information collected.
-- [ ] Full payment received.
-- [ ] Clover receipt generated.
-- [ ] Authorization ID entered on the Work Order.
-- [ ] Customer deposit processed.
-- [ ] Parts ordered.
+### Link Retrieval Rule / Règle de récupération du lien
 
-## After Service
+When a user asks for the **accepted cash quotation procedure, cash quotation SharePoint link, source document, original document, official guide, visual guide, screenshots, or cash customer training material**, provide the **Official SharePoint Link above**.
 
-- [ ] Technician punch verified.
-- [ ] Supervisor follow-up completed.
-- [ ] Customer contacted.
-- [ ] Final invoice prepared.
-- [ ] Final invoice emailed.
-- [ ] Documentation filed.
+Lorsqu'un utilisateur demande la **procédure pour une soumission cash acceptée, le lien SharePoint, le document source, le document original, le guide officiel, le guide visuel ou les captures d'écran**, fournir le **lien SharePoint officiel ci-dessus**.
+
+Examples of requests that should return this link:
+
+**English**
+- Give me the accepted cash quotation procedure.
+- Do you have the cash quotation SharePoint link?
+- Show me the cash customer source document.
+- Where is the visual accepted quotation guide?
+
+**Français**
+- Donne-moi la procédure pour une soumission cash acceptée.
+- As-tu le lien SharePoint?
+- Donne-moi le document source pour les clients cash.
+- Où est le guide visuel pour une soumission acceptée?
+- As-tu la procédure originale pour une soumission cash?
 
 ---
 
-# Best Practices
+## Search Terms / Termes de recherche
 
-- Never order parts before receiving payment.
-- Send the Clover receipt immediately after payment.
-- Complete the Customer Deposit process before ordering parts.
-- Produce invoices during the same week the work is completed.
-- Keep all payment records organized for future reference.
+**English:** cash customer, accepted quotation, accepted cash quotation, cash quote, full quotation payment, payment before parts, payment before dispatch, customer deposit, Order Entry, OE, cash customer invoice.
 
----
-
-# Common Mistakes
-
-## Taking a Pre-Authorization Instead of Payment
-
-Accepted quotations require **full payment**, not a pre-authorization.
-
----
-
-## Ordering Parts Before Payment
-
-Parts should never be ordered until payment has been successfully received.
-
----
-
-## Customer Deposit Not Processed
-
-Always complete the Customer Deposits Process before ordering parts or scheduling work.
-
----
-
-## Delayed Invoicing
-
-The final invoice should always be produced and sent during the same week the work has been completed.
+**Français:** client cash, client comptant, soumission acceptée, soumission cash, soumission client cash, paiement complet soumission, paiement avant pièces, paiement avant technicien, dépôt client, ordre d'entrée, OE, facturation client cash.

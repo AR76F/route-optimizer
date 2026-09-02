@@ -1,17 +1,8 @@
-# Policy - Stop Work Authority
+# Stop Work Authority
 
-# Version 1.0.0
+# Last Updated: 2026-08-28
 
-# Last Updated: 2026-07-20
-
-# Updated By: Jipeng Li
-
-# Change Log:
-
-v1.0.0
-- Creation of initial document.
-
-## Purpose
+# Purpose
 
 This policy outlines situations where Power Generation (PG) technicians have the right and responsibility to stop work due to unsafe working conditions.
 
@@ -19,15 +10,55 @@ The safety of employees takes precedence over operational, customer, or scheduli
 
 ---
 
-# Stop Work Authority
+# Quick Reference / Référence rapide
 
-Every employee has both the **right** and the **responsibility** to stop work whenever they believe the work environment presents an unacceptable safety risk.
+**Stop Work Authority / Droit d'arrêt de travail / Refus de travail**
 
-Work may only resume once the identified hazards have been eliminated or properly mitigated.
+Every employee has the **right and responsibility to stop work when they reasonably believe working conditions present an unacceptable safety risk**.
 
----
+Chaque employé a le **droit et la responsabilité d'arrêter le travail lorsqu'il juge que les conditions présentent un risque inacceptable pour la santé ou la sécurité**.
 
-# Examples of Stop Work Situations
+Work must not resume until the identified hazard has been **eliminated or adequately controlled**.
+
+Les travaux ne doivent reprendre que lorsque le danger identifié a été **éliminé ou adéquatement maîtrisé**.
+
+### When Stop Work Authority Applies / Quand arrêter le travail
+
+Examples include:
+
+- Environmental or biological hazards, including rodent contamination.
+- Unsafe access to the generator or work area.
+- Unsafe ladders, unstable ground, missing guardrails, or inadequate fall protection.
+- Significant snow or ice preventing safe access.
+- A customer requesting work despite unsafe conditions.
+- A customer refusing required Lock Out / Tag Out (LOTO).
+- Working alone when the task requires a second technician for safety.
+
+Exemples :
+
+- Risques environnementaux ou biologiques, incluant la présence de rongeurs ou d'excréments.
+- Accès non sécuritaire à la génératrice ou à la zone de travail.
+- Échelle non sécuritaire, sol instable, garde-corps absent ou protection contre les chutes inadéquate.
+- Neige ou glace importante empêchant un accès sécuritaire.
+- Client demandant de poursuivre les travaux malgré une condition dangereuse.
+- Client refusant une procédure de cadenassage (LOTO) requise.
+- Travail seul lorsqu'un deuxième technicien est requis pour assurer la sécurité.
+
+### If Work Is Stopped / Si le travail est arrêté
+
+1. Stop work immediately. / **Arrêter immédiatement le travail.**
+2. Notify the Service Coordinator. / **Aviser le coordonnateur de service.**
+3. Document the reason for stopping work. / **Documenter la raison de l'arrêt.**
+4. Inform the customer of the safety concern. / **Informer le client du problème de sécurité.**
+5. Resume work only after the hazard has been eliminated or adequately controlled. / **Reprendre les travaux uniquement lorsque le danger a été éliminé ou adéquatement maîtrisé.**
+
+### Search Terms / Termes de recherche
+
+**English:** Stop Work Authority, stop work, unsafe work, unsafe conditions, safety refusal, refuse work, LOTO refusal, unsafe access, working alone, rodent contamination, fall protection.
+
+**Français:** arrêt de travail, droit d'arrêt de travail, refus de travail, droit de refus, travail dangereux, conditions dangereuses, travail non sécuritaire, sécurité technicien, refus LOTO, refus cadenassage, accès dangereux, travail seul, travail isolé, présence de rongeurs, protection contre les chutes.
+
+# Detailed Examples of Stop Work Situations
 
 ## Environmental Hazards
 
@@ -137,17 +168,6 @@ If a technician exercises Stop Work Authority:
 
 ---
 
-# Common Stop Work Examples
-
-- Rodent infestation
-- Unsafe ladder
-- Missing fall protection
-- Snow or ice blocking access
-- Customer refuses LOTO
-- Technician working alone on a task requiring two people
-
----
-
 # Guiding Principle
 
 Safety always takes priority over productivity, customer requests, and scheduling.
@@ -155,9 +175,3 @@ Safety always takes priority over productivity, customer requests, and schedulin
 No employee will be expected to continue working in conditions they reasonably believe to be unsafe.
 
 ---
-
-# Related Documents
-
-- policies_general_technician_working_hours.md
-- policies_standby_on_call.md
-- coordinator_service_call_management.md

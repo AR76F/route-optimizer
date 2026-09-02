@@ -76,6 +76,26 @@ try:
 except Exception:
     GEOTAB_AVAILABLE = False
 
+# Test access internal Candiac server
+# from pathlib import Path
+
+# test_file = Path(
+#     r"\\cidcsdfs01\ca.cnd.dcec\LocalSharedFolders\common\access_test.pdf"
+# )
+
+# st.write("Candiac server accessible:", test_file.exists())
+
+# if test_file.exists():
+#     with open(test_file, "rb") as f: 
+#         pdf_data = f.read()
+
+#     st.download_button(
+#         label = "Open the test document",
+#         data = pdf_data,
+#         file_name = "access_test.pdf",
+#         mime = "application/pdf",
+#     )
+
 # ────────────────────────────────────────────────────────────────
 # Page config (ONE TIME)
 # ────────────────────────────────────────────────────────────────
