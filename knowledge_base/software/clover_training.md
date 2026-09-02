@@ -1,224 +1,205 @@
-# Coordinator - Clover Training
+# Clover Training
 
-# Version 1.0.0
-
-# Last Updated: 2026-07-20
-
-# Updated By: Jipeng Li
-
-# Change Log:
-
-v1.0.0
-- Creation of initial document.
+# Last Updated: 2026-09-02
 
 ## Purpose
 
-This document provides Service Coordinators with the standard procedure for using the Clover Virtual Terminal to process cash customer payments, pre-authorizations, purchases, and refunds.
+This document provides a concise overview of using the **Clover Virtual Terminal** to process cash customer pre-authorizations and payments.
 
-It also explains how Clover transactions integrate with BMS work orders and outlines best practices for managing cash customer profiles.
+It also explains how the Clover Authorization ID is associated with the corresponding BMS Work Order.
+
+## Objectif
+
+Ce document fournit un aperçu de l'utilisation du **Clover Virtual Terminal** pour traiter les préautorisations et les paiements des clients Cash.
+
+Il explique également comment le numéro d'autorisation Clover doit être associé au bon de travail correspondant dans BMS.
 
 ---
 
-# Systems Used
+## Quick Reference / Référence rapide
 
-- Clover Virtual Terminal
-- BMS
+**Clover / Virtual Terminal / Cash Customer Payments / Paiements clients Cash**
+
+Clover is used to process:
+
+- Pre-authorizations
+- Purchases / payments
+- Refunds
+
+For a standard cash customer service call:
+
+```text
+$750 Pre-Authorization
+```
+
+must be obtained before sending the technician to site.
+
+For an accepted cash customer quotation:
+
+```text
+Full quoted amount = Payment
+```
+
+Do **not** use a pre-authorization for an accepted cash quotation.
+
+After processing a pre-authorization or payment:
+
+1. Retrieve the transaction.
+2. Open **Details**.
+3. Select **View Payment Receipt**.
+4. Record the **Authorization ID**.
+5. Enter the Authorization ID as the **PO number on the BMS Work Order**.
+6. Save the receipt as a PDF and send it to the customer.
+
+### French Retrieval Concepts
+
+- Clover
+- Terminal virtuel Clover
+- Paiement client Cash
+- Préautorisation
+- Préautorisation de 750 $
+- Paiement carte de crédit
+- Paiement d'une soumission
+- Numéro d'autorisation
+- ID d'autorisation
+- Reçu de paiement
+- PO dans BMS
 
 ---
 
 # Accessing Clover
 
-Access to Clover requires an account registration.
-
-If you do not already have access:
-
-- Request a registration link from the Service Department Manager.
-- Complete the registration process.
-- Log in using your Cummins email address (WWID@cummins.com).
-
-Clover can be accessed at:
-
-https://www.clover.com/login
-
----
-
-# Clover Workflow
+Go to:
 
 ```text
-Customer Requires Payment
-            ↓
-Log into Clover
-            ↓
-Open Virtual Terminal
-            ↓
-Select Transaction Type
-            ↓
-Process Payment or Pre-Authorization
-            ↓
-Retrieve Payment Receipt
-            ↓
-Record Authorization ID
-            ↓
-Enter Authorization ID as the PO Number in BMS
-            ↓
-Send Receipt to Customer
+www.clover.com
 ```
 
+Log in using your Cummins email address:
+
+```text
+WWID@cummins.com
+```
+
+and your Clover password.
+
 ---
 
-# Opening the Virtual Terminal
+# Virtual Terminal
 
-After logging into Clover:
+From the Clover dashboard:
 
-1. Open the appropriate branch dashboard.
+1. Open the appropriate branch.
 2. Select **Virtual Terminal**.
-3. Choose the appropriate **Transaction Type**.
+3. Select the appropriate **Transaction Type**.
 
-Available transaction types include:
+The Virtual Terminal is used to process:
 
-- Pre-Authorization
-- Purchase
-- Refund
-
----
-
-# Processing a Pre-Authorization
-
-## Standard Service Calls
-
-For a standard cash service call:
-
-- Obtain a **$750 pre-authorization** before dispatching the technician.
-
-The technician should **not** be dispatched until the pre-authorization has been successfully completed.
+- Pre-Authorizations
+- Purchases
+- Refunds
 
 ---
 
-## Creating the Pre-Authorization
+# Pre-Authorization
 
-1. Select **Pre-Authorization** from the Transaction Type drop-down list.
+For a standard cash customer service call, obtain a:
+
+```text
+$750 Pre-Authorization
+```
+
+before sending the technician to the customer site.
+
+To process the pre-authorization:
+
+1. Select **Pre-Authorization** from the Transaction Type drop-down.
 2. Enter the pre-authorization amount.
-3. Add a reasonable amount for potential additional charges if appropriate.
+3. Add additional allowance for potential applicable fees when required.
 4. Enter the customer's payment information.
-5. Complete the transaction.
-
-Only fields marked with an asterisk (*) are mandatory.
+5. Select **Pre-Authorize Payment**.
 
 ---
 
-# Processing a Customer Payment
+# Accepted Cash Quotation
 
-When collecting a payment:
-
-1. Select the appropriate Transaction Type.
-2. Enter the sales amount.
-3. Enter the customer's payment information.
-4. Process the payment.
-
----
-
-# Cash Quotations
-
-When a **cash customer accepts a quotation**:
+When a cash customer accepts a quotation:
 
 **Do not perform a pre-authorization.**
 
-Instead:
+Collect payment for the:
 
-- Collect payment for the **entire quoted amount**.
+```text
+Full Quotation Amount
+```
 
-After payment:
+The payment must be received before proceeding with the accepted cash quotation workflow.
 
-1. Create an Order Entry (OE) in BMS.
-2. Reserve the payment against the work order.
-3. Enter the payment in the Charges tab.
-4. Add the payment reference in the Comments section.
-5. Apply the OE to the Misc Charges section of the work order.
-6. File the OE and payment receipt according to branch procedures.
-
-Refer to:
-
-- cash_customers_service_call.md
-- cash_customer_accepted_quote.md
-
-for the complete cash customer payment workflow.
-
-Refer to:
-
-- cash_customers_order_entry.md
-
-for the complete order entry workflow.
+The payment must then be reserved against the Work Order using the applicable **Customer Deposit / Order Entry (OE) process**.
 
 ---
 
-# Retrieving the Payment Receipt
+# Retrieving the Transaction Receipt
 
-After processing the transaction:
+After processing a pre-authorization or payment:
 
-1. Locate the completed payment.
+1. Retrieve the transaction.
 2. Select **Details**.
 3. Select **View Payment Receipt**.
 
-> Do **not** use **Send Receipt**, as this function is currently unavailable.
+Do not use:
 
-Save the receipt as a PDF.
+```text
+Send Receipt
+```
 
-Send the receipt to the customer.
+as this function is not working according to the original Clover training procedure.
+
+Save the receipt as a PDF and send it to the customer.
 
 ---
 
 # Authorization ID
 
-After opening the payment receipt:
+Retrieve the **Authorization ID** from the payment receipt.
 
-Record the **Authorization ID**.
+Enter the Authorization ID as the:
 
-The Authorization ID must be entered as the:
-
-**Purchase Order (PO) Number**
+```text
+PO Number
+```
 
 on the corresponding BMS Work Order.
 
-Failure to record the Authorization ID may prevent payment tracking.
+For a service call, the pre-authorization must be completed before the technician is sent to site.
 
 ---
 
-# Creating Customer Profiles
+# Customer Profiles
 
-It is recommended to create a Clover customer profile for every new cash customer.
+It is recommended to create a Clover profile for new cash customers so their credit card information can be saved for future transactions.
 
-Benefits include:
+Saved payment information is available only within the branch where the transaction/profile was created.
 
-- Faster future transactions.
-- Secure storage of payment information.
-
-Customer payment information is only available within the branch where it was originally saved.
-
----
-
-## Naming Convention
-
-When creating a new customer profile:
-
-Append the customer's BMS account number to the end of their last name.
+When creating a customer profile, append the customer's **BMS account number** to their last name.
 
 Example:
 
 ```text
-Brisson123456
+Brisson12345
 ```
 
 ---
 
 # Pre-Authorization Expiration
 
-If customer payment information is **not saved**:
+When the customer's payment information is not saved, pre-authorizations expire after:
 
-- Pre-authorizations expire after **2 weeks**.
+```text
+2 Weeks
+```
 
-If parts are not expected to arrive within that period:
-
-Add a reminder such as:
+If a required part will take longer than two weeks to arrive, add a note such as:
 
 ```text
 Contact the customer for payment once the order is ready.
@@ -226,58 +207,42 @@ Contact the customer for payment once the order is ready.
 
 ---
 
-# Coordinator Responsibilities
+## Official SharePoint Guide / Guide SharePoint officiel
 
-Before dispatching a technician:
+The official SharePoint document for **Clover Training** contains the complete visual procedure, including screenshots of the Clover login, Virtual Terminal, transaction processing, payment receipt, Authorization ID, and cash quotation workflow.
 
-- Confirm the appropriate transaction type.
-- Obtain the required payment or pre-authorization.
-- Verify that the Authorization ID has been recorded.
-- Enter the Authorization ID as the PO Number in BMS.
-- Save and send the payment receipt.
-- Create a customer profile whenever possible.
-- Follow the cash quotation process for accepted quotations.
+Le document SharePoint officiel de **formation Clover** contient la procédure visuelle complète avec les captures d'écran nécessaires.
 
----
+**Official SharePoint Link:**
 
-# Common Mistakes
+[Open the Clover Training Guide](https://cummins365.sharepoint.com/:p:/s/GRP_CC40846-AdministrationFSPG/IQAXG1oUf57mSpIvTuqMf0TkAcmgDeixwFPSC-v8kCWVnNI?e=FfK8F2)
 
-## Technician Dispatched Before Payment
+### Link Retrieval Rule / Règle de récupération du lien
 
-Always obtain the required payment or pre-authorization before dispatching a technician.
+When a user asks for the **Clover procedure link, SharePoint link, source document, original training document, official document, visual guide, screenshots, or Clover training material**, provide the **Official SharePoint Link above**.
 
----
+Lorsqu'un utilisateur demande le **lien Clover, lien SharePoint, document source, document original, document de formation, guide visuel, captures d'écran ou procédure Clover**, fournir le **lien SharePoint officiel ci-dessus**.
 
-## Wrong Transaction Type
+Examples of requests that should return this link:
 
-Do not use a pre-authorization when collecting payment for an accepted cash quotation.
+**English**
+- Give me the Clover procedure.
+- Do you have the Clover SharePoint link?
+- Show me the Clover training document.
+- Where is the visual Clover guide?
+- Give me the original Clover procedure.
 
----
-
-## Authorization ID Not Recorded
-
-Always enter the Authorization ID as the PO Number on the BMS Work Order.
-
----
-
-## Customer Profile Not Created
-
-Whenever possible, create a Clover customer profile to simplify future transactions.
+**Français**
+- Donne-moi la procédure Clover.
+- As-tu le lien SharePoint pour Clover?
+- Donne-moi le document de formation Clover.
+- Où est le guide visuel Clover?
+- As-tu un lien pour cette procédure?
 
 ---
 
-## Expired Pre-Authorization
+## Search Terms / Termes de recherche
 
-Remember that pre-authorizations expire after two weeks if the customer's payment information is not saved.
+**English:** Clover, Clover training, Virtual Terminal, cash customer payment, credit card payment, pre-authorization, $750 pre-authorization, accepted cash quotation, payment receipt, Authorization ID, Clover PO, Clover customer profile.
 
----
-
-# Best Practices
-
-- Create a customer profile for every new cash customer.
-- Explain the benefits of securely saving payment information.
-- Save every payment receipt as a PDF.
-- Verify that the Authorization ID has been entered into BMS before closing the transaction.
-- Review pre-authorizations regularly to ensure they do not expire before parts become available.
-
----
+**Français:** Clover, formation Clover, terminal virtuel, client Cash, paiement client Cash, paiement carte de crédit, préautorisation, préautorisation 750 $, soumission Cash acceptée, reçu Clover, numéro d'autorisation, ID d'autorisation, PO Clover, profil client Clover.

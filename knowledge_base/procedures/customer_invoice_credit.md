@@ -1,165 +1,249 @@
 # Customer Invoice Credit Procedure
 
-# Version 1.0.0
-
-# Last Updated: 2026-07-10
-
-# Updated By: Jipeng Li
-
-# Change Log:
-
-v1.0.0
-- Creation of initial document.
+# Last Updated: 2026-09-02
 
 ## Purpose
 
-This procedure explains how to create a credit against an already invoiced customer work order in BMS.
+This procedure explains how to create a **credit against an already invoiced customer Work Order in BMS**.
+
+The credit is created through **Order Entry** using transaction type `WOCM`.
+
+## Objectif
+
+Cette procédure explique comment effectuer un **crédit sur une facture client déjà facturée dans BMS**.
+
+Le crédit est créé dans **Order Entry** en utilisant le type de transaction `WOCM`.
 
 ---
 
-## Prerequisites
+## Quick Reference / Référence rapide
 
-- Customer invoice has already been generated.
-- User has access to BMS Order Entry.
-- Invoice number is available.
-- Credit reason has been approved.
+**Customer Invoice Credit / BMS Credit / Crédit de facture client**
+
+For a Service Work Order credit:
+
+- Open **Order Entry**.
+- Use transaction type `WOCM`.
+- Set **Pick Up** to `Y`.
+- Set **Ship Via** to `EM`.
+- Enter the applicable customer and unit information.
+- Add parts through the Parts Department when required.
+- Enter labor, mileage, and applicable parts credits under **Charges**.
+- Credit amounts must be entered as **negative values before taxes**.
+- Document the invoice reference and reason for the credit under **Comments**.
+- Complete the credit through **Total Order**.
+
+### French Retrieval Concepts
+
+- Crédit client
+- Crédit facture
+- Crédit de facture client
+- Faire un crédit dans BMS
+- Crédit BMS
+- Crédit sur bon de travail
+- Crédit sur Work Order
+- Facture déjà facturée
+- WOCM
+- Order Entry
+- Labor Rebill
+- Crédit kilométrage
+- Crédit pièces
+- Montant négatif
+- Annuler montant facture
+- Corriger facture client
 
 ---
 
-## Procedure
+# Open Order Entry
 
-### Step 1 – Open Order Entry
+In BMS, open:
 
-Navigate to:
-
-Customer Care
+```text
+Parts - Customer Care
 → Maintain Customer Orders
 → Order Entry
+```
+
+If **Order Entry** is already available in Favorites, it can be opened directly.
 
 ---
 
-### Step 2 – Complete Header Information
+# Complete the Order Information
+
+Enter the applicable customer and credit information.
+
+Use:
 
 | Field | Value |
-|--------|-------|
+|---|---|
 | Bill To | Customer account |
-| Transaction Type | WOCM |
-| Pick Up | Y |
-| Contact | Customer contact |
-| Ship Via | EM (Email) |
+| Transaction Type | `WOCM` |
+| Pick Up | `Y` |
+| Contact | Contact for the credit |
+| Ship Via | `EM` |
 | Unit | Customer unit number |
 
-Press **F10** after entering the unit.
+Press **F10** after entering the unit information.
 
 ---
 
-### Step 3 – Parts
+# Parts
 
 Open the **Items** tab.
 
-If parts are included in the credit:
+If parts must be included in the credit:
 
-- Contact the Parts Department.
-- Provide the Order Reference Number.
-- Parts must be added by Parts.
-
----
-
-### Step 4 – Charges
-
-Open the **Charges** tab.
-
-Enter the required credit lines:
-
-- Labor Rebill
-- Mileage Credit
-- Parts Credit (if applicable)
-
-Important:
-
-- Enter all amounts as **negative values**.
-- Enter amounts **before taxes**.
-- Taxes will be calculated automatically.
-
-Press **F10**.
+- Contact the **Parts Department**.
+- Provide the **Order Reference Number** displayed in the Order Entry.
+- The Parts Department must add the applicable parts to the credit.
 
 ---
 
-### Step 5 – Comments
+# Enter the Credit Amounts
 
-Open the **Comments** tab.
+Open the:
 
-Comment Type:
+```text
+Charges
+```
 
-Standard
+tab.
 
-Include:
+Enter the applicable credit lines, including:
 
-- Reason for credit
-- Invoice reference
-- Your WWID
-- Any additional explanation
+- **Labor Rebill**
+- Mileage
+- Parts, when applicable
 
-Example
+Travel time is included under **Labor Rebill**.
 
+> **Important**
+>
+> All credit amounts must be entered as **negative values**.
+>
+> Enter the amounts **before taxes**. Applicable taxes are added/calculated afterward.
+
+Press **F10** to save.
+
+---
+
+# Document the Credit
+
+Open the:
+
+```text
+Comments
+```
+
+tab.
+
+Use:
+
+```text
+Comment Type: Standard
+```
+
+Document:
+
+- The invoice being credited.
+- The reason for the credit.
+- Your WWID for reference.
+
+Example:
+
+```text
 IN REFERENCE TO INVOICE XXXXXXX
 
-Credit issued for incorrect labor billing.
+Credit issued for [reason].
 
 WWID: XXXXX
+```
 
 ---
 
-### Step 6 – Distributor Comments
+# Distributor Comment
 
-Comment Type:
+Add another comment using:
 
-Distributor
-
-Reason:
-
-Other
+```text
+Comment Type: Distributor
+Reason: Other
+```
 
 Enter:
 
+```text
 .
+```
 
-(single period)
+as the comment.
 
 ---
 
-### Step 7 – Complete Invoice
-
-Select **Total Order**.
-
-Verify:
-
-- Original invoice number
-- Invoice total
-- Purchase Order (PO), if applicable
-
-Enter:
-
-- Invoice Security Code
+# Complete the Credit
 
 Select:
 
+```text
+Total Order
+```
+
+Enter or verify:
+
+- Original invoice reference number.
+- Invoice total.
+- Purchase Order number, when applicable.
+- Invoice Security Code.
+
+Confirm that the credit amounts are correct.
+
+Then select:
+
+```text
 Invoice
+```
+
+to complete the credit.
 
 ---
 
-## Important Notes
+## Official SharePoint Guide / Guide SharePoint officiel
 
-- WOCM is always used for Service work orders.
-- Pick Up should always be set to **Y**.
-- Ship Via should always be **EM**.
-- Credit amounts must always be entered as negative values before taxes.
-- Parts credits must be coordinated with the Parts Department.
+The official SharePoint document for the **Customer Invoice Credit Procedure** contains the complete visual BMS procedure, including screenshots showing Order Entry, customer information, Items, Charges, Comments, and Total Order.
+
+Le document SharePoint officiel de la **procédure de crédit de facture client** contient la procédure visuelle complète dans BMS avec les captures d'écran nécessaires.
+
+**Official SharePoint Link:**
+
+[Open the Customer Invoice Credit Guide](https://cummins365-my.sharepoint.com/:w:/g/personal/ud016_cummins_com/IQCjUcGkP6qdQol5qSFmscP2ATiaaYAbSjtXoLPb98bHZY8?e=kuvK1l)
+
+### Link Retrieval Rule / Règle de récupération du lien
+
+When a user asks for the **customer invoice credit procedure, BMS credit procedure, WOCM procedure, SharePoint link, source document, original document, official guide, visual guide, or screenshots**, provide the **Official SharePoint Link above**.
+
+Lorsqu'un utilisateur demande la **procédure de crédit client, procédure de crédit de facture, procédure WOCM, lien SharePoint, document source, document original, guide officiel, guide visuel ou captures d'écran**, fournir le **lien SharePoint officiel ci-dessus**.
+
+Examples of requests that should return this link:
+
+**English**
+- How do I credit a customer invoice?
+- Give me the BMS credit procedure.
+- How do I create a WOCM?
+- Do you have the SharePoint link?
+- Show me the visual credit procedure.
+
+**Français**
+- Comment faire un crédit sur une facture?
+- Comment faire un crédit dans BMS?
+- Donne-moi la procédure WOCM.
+- As-tu le lien SharePoint?
+- Où est le guide visuel pour les crédits?
+- Donne-moi la procédure de crédit client.
 
 ---
 
-## Related Procedures
+## Search Terms / Termes de recherche
 
-- Invoicing
-- Cash Customer Procedure
-- Work Order Closing
+**English:** customer credit, invoice credit, customer invoice credit, credit invoice BMS, BMS credit, WOCM, Order Entry credit, Labor Rebill, mileage credit, parts credit, negative amount, credit Work Order.
+
+**Français:** crédit client, crédit facture, crédit de facture client, faire crédit BMS, crédit BMS, WOCM, Order Entry, crédit bon de travail, crédit WO, Labor Rebill, crédit kilométrage, crédit pièces, montant négatif.

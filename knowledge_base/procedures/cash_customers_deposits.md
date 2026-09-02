@@ -1,151 +1,251 @@
-# Customer Deposits Process
+# cash Customers - Customer Deposits / Order Entry (OE)
 
-# Version 1.0.0
+# Last Updated: 2026-09-02
 
-# Last Updated: 2026-07-20
+## Purpose
 
-# Updated By: Jipeng Li
+This procedure explains how to **receive, record, and apply a customer deposit using an Order Entry (OE) in OneBMS**.
 
-# Change Log:
+It applies to customer deposits associated with:
 
-v1.0.0
-- Initial transcription from the Customer Deposits Process OneBMS presentation.
+- Service work
+- Parts orders
+- Engine sales
 
-## Receiving a Customer Deposit
+## Objectif
 
-Create an **Order Entry (OE)** to receive a customer deposit for:
+Cette procédure explique comment **réceptionner, enregistrer et appliquer un dépôt client à l'aide d'un Order Entry (OE) dans OneBMS**.
 
-- Engine sale
-- Service event
-- Parts order
+Elle s'applique notamment aux dépôts associés aux travaux de service, aux commandes de pièces et aux ventes de moteurs.
 
-Within the **Charges** tab:
+---
 
-- Name: **DEPOSIT**
-- Apply the appropriate **Tax District**
-- Apply the applicable sales taxes
+## Quick Reference / Référence rapide
 
-### Purchase Order
+**Customer Deposit / Order Entry / OE / Dépôt client**
+
+To receive a customer deposit:
+
+- Create an **OE** with the customer's information.
+- Use the **Charges** tab.
+- Select `DEPOSIT`.
+- Enter the amount received.
+- Apply the appropriate **Tax District**.
+- Use `DEP` as the PO number when applicable.
+- Add the applicable Work Order or Serial Number reference in **Comments**.
+- Apply the deposit to the corresponding Work Order through **Misc Charges**.
+- When applying the deposit, use the **same amount and Tax District** as the original OE and enter the deposit as a **negative value**.
+
+### French Retrieval Concepts
+
+- Dépôt client
+- Dépôt dans BMS
+- Dépôt dans OneBMS
+- Order Entry
+- OE
+- Créer un OE
+- Réceptionner paiement
+- Réceptionner montant
+- Paiement client cash
+- Appliquer dépôt
+- Misc Charges
+- Charges
+- DEPOSIT
+- Paiement sur bon de travail
+- Paiement sur WO
+- Dépôt négatif
+- Tax District
+
+---
+
+# Creating the Order Entry (OE)
+
+Create an **Order Entry (OE)** using the customer's information.
+
+For a customer deposit, use:
 
 ```text
-DEP
+Transaction Type: OE
 ```
 
-### Comments
+Enter the applicable customer and order information.
 
-Add any references required.
+When applicable, use:
 
-Examples:
+```text
+PO: DEP
+```
 
+---
+
+# Recording the Deposit
+
+Open the:
+
+```text
+Charges
+```
+
+tab.
+
+Enter:
+
+```text
+Name: DEPOSIT
+Amount: Amount received
+Tax District: Applicable Tax District
+```
+
+The Tax District must reflect the correct tax treatment for the applicable branch/location.
+
+---
+
+# Adding the Payment Reference
+
+Open the:
+
+```text
+Comments
+```
+
+tab.
+
+Add a reference identifying the payment.
+
+The reference may include:
+
+- Work Order number
 - Serial Number
-- Work Order Number
+- Other relevant payment reference
 
 Example:
 
 ```text
-WO #123456
+PAYMENT FOR WOQT 123456
 ```
 
-> **Note**
->
-> The presentation uses the **BC Tax District** as an example.
->
-> Each branch must apply the correct Tax District applicable to its own location.
+The purpose is to clearly identify which Work Order or transaction the deposit belongs to.
 
 ---
 
-# Down Payments / Advance Payments
+# Applying the Deposit to the Work Order
 
-Once a deposit becomes a **down payment** or **partial payment** toward:
+Open the corresponding Work Order.
 
-- Engine sales
-- Parts sales
-- Service work
+Navigate to:
 
-the applicable sales taxes must be charged.
+```text
+Misc Charges
+```
 
-Examples include:
+Add:
 
-- GST
-- HST
-- Provincial Sales Tax (where applicable)
+```text
+Name: DEPOSIT
+```
 
-Source:
+Use the:
 
-- Canada Revenue Agency (CRA)
-- Excise Tax Act, subsection 168(1)
-- CRA Memorandum GST 300-6-8 – Deposits
+- Same deposit amount.
+- Same Tax District.
 
----
+The deposit must be entered as a:
 
-# Applying the Deposit on the Final Invoice
+```text
+Negative Value
+```
 
-## Order Entry (OE / XENG)
-
-When producing the final invoice:
-
-Within the **Charges** tab:
-
-- Name: **DEPOSIT**
-- Use the same Tax District used on the original OE.
-- Enter the deposit amount as a **negative value**.
+This applies the previously received deposit against the Work Order balance.
 
 ---
 
-## Work Order (WO)
+# Deposit Application Rule
 
-Within the **Misc Charges** tab:
+The original OE and the Work Order deposit application must correspond.
 
-- Name: **DEPOSIT**
-- Use the same Tax District used on the original OE.
-- Enter the deposit amount as a **negative value**.
+```text
+Original OE
+DEPOSIT
++ Amount Received
++ Applicable Tax District
 
----
+        ↓
 
-# Original OE – Customer Deposit
+Work Order - Misc Charges
+DEPOSIT
+- Same Amount
++ Same Tax District
+```
 
-When applying the deposit:
-
-- The original deposit information should match the amount and Tax District used on the final invoice.
-- The deposit is applied as a negative value to reduce the customer's remaining balance.
+The negative deposit reduces the amount remaining on the final invoice.
 
 ---
 
 # Sales Tax on Deposits
 
-Sales tax treatment depends on whether the deposit is **refundable** or **non-refundable**.
+Sales tax treatment depends on whether the deposit is **refundable or non-refundable**.
 
 ## Refundable Deposit
 
-If the customer agreement specifies that the deposit is refundable:
+If a contract specifically states that the deposit is refundable:
 
 - Do **not** charge sales tax when the deposit is initially received.
-- Taxes will be calculated on the final sale.
-- Apply the deposit as a negative value on the final invoice.
-- No sales tax is applied to the original deposit.
+- Taxes are calculated on the final sale.
+- Apply the deposit as a negative value on the final invoice without sales tax on the original deposit.
 
----
+## Non-Refundable Deposit / Down Payment
 
-## Non-Refundable Deposit
+If the deposit is non-refundable, or becomes a down payment or advance payment toward work that is proceeding:
 
-If the deposit is non-refundable:
+- Applicable sales taxes must be charged.
 
-- Sales tax must be charged when the deposit is received.
-
-This also applies to:
-
-- Down payments
-- Advance payments
-- Service work proceeding after payment
-
-Applicable taxes include:
+This may include:
 
 - GST
 - HST
-- Provincial Sales Tax (where applicable)
+- Applicable provincial sales taxes
 
-Source:
+The appropriate Tax District must be used.
 
-- Canada Revenue Agency (CRA)
-- Excise Tax Act, subsection 168(1)
-- CRA Memorandum GST 300-6-8 – Deposits
+---
+
+## Official SharePoint Guide / Guide SharePoint officiel
+
+The official **Customer Deposits Process OneBMS** SharePoint document contains the complete visual procedure, including screenshots showing the Order Entry, Charges, Comments, deposit application, and sales-tax treatment.
+
+Le document SharePoint officiel **Customer Deposits Process OneBMS** contient la procédure visuelle complète avec les captures d'écran nécessaires pour créer et appliquer un dépôt client dans OneBMS.
+
+**Official SharePoint Link:**
+
+[Open the Customer Deposits Process OneBMS Guide](https://cummins365-my.sharepoint.com/:p:/g/personal/ud016_cummins_com/IQCxLYmalriDS5ZqeNavhIjKAYTk2S-yFOjMsHFaz1Tfm9I?e=nK3sae)
+
+### Link Retrieval Rule / Règle de récupération du lien
+
+When a user asks for the **Customer Deposit procedure, Order Entry procedure, OE deposit procedure, SharePoint link, source document, original document, official guide, visual guide, screenshots, or OneBMS deposit training material**, provide the **Official SharePoint Link above**.
+
+Lorsqu'un utilisateur demande la **procédure de dépôt client, procédure OE, création d'un OE, application d'un dépôt, lien SharePoint, document source, document original, guide officiel, guide visuel ou captures d'écran**, fournir le **lien SharePoint officiel ci-dessus**.
+
+Examples of requests that should return this link:
+
+**English**
+- How do I create an OE for a customer deposit?
+- Give me the customer deposit procedure.
+- How do I apply a deposit to a Work Order?
+- Do you have the SharePoint link?
+- Show me the visual OE procedure.
+
+**Français**
+- Comment créer un OE pour un dépôt client?
+- Comment réceptionner un montant dans BMS?
+- Comment appliquer un dépôt sur un bon de travail?
+- Donne-moi la procédure OE.
+- As-tu le lien SharePoint?
+- Où est le guide visuel pour les dépôts?
+
+---
+
+## Search Terms / Termes de recherche
+
+**English:** customer deposit, Order Entry, OE, create OE, customer payment, receive deposit, DEPOSIT charge, Misc Charges, apply deposit, negative deposit, deposit Work Order, Tax District, OneBMS deposit.
+
+**Français:** dépôt client, Order Entry, OE, créer OE, réceptionner paiement, réceptionner montant, paiement client, DEPOSIT, Misc Charges, appliquer dépôt, dépôt négatif, dépôt bon de travail, dépôt WO, Tax District, dépôt OneBMS.

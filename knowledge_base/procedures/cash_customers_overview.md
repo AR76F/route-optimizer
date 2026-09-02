@@ -1,19 +1,6 @@
 # Cash Customers - Overview
 
-# Version 1.0.2
-
-# Last Updated: 2026-07-23
-
-# Updated By: Jipeng Li
-
-# Change Log:
-
-v1.0.2
-- Added financial risks and additional coordinator expectations.
-
-v1.0.0
-- Creation of initial document.
-
+# Last Updated: 2026-09-02
 
 ## Policy Overview
 Cash customers create higher financial risk because no approved credit account exists.

@@ -1,21 +1,114 @@
 # Power BI - WIP Management
 
-# Version 1.0.0
-
-# Last Updated: 2026-07-20
-
-# Updated By: Jipeng Li
-
-# Change Log:
-
-v1.0.0
-- Creation of initial document.
+# Last Updated: 2026-09-02
 
 ## Purpose
 
 This document explains how Service Coordinators use Power BI to retrieve and manage the Work In Progress (WIP) report.
 
 The WIP report is used to monitor open Work Orders, prioritize follow-up actions, and maintain an acceptable Days Sales Outstanding (DSO).
+
+---
+
+## Objectif
+
+Ce document explique comment les coordonnateurs de service utilisent **Power BI** pour consulter, exporter et gérer le rapport **WIP (Work In Progress)**.
+
+Le rapport WIP permet notamment de :
+
+- Consulter les bons de travail ouverts.
+- Identifier les travaux en attente ou vieillissants.
+- Suivre les jours sans main-d'œuvre (**DNL - Days No Labor**).
+- Prioriser les suivis et la facturation.
+- Maintenir un niveau acceptable de **DSO (Days Sales Outstanding)**.
+
+---
+
+## Official SharePoint Guide / Guide SharePoint officiel
+
+The official SharePoint document for the **Power BI WIP Management** procedure contains the original visual guide and screenshots for accessing, filtering, and exporting the WIP report.
+
+Le document SharePoint officiel de la procédure **Power BI WIP Management** contient le guide visuel original et les captures d'écran pour consulter, filtrer et exporter le rapport WIP.
+
+**Official SharePoint Link:**
+
+[Open the Power BI WIP Visual Guide / Ouvrir le guide visuel Power BI WIP](https://cummins365.sharepoint.com/:p:/s/GRP_CC40846-AdministrationFSPG/IQDsqKdqWoJKR6_Ns-wmptWTAbp8RzaPAdPacwu-VSLZvPg?e=gqgBwA)
+
+### Link Retrieval Rule / Règle de récupération du lien
+
+When a user asks for the **WIP procedure, WIP source document, SharePoint link, original document, official guide, visual guide, screenshots, or WIP training material**, provide the **Official SharePoint Link above**.
+
+Lorsqu'un utilisateur demande la **procédure WIP, le document source WIP, le lien SharePoint, le document original, le guide officiel, le guide visuel, les captures d'écran ou le matériel de formation WIP**, fournir le **lien SharePoint officiel ci-dessus**.
+
+Examples of requests that should return this link:
+
+**English**
+- Give me the WIP procedure.
+- Do you have the WIP SharePoint link?
+- Show me the WIP source document.
+- Where is the visual WIP guide?
+- Give me the original Power BI WIP procedure.
+
+**Français**
+- Donne-moi la procédure WIP.
+- As-tu le lien SharePoint du WIP?
+- Donne-moi le document source du WIP.
+- Où est le guide visuel du WIP?
+- As-tu un lien pour cette procédure?
+
+---
+
+## Quick Reference / Référence rapide
+
+**Power BI WIP / WIP Detail / Work In Progress**
+
+Use this resource when looking for:
+
+- WIP
+- WIP management
+- WIP report
+- Open Work Orders
+- WIP Detail
+- Work Order aging
+- Days No Labor (DNL)
+- Days Sales Outstanding (DSO)
+- WIP Excel export
+
+Termes de recherche en français :
+
+- WIP
+- Gestion du WIP
+- Rapport WIP
+- WIP Power BI
+- WIP Detail
+- Travaux en cours
+- Bons de travail ouverts
+- BT ouverts
+- Exporter le WIP
+- Exporter WIP en Excel
+- Jours sans main-d'œuvre
+- DNL
+- DSO
+- Suivi des bons de travail
+- Vieillissement des bons de travail
+
+---
+
+## Power BI WIP Link / Lien Power BI WIP
+
+The **WIP Detail** report can be accessed directly using the Power BI link below.
+
+Le rapport **WIP Detail** peut être consulté directement à partir du lien Power BI ci-dessous.
+
+**Power BI WIP:**
+
+[Open WIP Detail in Power BI / Ouvrir WIP Detail dans Power BI](https://app.powerbi.com/groups/me/apps/ed3dd510-050a-47ed-9455-477e60121d5d/reports/22237f46-ec09-4610-94f3-865fe6b5eb39/ReportSection7a177c83064b2c714917?experience=power-bi)
+
+### Link Retrieval Rule / Règle de récupération du lien
+
+When a user asks for the **WIP link, Power BI WIP link, WIP dashboard, WIP Detail report, or direct access to the WIP**, provide the Power BI link above.
+
+Lorsqu'un utilisateur demande le **lien WIP, lien Power BI du WIP, tableau de bord WIP, rapport WIP Detail ou accès direct au WIP**, fournir le lien Power BI ci-dessus.
 
 ---
 

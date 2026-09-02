@@ -7,6 +7,9 @@ AI assistant for CSSNA Candiac
 
 Change log:
 
+v1.1.0
+- Fixed cache invalidation by removing the use of LRU Cache.
+
 v1.0.1
 - Fixed OpenAI client initialization to reliably read the API key from
   Streamlit Cloud Secrets in addition to the environment, preventing
@@ -69,6 +72,7 @@ from dataclasses import dataclass
 from math import sqrt
 from pathlib import Path
 from typing import Any, Iterable, Protocol
+import unicodedata
 
 import fitz
 import streamlit as st
@@ -111,32 +115,83 @@ SUPPORTED_TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".log", ".json", ".xml", ".y
 SUPPORTED_PDF_EXTENSIONS = {".pdf"}
 
 ##### Hints for Querying #####
-# Besoin d'ajouter les versions françaises
+# Versions françaises ajoutées
 STOPWORDS = {
+    # English
     "what", "does", "do", "is", "are", "the", "a", "an", "of", "for",
     "to", "in", "on", "and", "or", "by", "with", "stand", "stands",
     "mean", "meaning", "tell", "me", "about", "please", "can", "you",
     "this", "that", "it", "who", "which", "whom", "where", "when", "why",
-    "how", "much", "many", "there", "here", "then", "than", "as"
+    "how", "much", "many", "there", "here", "then", "than", "as",
+
+    # Français
+    "quoi", "que", "quel", "quelle", "quels", "quelles", "qui",
+    "le", "la", "les", "un", "une", "des", "du", "de",
+    "dans", "sur", "pour", "par", "avec", "et", "ou",
+    "est", "sont", "ce", "cet", "cette", "ces",
+    "me", "moi", "nous", "vous", "il", "elle", "ils", "elles",
+    "comment", "pourquoi", "quand", "où", "combien",
+    "peux", "peut", "pouvez", "svp"
+}
+
+DIRECTORY_QUERY_HINTS = {
+    # English
+    "who is", "what is the role", "what is his role", "what is her role", "what is their role", 
+    "what is the position", "what position does", 
+    "what does he do", "what does she do", "role", "position", "job title",
+    "phone", "phone number", "mobile", "extension",
+    "wwid", "contact", "directory", "employee", "staff", "personnel",
+
+    # Français
+    "qui est", "quel est le rôle", "quel est son rôle", "quelle est sa fonction", "quel est son poste", 
+    "quelle est sa position", "que fait", 
+    "qu'est ce qu'il fait", "qu'est-ce que'elle fait", "rôle", "poste", "fonction",
+    "téléphone", "numéro de téléphone", "cellulaire",
+    "extension", "wwid", "contact", "répertoire",
+    "employé", "employée", "personnel"
 }
 
 TECHNICAL_QUERY_HINTS = {
+    # English
     "technician", "tech", "recommend", "dispatch", "territory", "territories",
     "region", "regions", "clearance", "clearances", "bilingual", "travel",
     "engine", "diagnostic", "diagnostics", "ats", "commissioning", "controls",
     "field service", "field technician", "shop only", "shop-only", "who covers",
-    "who is", "who handles", "who works", "specializes", "specializes in"
+    "who is", "who handles", "who works", "specializes", "specializes in",
+
+    # Français
+    "technicien", "techniciens", "recommande", "recommander",
+    "répartition", "territoire", "territoires", "région", "régions",
+    "habilitation", "habilitations", "bilingue", "voyage",
+    "moteur", "diagnostic", "diagnostics", "mise en service",
+    "contrôles", "service sur le terrain",
+    "qui couvre", "qui est", "qui s'occupe", "qui travaille",
+    "spécialiste", "spécialisé", "spécialisé en"
 }
 
 LIST_ALL_QUERY_HINTS = {
+    # English
     "list", "all", "every", "show all", "which technicians", "who has",
-    "who are", "qualified", "certified", "trained", 
+    "who are", "qualified", "certified", "trained",
+
+    # Français
+    "liste", "tous", "toutes", "chaque", "affiche tous",
+    "quels techniciens", "quelles techniciennes",
+    "qui a", "qui sont", "qualifié", "qualifiés",
+    "certifié", "certifiés", "formé", "formés"
 }
 
 LIST_ALL_CAPABILITY_HINTS = {
+    # English
     "training", "trainings", "certification", "certifications", "qualification",
     "qualifications", "course", "courses", "pcc", "ats", "controls",
-    "commissioning", "engine", "diagnostic", "diagnostics"
+    "commissioning", "engine", "diagnostic", "diagnostics",
+
+    # Français
+    "formation", "formations", "certification", "certifications",
+    "qualification", "qualifications", "cours",
+    "pcc", "ats", "contrôles", "mise en service",
+    "moteur", "diagnostic", "diagnostics"
 }
 
 ##### Data Classes for Embedding #####
@@ -165,11 +220,26 @@ class UploadLike(Protocol):
 ##### Embedding and Chunking Functions #####
 def normalize_text(text: str) -> str:
     """
-    Normalize text for simple matching.
+    Normalize text for simple English and French text matching.
+
+    - Convert to lowercase
+    - Remove French accents while preserving letters
+    - Remove punctuation
+    - Normalize whitespace
     """
     text = text.lower()
+
+    # Convert accented characters to their base form:
+    # é -> e, à -> a, ô -> o, etc.
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(
+        char for char in text
+        if not unicodedata.combining(char)
+    )
+
     text = re.sub(r"[^a-z0-9\s_-]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
+
     return text
 
 def tokenize(text: str) -> list[str]:
@@ -207,20 +277,27 @@ def extract_acronym(question: str) -> str | None:
             return match.group(1).upper()
     return None
 
+def is_directory_query(question: str) -> bool:
+    """
+    Heuristic that gives a small score boost to directory lookups.
+    """
+    q = normalize_text(question)
+    return any(normalize_text(hint) in q for hint in DIRECTORY_QUERY_HINTS)
+
 def is_technician_query(question: str) -> bool:
     """
     Heuristic that gives a small score boost to technician-profile lookups.
     """
     q = normalize_text(question)
-    return any(hint in q for hint in TECHNICAL_QUERY_HINTS)
+    return any(normalize_text(hint) in q for hint in TECHNICAL_QUERY_HINTS)
 
 def is_list_all_query(question: str) -> bool:
     """
     Detect questions that need broader technician-profile coverage.
     """
     q = normalize_text(question)
-    has_list_language = any(hint in q for hint in LIST_ALL_QUERY_HINTS)
-    has_capability_language = any(hint in q for hint in LIST_ALL_CAPABILITY_HINTS)
+    has_list_language = any(normalize_text(hint) in q for hint in LIST_ALL_QUERY_HINTS)
+    has_capability_language = any(normalize_text(hint) in q for hint in LIST_ALL_CAPABILITY_HINTS)
     return has_list_language and has_capability_language
 
 def split_markdown_into_chunks(text: str, max_words: int = 350) -> list[str]:
@@ -444,7 +521,26 @@ def score_chunk_embedding(
     if acronym and acronym.lower() in chunk.token_set:
         score += 0.25
 
-    if is_technician_query(question) and chunk.source.startswith("technicians/"):
+    if is_directory_query(question) and chunk.source.endswith("candiac_directory.md"):
+        score += 0.21
+
+    if is_directory_query(question):
+        normalized_question = normalize_text(question)
+
+        role_hints = {
+            "what is the role",
+            "what is his role",
+            "what is her role",
+            "what is their role",
+            "what is the position",
+            "what is the job title",
+        }
+
+        if any(normalize_text(hint) in normalized_question for hint in role_hints):
+            if chunk.source.endswith("candiac_directory.md"):
+                score += 0.20
+
+    if is_technician_query(question) and chunk.source.startswith("technicians\\"):
         score += 0.12
 
     return score
@@ -779,16 +875,21 @@ def build_agent(
     # Chunk scoring system
     if is_list_all_query(question):
         top_k = 15
+
+    elif is_directory_query(question):
+        top_k = 8
+
     elif is_technician_query(question):
         top_k = 8
+    
     else:
         top_k = 4
 
-    relevant_chunks = retrieve_relevant_chunks(question, kb_index, top_k=top_k)
+    relevant_chunks = retrieve_relevant_chunks(question, kb_index, top_k = top_k)
     retrieved_context = format_retrieved_context(relevant_chunks)
     temp_context = build_temporary_context(
-        temporary_context=temporary_context,
-        uploaded_sources=uploaded_sources,
+        temporary_context = temporary_context,
+        uploaded_sources = uploaded_sources,
     )
 
     # Instructions (to be changed as the chatbot could evolve into a true agent)
@@ -840,7 +941,7 @@ Temporary uploaded-file context:
 """.strip()
 
     return Agent(
-        name = "Service Coordinator Assistant",
+        name = "Service Assistant",
         model = "gpt-5.6-luna", # Sol best, Terra mid, Luna is worse, being 80% less expensive
         instructions = human_instructions,
     )
@@ -890,7 +991,7 @@ if __name__ == "__main__":
     while True:
         question = input("Ask a service question: ").strip()
 
-        if question.lower() in {"quit", "exit", "q"}:
+        if question.lower() in {"quit", "exit", "q", "quitter", "sortir"}:
             break
 
         if not question:

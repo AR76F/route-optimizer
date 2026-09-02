@@ -1,5 +1,7 @@
 # FieldAware Integration
 
+# Last Updated: 2026-09-02
+
 ## Official Source Document
 
 The original source document for the FieldAware Prioritization Integration is available on SharePoint.
@@ -9,7 +11,13 @@ The original source document for the FieldAware Prioritization Integration is av
 https://cummins365-my.sharepoint.com/:w:/g/personal/ud016_cummins_com/IQBWPhr57J7PRK3RYekQaE5WAfPnub33entt1UPj2xZnRj0
 
 When a user asks for the original, official, or SharePoint version of the FieldAware Prioritization Integration procedure, provide the link above and mention that the FA Integration section
-is on the last section of the document.
+is on the **last section of the document**.
+
+### Récupération du lien SharePoint
+
+Lorsqu'un utilisateur demande le **lien, lien SharePoint, document source, document original, guide visuel ou procédure FieldAware concernant l'affichage des priorités**, fournir le lien SharePoint officiel ci-dessus.
+
+Mentionner que la section concernant l'intégration FieldAware se trouve dans la **dernière section du document**.
 
 ---
 
@@ -22,6 +30,31 @@ To make this information available to dispatchers and schedulers, the priority c
 This document describes how to configure and display this field.
 
 Note: The Schedule Priority value is generated using the Prioritization Engine. This document describes how that value is stored and displayed within FieldAware. It does not define the prioritization logic itself.
+
+---
+
+## Vue d'ensemble
+
+Le **moteur de priorisation** attribue à chaque travail un code de priorité standardisé, par exemple `P1-C1`.
+
+Dans FieldAware, ce code est inscrit dans le champ **Schedule Priority** afin de permettre aux coordonnateurs et aux répartiteurs de visualiser la priorité directement dans la job et dans le Scheduler.
+
+Cette procédure explique comment :
+
+- Activer le champ **Schedule Priority**.
+- Inscrire le code de priorité dans FieldAware.
+- Afficher la priorité dans le Scheduler.
+- Consulter la priorité d'une job.
+
+Cette procédure ne définit pas la logique de priorisation elle-même. Le code de priorité est déterminé par le **moteur de priorisation**.
+
+---
+
+## Search Terms / Termes de recherche
+
+**English:** FieldAware priority, FA priority, Schedule Priority, priority code FieldAware, enter priority in FA, display priority Scheduler, prioritization FieldAware, P1-C1 FieldAware.
+
+**Français:** priorité FieldAware, priorité FA, Schedule Priority, code de priorité FieldAware, entrer priorité dans FA, ajouter priorité dans FieldAware, afficher priorité Scheduler, voir priorité dans FieldAware, priorisation FieldAware, code P1-C1, indiquer priorité dans FA.
 
 ---
 
