@@ -1,15 +1,6 @@
-# Customer - Generator Does Not Start During a Power Outage
+# Customers - Generator Does Not Start During a Power Outage
 
-# Version 1.0.0
-
-# Last Updated: 2026-07-23
-
-# Updated By: Jipeng Li
-
-# Change Log:
-
-v1.0.0
-- Creation of initial document.
+# Last Updated: 2026-09-03
 
 ## Purpose
 
@@ -26,6 +17,22 @@ The objective is to determine whether the issue can be resolved through basic op
 > Customers should never perform work that exposes them to electrical hazards or unsafe conditions.
 >
 > If at any point the customer is uncomfortable performing a step, discontinue the procedure and schedule service.
+
+## Objectif
+
+Cette procédure fournit aux coordonnateurs de service un flux de dépannage simple pour guider les clients dont le générateur ne démarre pas automatiquement lors d'une panne de courant du réseau électrique, en particulier en dehors des heures normales, où l'envoi d'un technicien implique des tarifs de temps supplémentaire.
+
+L'objectif est de déterminer si le problème peut être résolu par des actions de base de l'opérateur avant de dépêcher un technicien pendant les heures normales de la journée plutôt qu'en dehors des heures normales.
+
+> **Important**
+>
+> Cette procédure est destinée uniquement au dépannage de base par le client.
+>
+> Cette procédure est destinée uniquement aux générateurs Cummins/Onan.
+>
+> Les clients ne doivent jamais effectuer de travaux les exposant à des risques électriques ou à des conditions dangereuses.
+>
+> Si, à tout moment, le client se sent mal à l'aise d'exécuter une étape, interrompre la procédure et planifier une intervention de service.
 
 ---
 
@@ -272,3 +279,5 @@ A customer could check whether the ATS is set in **AUTO** or not. Simply setting
 ## Breaker Turned off
 
 A customer could check whether the breaker is correctly turned on. Simply turning on the breaker could resolve a downed generator situation.
+
+---

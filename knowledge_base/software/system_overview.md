@@ -1,21 +1,18 @@
 # Software - System Overview
 
-# Version 1.0.0
-
-# Last Updated: 2026-07-20
-
-# Updated By: Jipeng Li
-
-# Change Log:
-
-v1.0.0
-- Creation of initial document.
+# Last Updated: 2026-09-03
 
 ## Purpose
 
 This document provides a high-level overview of the primary software applications used by the Power Generation Service Department and explains how information flows between them.
 
 Understanding the role of each system helps Service Coordinators know where information originates, how it is synchronized, and where specific tasks should be completed.
+
+## Objectif
+
+Ce document fournit un aperçu général des principales applications logicielles utilisées par le département de service Power Generation et explique comment l’information circule entre celles-ci.
+
+Comprendre le rôle de chaque système permet aux coordonnateurs de service de savoir d’où provient l’information, comment elle est synchronisée et dans quel système les différentes tâches doivent être effectuées.
 
 ---
 
@@ -290,10 +287,3 @@ Recent operational changes may not appear until the following business day.
 
 ---
 
-# Related Documents
-
-- software/bms/work_order_creation.md
-- software/clover/training.md
-- software/fieldaware/dispatch.md
-- service_call_management.md
-- invoicing.md

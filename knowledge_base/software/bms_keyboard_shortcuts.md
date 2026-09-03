@@ -1,21 +1,53 @@
 # BMS - Keyboard Shortcuts
 
-# Version 1.0.0
-
-# Last Updated: 2026-07-20
-
-# Updated By: Jipeng Li
-
-# Change Log:
-
-v1.0.0
-- Creation of initial document.
+# Last Updated: 2026-09-03
 
 ## Purpose
 
 This document provides a quick reference for commonly used keyboard shortcuts in the Business Management System (BMS).
 
 Using keyboard shortcuts can improve efficiency when navigating forms, creating work orders, managing customer records, and performing day-to-day coordinator tasks.
+
+---
+
+## Objectif
+
+Ce document fournit une référence rapide des raccourcis clavier couramment utilisés dans BMS afin de faciliter la navigation, la recherche et la gestion des dossiers.
+
+---
+
+## French Retrieval Metadata
+
+**French Title:** Raccourcis clavier BMS
+
+**French Keywords:** raccourcis clavier BMS, touches BMS, commandes clavier BMS, raccourcis Business Management System, touche F10, touche F6, touche F4, touche F3, touche F7, touche F8, touche F9, Ctrl Q, Ctrl E, enregistrer BMS, rechercher BMS, exécuter une recherche BMS, liste de valeurs BMS, navigation BMS, imprimer BMS, aide BMS
+
+**French Retrieval Phrases:**
+- Quels sont les raccourcis clavier dans BMS?
+- Quelles sont les touches rapides dans BMS?
+- Comment enregistrer avec le clavier dans BMS?
+- Comment faire une recherche dans BMS?
+- Comment utiliser F7 et F8 dans BMS?
+- À quoi sert F9 dans BMS?
+- À quoi sert F10 dans BMS?
+- Comment ouvrir une liste de valeurs dans BMS?
+- Comment fermer une fenêtre dans BMS?
+- Quels raccourcis BMS sont utiles pour les coordonnateurs?
+
+---
+
+# Frequently Used Shortcuts
+
+These shortcuts are the ones Service Coordinators are most likely to use throughout the day.
+
+| Shortcut | Typical Use |
+|----------|-------------|
+| **F10** | Save changes to a Work Order, Unit, Site, or Customer record. |
+| **F6** | Create a new Site, Unit, or other BMS record. |
+| **F7** | Search for existing records. |
+| **F8** | Execute the search. |
+| **F9** | Open lookup lists for customers, units, models, and other selectable fields. |
+| **Ctrl + E** | Edit long Complaint, Cause, Correction, or Remarks text. |
 
 ---
 
@@ -85,21 +117,6 @@ Using keyboard shortcuts can improve efficiency when navigating forms, creating 
 
 ---
 
-# Frequently Used Shortcuts
-
-These shortcuts are the ones Service Coordinators are most likely to use throughout the day.
-
-| Shortcut | Typical Use |
-|----------|-------------|
-| **F10** | Save changes to a Work Order, Unit, Site, or Customer record. |
-| **F6** | Create a new Site, Unit, or other BMS record. |
-| **F7** | Search for existing records. |
-| **F8** | Execute the search. |
-| **F9** | Open lookup lists for customers, units, models, and other selectable fields. |
-| **Ctrl + E** | Edit long Complaint, Cause, Correction, or Remarks text. |
-
----
-
 # Tips
 
 - Save frequently using **F10** to avoid losing work.
@@ -108,9 +125,3 @@ These shortcuts are the ones Service Coordinators are most likely to use through
 - Use **Ctrl + E** when editing long text fields to improve readability and reduce formatting errors.
 
 ---
-
-# Related Documents
-
-- system_overview.md
-- bms_work_order_creation.md
-- overtime_entry.md

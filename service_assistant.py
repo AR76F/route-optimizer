@@ -78,8 +78,9 @@ import fitz
 import streamlit as st
 
 # OpenAI Agents SDK
-from agents import Agent, Runner, SQLiteSession
+from agents import Agent, Runner, SQLiteSession, ModelSettings
 from openai import OpenAI
+from openai.types.shared import Reasoning
 
 # Short instructions before trying to launch the assistant
 ## Set virtual environment (python -m venv [your environment name])
@@ -115,7 +116,6 @@ SUPPORTED_TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".log", ".json", ".xml", ".y
 SUPPORTED_PDF_EXTENSIONS = {".pdf"}
 
 ##### Hints for Querying #####
-# Versions françaises ajoutées
 STOPWORDS = {
     # English
     "what", "does", "do", "is", "are", "the", "a", "an", "of", "for",
@@ -642,7 +642,7 @@ def _bytes_to_data_url(raw_bytes: bytes, suffix: str) -> str:
     }
     mime = mime_map.get(suffix.lower(), "application/octet-stream")
     encoded = base64.b64encode(raw_bytes).decode("ascii")
-    return f"data:{mime};base64,{encoded}"
+    return f"data: {mime}; base64, {encoded}"
 
 def _pdf_pages_to_vision_items(raw_bytes: bytes, display_name: str, max_pages: int = 8) -> list[dict[str, Any]]:
     """
@@ -660,7 +660,7 @@ def _pdf_pages_to_vision_items(raw_bytes: bytes, display_name: str, max_pages: i
         raise RuntimeError(f"Could not open PDF source {display_name!r}: {exc}") from exc
 
     try:
-        for page_number, page in enumerate(doc, start=1):
+        for page_number, page in enumerate(doc, start = 1):
             if page_number > int(max_pages):
                 break
             try:
@@ -824,7 +824,7 @@ def build_uploaded_vision_input_items(uploaded_sources: Iterable[Any] | None = N
 
         if suffix in SUPPORTED_PDF_EXTENSIONS:
             try:
-                items.extend(_pdf_pages_to_vision_items(raw_bytes, display_name, max_pages = 10))
+                items.extend(_pdf_pages_to_vision_items(raw_bytes, display_name, max_pages = 25))
             except Exception:
                 # If a PDF cannot be rendered, fall back to text context only.
                 continue
@@ -943,6 +943,7 @@ Temporary uploaded-file context:
     return Agent(
         name = "Service Assistant",
         model = "gpt-5.6-luna", # Sol best, Terra mid, Luna is worse, being 80% less expensive
+        model_settings = ModelSettings(reasoning = Reasoning(effort = "medium"), verbosity = "low"),
         instructions = human_instructions,
     )
 

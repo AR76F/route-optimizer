@@ -1,21 +1,18 @@
 # BMS - Managing Favorites
 
-# Version 1.0.0
-
-# Last Updated: 2026-07-20
-
-# Updated By: Jipeng Li
-
-# Change Log:
-
-v1.0.0
-- Creation of initial document.
+# Last Updated: 2026-09-03
 
 ## Purpose
 
 This procedure explains how to add or remove favorite menu items in BMS.
 
 Using Favorites allows Service Coordinators to quickly access frequently used forms and improve navigation efficiency.
+
+## Objectif
+
+Cette procédure explique comment ajouter ou supprimer des éléments dans le menu favoris de BMS.
+
+L’utilisation des favoris permet aux coordonnateurs de service d’accéder rapidement aux écrans fréquemment utilisés et d’améliorer l’efficacité de la navigation dans BMS.
 
 ---
 

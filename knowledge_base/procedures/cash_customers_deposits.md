@@ -1,4 +1,4 @@
-# cash Customers - Customer Deposits / Order Entry (OE)
+# Cash Customers - Customer Deposits / Order Entry (OE)
 
 # Last Updated: 2026-09-02
 

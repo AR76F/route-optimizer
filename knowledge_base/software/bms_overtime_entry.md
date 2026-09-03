@@ -1,21 +1,18 @@
-# Coordinator - Overtime Entry in BMS
+# BMS - Overtime Entry 
 
-# Version 1.0.0
-
-# Last Updated: 2026-07-20
-
-# Updated By: Jipeng Li
-
-# Change Log:
-
-v1.0.0
-- Creation of initial document.
+# Last Updated: 2026-09-03
 
 ## Purpose
 
-This document explains how Service Coordinators must enter overtime (OT) in BMS when preparing quotations or completing invoicing.
+This document explains how Service Coordinators must enter **overtime (OT)** in BMS when preparing quotations or completing invoicing.
 
 Correctly charging overtime ensures that customer quotations and invoices accurately reflect labor costs and comply with branch billing practices.
+
+## Objectif
+
+Ce document explique comment les coordonnateurs de service doivent entrer les **heures supplémentaires (OT)** dans BMS lors de la préparation des soumissions ou de la facturation.
+
+La saisie correcte des heures supplémentaires permet de s’assurer que les soumissions et les factures reflètent fidèlement les coûts de main-d’œuvre et respectent les pratiques de facturation de la succursale.
 
 ---
 

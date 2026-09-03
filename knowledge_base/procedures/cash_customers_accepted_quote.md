@@ -1,4 +1,4 @@
-# cash Customers - Accepted Quotation
+# Cash Customers - Accepted Quotation
 
 # Last Updated: 2026-09-02
 
