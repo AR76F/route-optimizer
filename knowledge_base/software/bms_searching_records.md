@@ -1,21 +1,44 @@
 # BMS - Searching Records
 
-# Version 1.0.0
-
-# Last Updated: 2026-07-20
-
-# Updated By: Jipeng Li
-
-# Change Log:
-
-v1.0.0
-- Creation of initial document.
+# Last Updated: 2026-09-03
 
 ## Purpose
 
-This document explains the different methods available for searching customers, work orders, work order history, and other records within BMS.
+This document explains the different methods available for **searching customers, work orders, work order history, and other records within BMS**.
 
 Searching efficiently allows Service Coordinators to quickly retrieve customer information, previous service history, invoices, and work orders.
+
+## Objectif
+
+Ce document explique les différentes méthodes disponibles dans BMS pour rechercher des clients, des bons de travail, l’historique des travaux et d’autres dossiers.
+
+Une recherche efficace permet aux coordonnateurs de service de retrouver rapidement les renseignements sur les clients, l’historique des travaux, les factures et les bons de travail.
+
+---
+
+## French Retrieval Metadata
+
+**French Title:** BMS - Recherche de dossiers
+
+**French Keywords:** recherche BMS, rechercher dans BMS, recherche client BMS, trouver client BMS, numéro client BMS, rechercher bon de travail, rechercher work order, recherche WO, historique client BMS, historique travaux client, Service Lookup, Work Order Query, recherche facture BMS, numéro de facture, numéro de bon de commande, purchase order, recherche par superviseur, recherche F7 F8, mode Query BMS, recherche avec pourcentage BMS, wildcard BMS, recherche avec %, trouver ancien bon de travail
+
+**French Retrieval Phrases:**
+- Comment faire une recherche dans BMS?
+- Comment rechercher un client dans BMS?
+- Comment trouver un numéro de client dans BMS?
+- Comment trouver un bon de travail dans BMS?
+- Comment rechercher un ancien work order?
+- Comment voir l'historique d'un client dans BMS?
+- Comment voir les anciens travaux d'un client?
+- Comment utiliser Service Lookup dans BMS?
+- Comment utiliser Work Order Query dans BMS?
+- Comment rechercher avec F7 et F8 dans BMS?
+- Comment rechercher une facture dans BMS?
+- Comment rechercher avec un numéro de facture?
+- Comment rechercher avec un numéro de bon de commande?
+- Comment rechercher par numéro de téléphone dans BMS?
+- Comment utiliser le symbole % pour une recherche dans BMS?
+- Comment retrouver les anciens travaux effectués pour un client?
 
 ---
 
@@ -174,6 +197,18 @@ BMS will retrieve all matching records.
 
 ---
 
+# SharePoint Resource
+
+A visual reference for BMS record searching is available on SharePoint.
+
+**Resource:** [BMS Searching Records - Visual Guide](https://cummins365.sharepoint.com/:p:/s/GRP_CC40846-AdministrationFSPG/IQCH9dgGQAjHS4al0EBw844xAewQEJ4ObAt0rLJJxMAMpcw?e=zxZ94e)
+
+> **Note**
+>
+> The SharePoint slides are intended as a visual reference only. This document contains the more detailed procedure and should be used as the primary reference for BMS record searching.
+
+---
+
 # Choosing the Right Search Method
 
 | If you need to... | Use |
@@ -249,3 +284,5 @@ F8
 ```
 
 to retrieve matching records.
+
+---

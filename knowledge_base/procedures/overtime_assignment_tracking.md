@@ -1,15 +1,6 @@
-# Overtime Assignment and Tracking Procedure
+# Procedure - Overtime Assignment and Tracking 
 
-# Version 1.0.0
-
-# Last Updated: 2026-08-12
-
-# Updated By: Jipeng Li
-
-# Change Log:
-
-v1.0.0
-- Creation of initial document.
+# Last Updated: 2026-09-03
 
 ## Purpose
 
@@ -21,6 +12,38 @@ The objective is to maintain a fair overtime allocation process by considering b
 - Technicians who volunteered for overtime but were not selected.
 
 Accurate and timely maintenance of the overtime tracking file is required to provide a fair view of each technician's participation.
+
+## Objectif
+
+Cette procédure définit comment les occasions de temps supplémentaire en soirée et durant les fins de semaine doivent être enregistrées et attribuées au sein du département de service de Candiac.
+
+L'objectif est d'assurer une répartition équitable du temps supplémentaire en tenant compte des techniciens qui ont effectué du temps supplémentaire ainsi que de ceux qui se sont portés volontaires sans être sélectionnés.
+
+---
+
+## French Retrieval Metadata
+
+**French Title:** Attribution et suivi du temps supplémentaire des techniciens
+
+**French Keywords:** temps supplémentaire, overtime, OT, liste overtime, fichier overtime, suivi overtime, attribution overtime, assigner overtime, choisir technicien overtime, technicien volontaire overtime, volontaire temps supplémentaire, soirée overtime, fin de semaine overtime, weekend overtime, ancienneté overtime, historique overtime, répartition overtime, Liste overtime et outils Candiac, I overtime, X vert overtime
+
+**French Retrieval Phrases:**
+- Comment attribuer un overtime à un technicien?
+- Comment choisir un technicien pour du temps supplémentaire?
+- Comment fonctionne la liste d'overtime?
+- Où est le fichier d'overtime?
+- Où est la liste de temps supplémentaire?
+- Comment remplir le fichier d'overtime?
+- Que signifie le I dans la liste d'overtime?
+- Que signifie le X vert dans la liste d'overtime?
+- Comment enregistrer les techniciens intéressés par un overtime?
+- Est-ce qu'il faut inscrire tous les techniciens volontaires?
+- Comment l'ancienneté est-elle utilisée pour attribuer l'overtime?
+- Est-ce que le technicien avec le plus d'ancienneté reçoit automatiquement l'overtime?
+- Comment vérifier qui devrait recevoir le prochain overtime?
+- Comment assurer une répartition équitable de l'overtime?
+- Quand faut-il mettre à jour la liste d'overtime?
+- Est-ce que les jobs de soir et de fin de semaine doivent être ajoutées à la liste?
 
 ---
 
@@ -184,21 +207,6 @@ Recording expressions of interest provides visibility into technicians who consi
 
 ---
 
-# Why the File Must Remain Current
-
-The overtime tracking file is used to evaluate:
-
-- Overtime performed.
-- Technician participation.
-- Technician willingness to accept overtime.
-- Distribution of overtime opportunities.
-
-If evening or weekend jobs are missing from the file, the department no longer has an accurate view of technician participation.
-
-This can make future overtime selection less equitable.
-
----
-
 # Coordinator Responsibilities
 
 For every evening or weekend overtime opportunity:
@@ -214,57 +222,12 @@ For every evening or weekend overtime opportunity:
 
 ---
 
-# Coordinator Checklist
-
-## When an Overtime Opportunity Is Offered
-
-- [ ] Overtime opportunity added to the tracking file.
-- [ ] Open call communicated to technicians.
-- [ ] Every interested technician recorded.
-- [ ] `I` entered for every technician who volunteered.
-- [ ] Recent overtime history reviewed.
-- [ ] Seniority considered.
-- [ ] Technician selected.
-- [ ] Green `X` entered for the selected technician.
-
-## After the Overtime Job
-
-- [ ] Confirm the selected technician performed the job.
-- [ ] Verify the overtime tracking file is complete and current.
-
----
-
 # Common Mistakes
 
-## Recording Only the Selected Technician
-
-Do not record only the technician who receives the job.
-
-Every technician who volunteered must also be recorded with an `I`.
-
----
-
-## Selecting Based Only on Seniority
-
-Seniority is one factor in the selection process.
-
-Recent overtime performed must also be considered to maintain equitable distribution.
-
----
-
-## Missing Evening or Weekend Jobs
-
-Every evening and weekend overtime job must be entered into the tracking file.
-
-Missing jobs distort technicians' overtime histories and may affect future assignments.
-
----
-
-## Updating the File Later
-
-Do not allow overtime assignments to accumulate before updating the file.
-
-Update the overtime tracking file after every applicable job so that the information used for the next selection remains current.
+- **Recording only the selected technician:** Every technician who volunteered must be recorded with an `I`, even if they were not selected.
+- **Selecting based only on seniority:** Seniority is one factor, but recent overtime performed must also be considered.
+- **Missing evening or weekend jobs:** Every applicable overtime job must be entered into the tracking file.
+- **Delaying file updates:** Update the overtime tracking file after every applicable job so the information is current for the next assignment.
 
 ---
 

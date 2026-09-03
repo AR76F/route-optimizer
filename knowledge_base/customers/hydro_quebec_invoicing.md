@@ -1,4 +1,4 @@
-# Hydro-Québec Invoicing Requirements
+# Customers - Hydro-Québec Invoicing Requirements
 
 # Last Updated: 2026-08-28
 
