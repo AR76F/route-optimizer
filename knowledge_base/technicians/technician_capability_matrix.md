@@ -110,13 +110,7 @@ Then consult the detailed technician profile for the final recommendation.
 
 ## Quick Observations
 
-- The workbook is heavily weighted toward Candiac technicians.
 - François Racine and Alain Duguay are the strongest security-qualified technicians in this sheet.
 - Louis Lauzon is one of the most senior technicians in the workbook and shows strong PM / route support.
 - Donald Lagacé and Sebstien Pepin-Millette are in-shop only, do not dispatch them to field service calls.
 
-## Related Documents
-
-- technician_profiles.md
-- technician_selection_rules.md
-- service_department_directory.md

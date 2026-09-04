@@ -942,8 +942,10 @@ Temporary uploaded-file context:
 
     return Agent(
         name = "Service Assistant",
-        model = "gpt-5.6-luna", # Sol best, Terra mid, Luna is worse, being 80% less expensive
-        model_settings = ModelSettings(reasoning = Reasoning(effort = "medium"), verbosity = "low"),
+        model = "gpt-5.6-luna", 
+        model_settings = ModelSettings(reasoning = Reasoning(effort = "low"), 
+                                        verbosity = "low",
+                                        temperature = 0.2),
         instructions = human_instructions,
     )
 
