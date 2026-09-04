@@ -77,6 +77,7 @@ except Exception:
     GEOTAB_AVAILABLE = False
 
 # Test access internal Candiac server
+# Le serveur est seulement accessible en "Localhost"
 # from pathlib import Path
 
 # test_file = Path(
@@ -538,14 +539,14 @@ def render_page_1():
                 api.authenticate()
                 return api
 
-            @st.cache_data(ttl=900, show_spinner=False)
-            def _geotab_devices_cached(user, pwd, db, server):
+            @st.cache_data(ttl=300, show_spinner=False)
+            def _geotab_devices_cached(user, pwd, db, server, refresh_key):
                 api = _geotab_api_cached(user, pwd, db, server)
                 devs = api.call("Get", typeName="Device", search={"isActive": True}) or []
                 return [{"id": d["id"], "name": d.get("name") or d.get("serialNumber") or "unit"} for d in devs]
 
             # [MOYEN-2] Fetch positions Geotab en parallèle avec ThreadPoolExecutor
-            @st.cache_data(ttl=75, show_spinner=False)
+            @st.cache_data(ttl=60, show_spinner=False)
             def _geotab_positions_for(api_params, device_ids, refresh_key):
                 user, pwd, db, server = api_params
                 api = _geotab_api_cached(user, pwd, db, server)
@@ -568,9 +569,9 @@ def render_page_1():
                         if lat is not None and lon is not None:
                             return {"deviceId": did, "lat": float(lat), "lon": float(lon),
                                     "when": when, "driverName": driver_name}
-                        return {"deviceId": did, "error": "no_position"}
-                    except Exception:
-                        return {"deviceId": did, "error": "error"}
+                        return {"deviceId": did, "error": "no_position", "driverName": driver_name}
+                    except Exception as exc:
+                        return {"deviceId": did, "error": f"error: {type(exc).__name__}"}
 
                 results = []
                 with ThreadPoolExecutor(max_workers=6) as ex:
@@ -618,13 +619,25 @@ def render_page_1():
                 dev_label = device_name or device_id
                 return f"{driver} — {dev_label}"
 
-            devs = _geotab_devices_cached(G_USER, G_PWD, G_DB, G_SERVER)
+            # The refresh key is deliberately part of both cached calls. The
+            # refresh button must invalidate the active device/driver list as
+            # well as the position data.
+            devs = _geotab_devices_cached(G_USER, G_PWD, G_DB, G_SERVER, st.session_state.geo_refresh_key)
             if not devs:
                 st.info("Aucun appareil actif trouvé.")
             else:
+                # DeviceStatusInfo contains the current driver association as
+                # well as the latest GPS point. Fetch it once for every active
+                # device so the selector uses live Geotab assignments.
+                all_ids = tuple(d["id"] for d in devs)
+                live_status = _geotab_positions_for(
+                    (G_USER, G_PWD, G_DB, G_SERVER), all_ids, st.session_state.geo_refresh_key
+                )
+                status_by_id = {p["deviceId"]: p for p in live_status}
                 options, label2id = [], {}
                 for d in devs:
-                    lbl = _label_for_device(d["id"], d["name"], None)
+                    live_driver = status_by_id.get(d["id"], {}).get("driverName")
+                    lbl = _label_for_device(d["id"], d["name"], live_driver)
                     options.append(lbl)
                     label2id[lbl] = d["id"]
 
@@ -637,7 +650,7 @@ def render_page_1():
                 wanted_ids = [label2id[lbl] for lbl in picked_labels]
 
                 if wanted_ids:
-                    pts = _geotab_positions_for((G_USER, G_PWD, G_DB, G_SERVER), tuple(wanted_ids), st.session_state.geo_refresh_key)
+                    pts = [status_by_id[did] for did in wanted_ids if did in status_by_id]
                     id2name = {d["id"]: d["name"] for d in devs}
                     valid = [p for p in pts if "lat" in p and "lon" in p]
                     if valid:
@@ -662,7 +675,9 @@ def render_page_1():
                             folium.Marker(
                                 [p["lat"], p["lon"]],
                                 popup=folium.Popup(
-                                    f"<b>{label}</b><br>Recency: {lab}<br>{p['lat']:.5f}, {p['lon']:.5f}",
+                                    f"<b>{label}</b><br>Recency: {lab}<br>"
+                                    f"Last Geotab signal: {p.get('when') or 'unknown'}<br>"
+                                    f"{p['lat']:.5f}, {p['lon']:.5f}",
                                     max_width=320
                                 ),
                                 tooltip=label,
@@ -682,6 +697,17 @@ def render_page_1():
 
                         st_folium(fmap, height=800, width=1800)
 
+                        stale = []
+                        for p in valid:
+                            _, recency = recency_color(p.get("when"))
+                            if recency not in {"≤ 2h", "≤ 24h"}:
+                                stale.append(p)
+                        if stale:
+                            st.warning(
+                                f"{len(stale)} position(s) sélectionnée(s) ne sont pas récentes. "
+                                "La carte affiche l'heure du dernier signal Geotab; vérifiez la communication du véhicule."
+                            )
+
                         start_choice = st.selectbox("Utiliser comme point de départ :", ["(aucun)"] + choice_labels, index=0, key="geo_start_choice")
                         if start_choice != "(aucun)":
                             chosen = valid[choice_labels.index(start_choice)]
@@ -689,7 +715,10 @@ def render_page_1():
                             st.session_state.route_start = picked_addr
                             st.success(f"Départ défini depuis **{start_choice}** → {picked_addr}")
                     else:
-                        st.warning("Aucune position exploitable pour les éléments sélectionnés (essayez de rafraîchir).")
+                        st.warning(
+                            "Aucune position exploitable pour les éléments sélectionnés "
+                            "(essayez de rafraîchir)."
+                        )
                 else:
                     st.info("Sélectionnez au moins un véhicule/technicien pour afficher la carte.")
         else:
