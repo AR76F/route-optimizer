@@ -1,6 +1,6 @@
 # Procedure - Preparing and Accepting a Quote
 
-# Last Updated: 2026-09-03
+# Last Updated: 2026-09-11
 
 ---
 
@@ -78,6 +78,8 @@ Using the FieldAware Job ID provided by the technician:
 
 The RFQ should contain the information required to understand the additional work and parts identified by the technician.
 
+The RFQ may also be sent out directly by a technician through email.
+
 ---
 
 ## 2. Create the WOQT in BMS
@@ -86,13 +88,13 @@ Create a **WOQT** in BMS using the information provided in the technician's RFQ.
 
 Prepare the WOQT with the required labor, travel, and other applicable charges.
 
-Parts can then be coordinated with the Parts Department.
+Do not send the quotation to the customer before the Parts Department has added the required parts and pricing.
 
 ---
 
-## 3. Send Parts Request
+## 3. Email the Parts Request
 
-Send the parts request to the Parts Department.
+Send an email to the Parts Department requesting that the required parts be added to the WOQT.
 
 Include:
 
@@ -117,9 +119,9 @@ Always:
 
 ---
 
-## 4. Complete the Customer Quotation
+## 4. Receive the Updated Quotation
 
-Once the required parts information and pricing have been added, complete the WOQT and prepare the quotation for the customer.
+When the WOQT is returned by the Parts Department with the parts and pricing added, review the information and complete the customer quotation.
 
 The quotation should clearly describe the proposed work and applicable charges based on the technician's findings.
 
@@ -135,6 +137,14 @@ When sending the email:
 - Attach the quotation.
 - Inform the customer that approval is required before proceeding.
 - Request a Purchase Order (PO) and/or signed quotation when applicable.
+
+---
+
+## 6. Record the Date Sent to the Customer
+
+After sending the quotation to the customer, update the WOQT status with the date on which the quotation was sent.
+
+Use the date the email was actually sent to the customer.
 
 ---
 

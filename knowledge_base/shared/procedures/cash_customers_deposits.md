@@ -1,6 +1,6 @@
 # Cash Customers - Customer Deposits / Order Entry (OE)
 
-# Last Updated: 2026-09-02
+# Last Updated: 2026-09-11
 
 ## Purpose
 
@@ -29,12 +29,12 @@ To receive a customer deposit:
 - Create an **OE** with the customer's information.
 - Use the **Charges** tab.
 - Select `DEPOSIT`.
-- Enter the amount received.
+- Enter the deposit amount before taxes. OneBMS calculates the applicable taxes automatically at the end.
 - Apply the appropriate **Tax District**.
 - Use `DEP` as the PO number when applicable.
 - Add the applicable Work Order or Serial Number reference in **Comments**.
-- Apply the deposit to the corresponding Work Order through **Misc Charges**.
-- When applying the deposit, use the **same amount and Tax District** as the original OE and enter the deposit as a **negative value**.
+- Open the corresponding Work Order and go to **Total BT/WO / Misc Charges**.
+- Select **DEPOSIT**, enter the deposit amount as a **negative value**, and use the same Tax District as the original OE.
 
 ### French Retrieval Concepts
 
@@ -92,9 +92,11 @@ Enter:
 
 ```text
 Name: DEPOSIT
-Amount: Amount received
+Amount: Deposit amount before taxes
 Tax District: Applicable Tax District
 ```
+
+OneBMS calculates the applicable taxes automatically at the end. Do not enter the tax-inclusive amount in the OE.
 
 The Tax District must reflect the correct tax treatment for the applicable branch/location.
 
@@ -135,19 +137,23 @@ Open the corresponding Work Order.
 Navigate to:
 
 ```text
-Misc Charges
+Total BT/WO / Misc Charges
 ```
 
-Add:
+Select:
 
 ```text
-Name: DEPOSIT
+DEPOSIT
 ```
 
-Use the:
+Enter:
 
-- Same deposit amount.
-- Same Tax District.
+```text
+Amount: Negative deposit amount
+Tax District: Same Tax District as the original OE
+```
+
+The deposit must be applied directly from the Work Order. If searching for the deposit does not return a result, do not use the search; open the Work Order and apply it through **Total BT/WO / Misc Charges**.
 
 The deposit must be entered as a:
 
@@ -166,14 +172,14 @@ The original OE and the Work Order deposit application must correspond.
 ```text
 Original OE
 DEPOSIT
-+ Amount Received
++ Deposit Amount Before Taxes
 + Applicable Tax District
 
         ↓
 
 Work Order - Misc Charges
 DEPOSIT
-- Same Amount
+- Negative Deposit Amount
 + Same Tax District
 ```
 

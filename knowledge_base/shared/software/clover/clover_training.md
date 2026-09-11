@@ -1,16 +1,16 @@
 # Clover Training
 
-# Last Updated: 2026-09-02
+# Last Updated: 2026-09-11
 
 ## Purpose
 
-This document provides a concise overview of using the **Clover Virtual Terminal** to process cash customer pre-authorizations and payments.
+This document provides a concise overview of using the **Clover Virtual Terminal** to process cash customer pre-authorizations, payments, and refunds.
 
 It also explains how the Clover Authorization ID is associated with the corresponding BMS Work Order.
 
 ## Objectif
 
-Ce document fournit un aperçu de l'utilisation du **Clover Virtual Terminal** pour traiter les préautorisations et les paiements des clients Cash.
+Ce document fournit un aperçu de l'utilisation du **Clover Virtual Terminal** pour traiter les préautorisations, les paiements et les remboursements des clients Cash.
 
 Il explique également comment le numéro d'autorisation Clover doit être associé au bon de travail correspondant dans BMS.
 
@@ -50,6 +50,17 @@ After processing a pre-authorization or payment:
 4. Record the **Authorization ID**.
 5. Enter the Authorization ID as the **PO number on the BMS Work Order**.
 6. Save the receipt as a PDF and send it to the customer.
+7. For a credit card payment, place the payment receipt together with the invoice or the BMS Order Entry (OE) created in the front drawer.
+8. Stamp the documents and complete all required information.
+
+## Refunds
+
+When processing a refund:
+
+1. Complete the refund in Clover.
+2. Retrieve and print the refund payment receipt.
+3. Bring the refund receipt together with the invoice to the front drawer.
+4. Stamp the documents and complete all required information.
 
 ### French Retrieval Concepts
 

@@ -1132,7 +1132,7 @@ Temporary uploaded-file context:
         name = "Service Assistant",
         model = "gpt-5.6-luna", 
         model_settings = ModelSettings(
-            reasoning = Reasoning(effort = "medium"), verbosity = "low", temperature = 0.2),
+            reasoning = Reasoning(effort = "medium"), verbosity = "low"),
         instructions = human_instructions,
     )
 
