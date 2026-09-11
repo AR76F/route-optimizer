@@ -84,10 +84,9 @@ Examples
 Preferred Technicians
 
 1. Pier-Luc Côté
-2. Alain Duguay
-3. François Racine
-4. Martin Bourbonnière
-5. Patrick Bellefleur
+2. Alexandre Pelletier-Guay
+3. Christian Dubreuil
+4. Fredy Diaz
 
 ---
 
@@ -235,7 +234,7 @@ Preferred Technicians
 
 1. Christian Dubreuil
 2. François Racine
-3. Michael Sulte
+3. Kevin DUranceau
 4. Pier-Luc Côté
 5. Alain Duguay
 
@@ -319,8 +318,8 @@ Primary Technicians
 
 Secondary Support
 
-- Christian Dubreuil
 - Patrick Robitaille
+- Benoit Laramée
 
 ---
 
