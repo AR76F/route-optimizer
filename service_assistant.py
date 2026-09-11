@@ -1,9 +1,9 @@
 """
 Service Coordinator Assistant
-Version 1.0.1
+Version 1.1.0
 Author: UD016
 
-AI assistant for CSSNA Candiac
+AI assistant for CSSNA PGBU Service Departmentss
 
 Change log:
 
@@ -64,6 +64,7 @@ v0.1.0
 from __future__ import annotations
 
 import base64
+import asyncio
 import os
 import pickle
 import re
@@ -110,6 +111,15 @@ CACHE_DIR = Path(".cache")
 EMBEDDING_CACHE_PATH = CACHE_DIR / "service_assistant_embedding_index.pkl"
 SESSION_DB_PATH = Path("service_assistant_sessions.sqlite3")
 _SESSION_CACHE: dict[str, SQLiteSession] = {}
+
+# Retrieval scoring configuration
+KEYWORD_OVERLAP_BOOST = 0.05
+ACRONYM_MATCH_BOOST = 0.25
+DIRECTORY_QUERY_BOOST = 0.21
+ROLE_DIRECTORY_QUERY_BOOST = 0.20
+TECHNICIAN_QUERY_BOOST = 0.12
+
+SUPPORTED_BRANCHES = {"candiac", "ottawa"}
 
 SUPPORTED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
 SUPPORTED_TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".log", ".json", ".xml", ".yaml", ".yml"}
@@ -291,6 +301,63 @@ def is_technician_query(question: str) -> bool:
     q = normalize_text(question)
     return any(normalize_text(hint) in q for hint in TECHNICAL_QUERY_HINTS)
 
+
+def normalize_source_path(source: str) -> str:
+    """
+    Normalize Windows and Unix source paths for reliable classification.
+    """
+    return source.replace("\\", "/").strip("/").lower()
+
+
+def classify_source(source: str) -> set[str]:
+    """
+    Identify the branch and functional category represented by a knowledge
+    base source.
+
+    This supports both the current layout and future branch-specific layouts,
+    for example:
+
+        technicians/name.md
+        ottawa/technicians/name.md
+        branches/ottawa/technicians/name.md
+        directory.md
+    """
+    normalized = normalize_source_path(source)
+    source_path = Path(normalized)
+    parts = set(source_path.parts)
+    stem = source_path.stem
+
+    tags: set[str] = set()
+
+    for branch in SUPPORTED_BRANCHES:
+        if branch in parts or branch in stem:
+            tags.add(branch)
+
+    if "branches" in parts:
+        tags.add("branch_specific")
+
+    # Existing root-level sources are shared unless they identify a branch.
+    if "shared" in parts or not tags.intersection(SUPPORTED_BRANCHES):
+        tags.add("shared")
+
+    if "technicians" in parts or "tech_profiles" in parts:
+        tags.add("technician")
+
+    if "directory" in stem:
+        tags.add("directory")
+
+    return tags
+
+
+ROLE_DIRECTORY_HINTS = {
+    "what is the role",
+    "what is his role",
+    "what is her role",
+    "what is their role",
+    "what is the position",
+    "what is the job title",
+}
+
 def is_list_all_query(question: str) -> bool:
     """
     Detect questions that need broader technician-profile coverage.
@@ -342,41 +409,77 @@ def split_markdown_into_chunks(text: str, max_words: int = 350) -> list[str]:
 
     return chunks
 
-def file_signature(file_path: Path) -> tuple[str, int, int]:
+def file_signature(
+    file_path: Path,
+    knowledge_base_path: Path,
+) -> tuple[str, str, int, int]:
     """
     A compact signature used to invalidate cached embeddings when files change.
     """
     stat = file_path.stat()
-    return (str(file_path.relative_to(KNOWLEDGE_BASE_PATH)), stat.st_mtime_ns, stat.st_size)
 
-def build_chunk_index(path: str = "knowledge_base") -> tuple[Chunk, ...]:
-    """
-    Load and chunk all Markdown documents in the active knowledge base.
-    """
-    kb_path = Path(path)
-    if not kb_path.exists():
-        return tuple()
+    return (
+        str(knowledge_base_path.resolve()),
+        str(file_path.relative_to(knowledge_base_path)),
+        stat.st_mtime_ns,
+        stat.st_size,
+    )
 
+def normalize_knowledge_base_paths(
+    knowledge_base_paths: str | Path | Iterable[str | Path],
+) -> tuple[Path, ...]:
+    """
+    Normalize one or more knowledge-base paths into an ordered tuple of Paths.
+
+    Accepts a single string or Path, or an iterable of strings and Paths.
+    The function preserves the supplied order and does not check whether
+    the paths exist.
+    """
+    if isinstance(knowledge_base_paths, (str, Path)):
+        paths = [knowledge_base_paths]
+    else:
+        paths = list(knowledge_base_paths)
+
+    return tuple(Path(path) for path in paths)
+
+def build_chunk_index(
+    knowledge_base_paths: str | Path | Iterable[str | Path] = KNOWLEDGE_BASE_PATH,
+) -> tuple[Chunk, ...]:
+    """
+    Load and chunk Markdown documents from the selected knowledge-base folders.
+    """
+    roots = normalize_knowledge_base_paths(knowledge_base_paths)
     chunks: list[Chunk] = []
 
-    for file in sorted(kb_path.rglob("*.md")):
-        try:
-            text = file.read_text(encoding = "utf-8")
-        except Exception:
+    for kb_path in roots:
+        if not kb_path.exists():
             continue
 
-        relative_source = str(file.relative_to(kb_path))
-        file_stem = file.stem
+        namespace = kb_path.name
 
-        for chunk_text in split_markdown_into_chunks(text):
-            searchable_text = f"{relative_source}\n{file_stem}\n{chunk_text}"
-            chunks.append(
-                Chunk(
-                    source = relative_source,
-                    text = chunk_text,
-                    token_set = frozenset(tokenize(searchable_text)),
+        for file in sorted(kb_path.rglob("*.md")):
+            try:
+                text = file.read_text(encoding = "utf-8")
+            except Exception:
+                continue
+
+            relative_source = f"{namespace}/{file.relative_to(kb_path)}"
+            file_stem = file.stem
+
+            for chunk_text in split_markdown_into_chunks(text):
+                searchable_text = (
+                    f"{relative_source}\n"
+                    f"{file_stem}\n"
+                    f"{chunk_text}"
                 )
-            )
+
+                chunks.append(
+                    Chunk(
+                        source = relative_source,
+                        text = chunk_text,
+                        token_set = frozenset(tokenize(searchable_text)),
+                    )
+                )
 
     return tuple(chunks)
 
@@ -419,7 +522,7 @@ def embed_texts(texts: list[str], batch_size: int = 64) -> list[tuple[float, ...
 
     return vectors
 
-def read_embedding_cache() -> tuple[tuple[tuple[str, int, int], ...], tuple[EmbeddedChunk, ...]] | None:
+def read_embedding_cache() -> tuple[tuple[tuple[str, str, int, int], ...], tuple[EmbeddedChunk, ...]] | None:
     """
     Load the cached embedding index if the knowledge base has not changed.
     """
@@ -441,7 +544,7 @@ def read_embedding_cache() -> tuple[tuple[tuple[str, int, int], ...], tuple[Embe
     return signature, chunks
 
 def write_embedding_cache(
-    signature: tuple[tuple[str, int, int], ...],
+    signature: tuple[tuple[str, str, int, int], ...],
     chunks: tuple[EmbeddedChunk, ...],
 ) -> None:
     """
@@ -458,16 +561,26 @@ def write_embedding_cache(
     with EMBEDDING_CACHE_PATH.open("wb") as f:
         pickle.dump(payload, f)
 
-def build_embedding_index(path: str = "knowledge_base") -> tuple[EmbeddedChunk, ...]:
+def build_embedding_index(
+    knowledge_base_paths: str | Path | Iterable[str | Path] = KNOWLEDGE_BASE_PATH,
+) -> tuple[EmbeddedChunk, ...]:
     """
     Load or build the embedding index for all active knowledge base Markdown files.
     """
-    kb_path = Path(path)
-    if not kb_path.exists():
+    roots = normalize_knowledge_base_paths(knowledge_base_paths)
+
+    existing_roots = tuple(
+        root
+        for root in roots
+        if root.exists()
+    )
+
+    if not existing_roots:
         return tuple()
 
     current_signature = tuple(
-        file_signature(file)
+        file_signature(file, kb_path)
+        for kb_path in existing_roots
         for file in sorted(kb_path.rglob("*.md"))
     )
 
@@ -477,7 +590,7 @@ def build_embedding_index(path: str = "knowledge_base") -> tuple[EmbeddedChunk, 
         if cached_signature == current_signature:
             return cached_chunks
 
-    base_chunks = build_chunk_index(path)
+    base_chunks = build_chunk_index(existing_roots)
     if not base_chunks:
         return tuple()
 
@@ -515,33 +628,28 @@ def score_chunk_embedding(
     qtokens = tokenize_for_retrieval(question)
     overlap = len(set(qtokens) & chunk.token_set)
 
-    score = similarity + (0.05 * overlap)
+    score = similarity + (KEYWORD_OVERLAP_BOOST * overlap)
 
     acronym = extract_acronym(question)
     if acronym and acronym.lower() in chunk.token_set:
-        score += 0.25
+        score += ACRONYM_MATCH_BOOST
 
-    if is_directory_query(question) and chunk.source.endswith("candiac_directory.md"):
-        score += 0.21
+    source_tags = classify_source(chunk.source)
+
+    if is_directory_query(question) and "directory" in source_tags:
+        score += DIRECTORY_QUERY_BOOST
 
     if is_directory_query(question):
         normalized_question = normalize_text(question)
 
-        role_hints = {
-            "what is the role",
-            "what is his role",
-            "what is her role",
-            "what is their role",
-            "what is the position",
-            "what is the job title",
-        }
+        if any(
+            normalize_text(hint) in normalized_question
+            for hint in ROLE_DIRECTORY_HINTS
+        ) and "directory" in source_tags:
+            score += ROLE_DIRECTORY_QUERY_BOOST
 
-        if any(normalize_text(hint) in normalized_question for hint in role_hints):
-            if chunk.source.endswith("candiac_directory.md"):
-                score += 0.20
-
-    if is_technician_query(question) and chunk.source.startswith("technicians\\"):
-        score += 0.12
+    if is_technician_query(question) and "technician" in source_tags:
+        score += TECHNICIAN_QUERY_BOOST
 
     return score
 
@@ -860,17 +968,93 @@ def get_session(session_id: str = "default_service_chat") -> SQLiteSession:
         _SESSION_CACHE[session_id] = SQLiteSession(session_id, str(SESSION_DB_PATH))
     return _SESSION_CACHE[session_id]
 
+
+def _session_item_to_text(item: Any) -> str:
+    """
+    Convert a session history item into searchable text.
+
+    SQLiteSession stores Responses API-style items, so content may be either
+    a plain string or a list of content parts. Retrieval only needs the text;
+    images and other non-text parts are intentionally ignored.
+    """
+    if not isinstance(item, dict):
+        return ""
+
+    role = str(item.get("role", "")).strip().lower()
+    content = item.get("content", "")
+
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, list):
+        text_parts: list[str] = []
+        for part in content:
+            if isinstance(part, str):
+                text_parts.append(part)
+            elif isinstance(part, dict) and isinstance(part.get("text"), str):
+                text_parts.append(part["text"])
+        text = " ".join(text_parts)
+    else:
+        text = ""
+
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        return ""
+
+    return f"{role}: {text}" if role else text
+
+
+def build_retrieval_query(
+    question: str,
+    session: SQLiteSession | None = None,
+    max_history_items: int = 6,
+    max_history_chars: int = 5000,
+) -> str:
+    """
+    Build a retrieval query that preserves context from recent conversation.
+
+    The user's current question remains the primary query. Recent turns are
+    appended only for retrieval, so follow-ups such as "send me the visual
+    guide link" can inherit the procedure name from the preceding turn while
+    the final agent still receives the original user wording.
+    """
+    current_question = question.strip()
+    if not current_question or session is None:
+        return current_question
+
+    try:
+        history_items = asyncio.run(session.get_items(limit = max_history_items))
+    except Exception:
+        # Retrieval context should never make an otherwise valid request fail.
+        return current_question
+
+    history_text = [
+        text
+        for item in history_items
+        if (text := _session_item_to_text(item))
+    ]
+    if not history_text:
+        return current_question
+
+    history = "\n".join(history_text)
+    history = history[-max_history_chars:]
+    return (
+        f"Current question: {current_question}\n"
+        f"Recent conversation context: {history}"
+    )
+
 ##### Agent Build and Instructions #####
 def build_agent(
     question: str,
+    knowledge_base_paths: str | Path | Iterable[str | Path] = KNOWLEDGE_BASE_PATH,
     temporary_context: str | None = None,
     uploaded_sources: Iterable[Any] | None = None,
+    retrieval_query: str | None = None,
 ) -> Agent:
     """
     Build an agent with only the most relevant knowledge excerpts.
     """
     # Database link (current version is just a folder)
-    kb_index = build_embedding_index("knowledge_base")
+    kb_index = build_embedding_index(knowledge_base_paths)
 
     # Chunk scoring system
     if is_list_all_query(question):
@@ -885,7 +1069,11 @@ def build_agent(
     else:
         top_k = 4
 
-    relevant_chunks = retrieve_relevant_chunks(question, kb_index, top_k = top_k)
+    relevant_chunks = retrieve_relevant_chunks(
+        retrieval_query or question,
+        kb_index,
+        top_k = top_k,
+    )
     retrieved_context = format_retrieved_context(relevant_chunks)
     temp_context = build_temporary_context(
         temporary_context = temporary_context,
@@ -942,7 +1130,7 @@ Temporary uploaded-file context:
 
     return Agent(
         name = "Service Assistant",
-        model = "gpt-5.6-luna", # Sol best, Terra mid, Luna is worse, being 80% less expensive
+        model = "gpt-5.6-luna", 
         model_settings = ModelSettings(reasoning = Reasoning(effort = "medium"), verbosity = "low"),
         instructions = human_instructions,
     )
@@ -951,6 +1139,7 @@ Temporary uploaded-file context:
 def ask_service_assistant(
     question: str,
     session_id: str = "default_service_chat",
+    knowledge_base_paths: str | Path | Iterable[str | Path] = KNOWLEDGE_BASE_PATH,
     temporary_context: str | None = None,
     uploaded_sources: Iterable[Any] | None = None,
 ) -> str:
@@ -962,13 +1151,17 @@ def ask_service_assistant(
     Use uploaded_sources for file-like objects or uploaded file handles.
     """
 
+    session = get_session(session_id = session_id)
+    retrieval_query = build_retrieval_query(question, session = session)
+
     # Normal assistant path for everything else
     agent = build_agent(
         question,
+        knowledge_base_paths = knowledge_base_paths,
         temporary_context = temporary_context,
         uploaded_sources = uploaded_sources,
+        retrieval_query = retrieval_query,
     )
-    session = get_session(session_id = session_id)
     user_input = build_user_input(
         question,
         uploaded_sources = uploaded_sources,

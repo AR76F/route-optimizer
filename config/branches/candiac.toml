@@ -1,0 +1,10 @@
+[branch]
+id = "candiac"
+label = "Candiac - Z8"
+display_order = 1
+default_language = "fr"
+timezone = "America/Montreal"
+knowledge_base_paths = [
+    "knowledge_base/shared",
+    "knowledge_base/candiac",
+]

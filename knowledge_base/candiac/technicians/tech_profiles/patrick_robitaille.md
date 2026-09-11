@@ -57,7 +57,7 @@ Senior field technician recognized for flexibility, long-distance travel, and re
 
 ## Not Suitable For
 
-- Les Entrepots Frigoriques.
+- Les Entrepots Frigorifiques.
 
 ## Operational Notes
 
