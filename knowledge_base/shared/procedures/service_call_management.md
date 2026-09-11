@@ -1,16 +1,20 @@
 # Procedure - Service Call Management
 
-# Last Updated: 2026-09-03
+# Last Updated: 2026-09-09
 
 ## Purpose
 
-This document provides the high-level workflow for receiving, qualifying, booking, and preparing a service call for dispatch.
+This document is for Service Coordinators who take or receive service-related calls and are responsible for qualifying, booking, preparing, and dispatching the work.
+
+It is not the front-desk call-triage procedure. Front desk staff use [Front Desk Call Triage](front_desk_call_triage.md) to perform basic screening and route the request. Once the request is routed to a Service Coordinator, use this procedure to develop the job into a complete, approved, and dispatch-ready service call.
 
 Use the linked procedures for detailed system instructions, pricing, technician selection, quotations, payment, and customer-specific workflows.
 
 ## Objectif
 
-Ce document présente le processus général de réception, d’évaluation, de planification et de préparation d’un appel de service avant le dispatch.
+Ce document s’adresse aux coordonnateurs de service qui prennent ou reçoivent les appels de service et qui doivent évaluer, planifier, préparer et envoyer le travail en dispatch.
+
+Il ne remplace pas la procédure de triage des appels à la réception. Le personnel de la réception utilise [Front Desk Call Triage](front_desk_call_triage.md) pour effectuer le filtrage de base et acheminer la demande. Une fois la demande acheminée à un coordonnateur de service, utilisez la présente procédure pour préparer un appel de service complet, approuvé et prêt pour le dispatch.
 
 Consultez les procédures liées pour obtenir les instructions détaillées sur les systèmes, les tarifs, la sélection des techniciens, les soumissions, les paiements et les workflows propres à chaque type de client.
 
@@ -18,11 +22,11 @@ Consultez les procédures liées pour obtenir les instructions détaillées sur 
 
 ## Scope and Handoff
 
-This procedure begins after basic front-desk triage, or when a Service Coordinator receives the call directly.
+This procedure begins after basic front-desk triage, or when a Service Coordinator receives the call directly. It covers coordinator call handling through pre-dispatch readiness.
 
 For basic call screening and routing, use [Front Desk Call Triage](front_desk_call_triage.md).
 
-The Service Coordinator is responsible for ensuring that the job is understood, approved, properly prepared, and ready for the applicable detailed procedure.
+Front desk triage identifies the caller's basic need and routes the request. The Service Coordinator is responsible for taking the deeper service-call information, ensuring that the job is understood and approved, preparing the records, confirming the technician and appointment, and making the job ready for the applicable detailed procedure.
 
 ## High-Level Workflow
 
@@ -64,6 +68,8 @@ Use the following questions during the call. Record the answers in the applicabl
 - On-site contact name and telephone number.
 - Site access, parking, gate, security, rooftop, or other restrictions.
 - Any known safety concerns.
+- Whether an accessible person will be available on site for the technician.
+- Whether a site contact or network will be available if the technician needs assistance. Explain that a technician cannot be expected to work alone; if no person is readily accessible and no suitable on-site network is available, the work may be refused.
 
 ## Equipment
 
@@ -87,7 +93,7 @@ Examples include `FC1223` and `Low Coolant`.
 
 For inverter (ATS)-related issues, confirm whether a simulated outage can be performed and what time window is suitable.
 
-For non-Cummins equipment, explain that technician availability and product expertise may be limited and that referral to a specialized provider may be necessary.
+For non-Cummins equipment, explain that a technician may be available, but may not specialize in that product; referral to a more specialized provider may be necessary.
 
 # 2. Classify the Request
 
@@ -194,6 +200,7 @@ Before dispatching, verify:
 - Site address and on-site contact are confirmed.
 - Equipment, complaint, and alarm information are documented.
 - Safety and access requirements are visible to the technician.
+- The customer understands that the technician cannot work alone and that an accessible site contact or suitable on-site network is required; any refusal-of-work risk is documented.
 - Customer approval is documented.
 - Credit, payment, or deposit requirements are satisfied.
 - Required parts are available or an exception is approved.

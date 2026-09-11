@@ -17,7 +17,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 )
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-08-14-loc-avant-split-v36"
+APP_VERSION = "2026-09-04-nuit-rechargee-v37"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -513,6 +513,12 @@ def load_week_from_gsheet(emp_num: str, p_start: date, p_end: date) -> list[dict
                 continue
             seen_keys.add(dedup_key)
             pay_type = str(rec.get("pay_type", "RT")).strip()
+            # Mémoriser si cette journée est marquée "nuit à l'extérieur"
+            if str(rec.get("nuit", "")).strip().lower() in ("oui", "yes", "true", "1"):
+                try:
+                    st.session_state.setdefault("_nuits_chargees", set()).add(d.isoformat())
+                except Exception:
+                    pass
             lignes_by_date[d].append({
                 "date":        d,
                 "time_in":     ti,
@@ -998,7 +1004,15 @@ def show_timesheet():
         CATS_TRAVAIL = ("Regular Time", "Overtime", "Double Time",
                         "Heures en banque", "OT en banque", "DT en banque")
         heures_travaillees = sum(hrs_by_cat.get(c, 0.0) for c in CATS_TRAVAIL)
-        nuit_ext = st.session_state.get(f"nuit_{state_key}_{d.isoformat()}", False)
+        _nuit_iso = d.isoformat()
+        _nuits_chargees = st.session_state.get("_nuits_chargees", set())
+        # Une journée est "nuit à l'extérieur" si : le bouton a été activé cette
+        # session, OU si elle est marquée "oui" dans la feuille (déjà soumise).
+        nuit_ext = (st.session_state.get(f"nuit_{state_key}_{_nuit_iso}", False)
+                    or _nuit_iso in _nuits_chargees)
+        # Refléter l'état chargé dans la clé du bouton pour cohérence visuelle
+        if _nuit_iso in _nuits_chargees and not st.session_state.get(f"nuit_{state_key}_{_nuit_iso}", False):
+            st.session_state[f"nuit_{state_key}_{_nuit_iso}"] = True
         prime_souper = (heures_travaillees >= 10.0) and not nuit_ext
 
         exp_key = f"exp_{state_key}_{d.isoformat()}"

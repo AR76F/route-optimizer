@@ -1,10 +1,10 @@
-# Candiac Z8 Directory
+# CSSNA Employee Directory
 
-# Last Updated: 2026-09-01
+# Last Updated: 2026-09-11
 
 # Purpose
 
-This document is the centralized directory for CSSNA's Candiac Z8 branch personnel and contacts.
+This document is the centralized directory for CSSNA's personnel and contacts.
 
 It contains employees across Service, PM, administration, sales, management, technicians, technician agents, operational contacts, and branch locations.
 
@@ -23,7 +23,7 @@ Do not restrict directory lookups to technician profiles.
 
 # Objectif
 
-Ce document constitue le répertoire centralisé du personnel et des contacts de la succursale de Candiac Z8 de CSSNA.
+Ce document constitue le répertoire centralisé du personnel et des contacts de CSSNA.
 
 Il contient les employés des équipes de service, d'entretien préventif (PM), d'administration, des ventes, de la gestion, les techniciens, les agents techniques, ainsi que les contacts opérationnels et les succursales.
 

@@ -1,15 +1,6 @@
 # Technician Capability Matrix
 
-# Version 1.0.0
-
-# Last Updated: 2026-07-20
-
-# Updated By: Jipeng Li
-
-# Change Log:
-
-v1.0.0
-- Creation of initial dispatch matrix based on the technician capacity workbook.
+# Last Updated: 2026-09-11
 
 ## Purpose
 
@@ -114,3 +105,8 @@ Then consult the detailed technician profile for the final recommendation.
 - Louis Lauzon is one of the most senior technicians in the workbook and shows strong PM / route support.
 - Donald Lagacé and Sebstien Pepin-Millette are in-shop only, do not dispatch them to field service calls.
 
+## Related Documents
+
+- technician_profiles.md
+- technician_selection_rules.md
+- directory.md
