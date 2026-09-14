@@ -14,6 +14,8 @@ keywords:
   - garantie moteur
   - electric bus warranty
   - garantie autobus électrique
+  - distributor warranty
+  - garantie du distributeur
   - CECO
   - Onan
   - BMS
@@ -21,7 +23,7 @@ keywords:
   - PGBU
 ---
 
-# Last Updated: 2026-09-10
+# Last Updated: 2026-09-14
 
 # Warranty Overview
 
@@ -39,9 +41,22 @@ For detailed claim creation and processing steps, refer to the applicable warran
 
 ## Main Warranty Categories
 
-The warranty process can be divided into three main categories:
+The warranty process can be divided into four main categories. The applicable path depends on the product, failed component, coverage source, and location where the work was performed.
 
-### 1. Generator Engine Warranty — CECO
+### 1. Distributor Warranty
+
+Use the distributor warranty process when the repair is covered through the distributor warranty arrangement rather than a standard manufacturer warranty claim.
+
+For the documented Onan distributor workflow:
+
+- Create the claim in BMS using the applicable distributor Claim Type.
+- Select `Onan` as the vendor when required by the procedure.
+- Use **Default Warranty** to enter the covered percentage for parts and labor.
+- Verify the allocation in **Total WO** before finalizing the Work Order.
+
+See [Distributor Warranty Overview](distributor_warranty/distributor_warranty_overview.md) and [Distributor Warranty Claims](distributor_warranty/distributor_warranty_claims.md) for the detailed BMS procedure.
+
+### 2. Generator Engine Warranty — CECO
 
 Use the engine warranty process when the failed component belongs to the engine.
 
@@ -53,9 +68,11 @@ For generator applications:
 
 The exact warranty coverage must be verified for the affected engine and component before proceeding with the claim.
 
+See [Generator Engine Warranty Overview](engine_warranty/engine_warranty_overview.md) and [Generator Engine Warranty Claims](engine_warranty/engine_warranty_claims.md) for the CECO-specific path.
+
 ---
 
-### 2. Generator Warranty — Onan
+### 3. Generator Warranty — Onan
 
 Use the Onan warranty process when the failed component belongs to the generator rather than the engine.
 
@@ -69,9 +86,11 @@ For generator applications:
 
 If the generator's Date in Service does not populate in PGBU, the unit may not be registered and registration may be required before proceeding.
 
+See [Generator Warranty Overview](generator/generator_warranty_overview.md) and [Onan Generator Warranty Claims](generator/onan_claims.md) for the Onan-specific path.
+
 ---
 
-### 3. Electric Bus Warranty — CECO
+### 4. Electric Bus Warranty — CECO
 
 Electric bus warranty claims use the CECO warranty process and share several concepts with engine warranty claims.
 
@@ -80,6 +99,8 @@ Before determining warranty coverage, obtain and verify the required information
 Electric bus warranty claims rely heavily on QuickServe Online and the Warranty Failure Code Manual for Electrification to identify the applicable component and failure code.
 
 The warranty documentation must also be reviewed for applicable limitations and exclusions.
+
+See [Electric Bus Warranty Overview](electric_bus/electric_bus_warranty_overview.md) and [Electric Bus Warranty Claims](electric_bus/electric_bus_claims.md) for the electric-bus-specific path.
 
 ---
 
@@ -97,6 +118,8 @@ Before proceeding with a warranty claim, collect as much of the following inform
 - Work order number
 - Location of the repair: in-shop or field service
 - Applicable warranty coverage
+- Warranty type and applicable Claim Type
+- Warranty-covered parts and labor percentages, when applicable
 
 Do not assume that the manufacturing or build date is the Warranty Start Date. Verify the applicable Date in Service.
 
@@ -152,6 +175,8 @@ Depending on the equipment, coverage can be checked using:
 - Guidanz
 - Cummins warranty documentation and manuals
 
+For distributor warranty claims, also verify the applicable distributor coverage percentage for parts and labor before applying **Default Warranty** in BMS.
+
 For electric buses, the training documentation also identifies the Cummins Warranty AI Assistant as an available warranty resource.
 
 Always review applicable warranty limitations and exclusions when determining coverage.
@@ -179,6 +204,7 @@ Refer to the dedicated SRT and labor warranty procedure for detailed instruction
 ## Important Principles
 
 - Always verify warranty coverage for the specific unit and failed component.
+- Confirm whether the claim follows the distributor warranty path or the applicable manufacturer/product warranty path.
 - Do not assume that a component is covered solely because the unit is under warranty.
 - Base the claim on the technician's documented diagnosis and repair actions.
 - Confirm unclear Failure Codes with the technician.
