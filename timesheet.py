@@ -17,7 +17,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 )
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-09-04-nuit-rechargee-v37"
+APP_VERSION = "2026-09-04-fix-banque-obti-v38"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -1870,9 +1870,19 @@ def _render_row(idx: int, row: dict, wo_labels: list, wo_by_label: dict, d: date
         meal = 0.0
         row["meal_hrs"] = 0.0
     elif ti is not None and to_ is not None:
+        _confirm = st.session_state.get(f"split_confirm_{uid}")
+        _row_cat = row.get("category", "")
         # Si l'utilisateur a choisi "Garder RT seulement" → respecter ce choix
-        if st.session_state.get(f"split_confirm_{uid}") == "non":
+        if _confirm == "non":
             cat = "Regular Time"
+        # Si la ligne est une ligne de banque (créée par le split) → préserver
+        # sa catégorie banque au lieu de la recalculer par l'heure.
+        elif _row_cat in ("OT en banque", "DT en banque", "Heures en banque"):
+            cat = _row_cat
+        # Idem si le segment payé a été figé en OT/DT par le split (ligne issue
+        # d'un découpage payé) : ne pas recalculer, garder ce qui est enregistré.
+        elif _confirm in ("paye", "banque") and _row_cat in ("Overtime", "Double Time", "Regular Time"):
+            cat = _row_cat
         else:
             cat = infer_category(d, ti, to_)
             if apply_daily_cap and rt_already >= 8.0 and cat == "Regular Time":
