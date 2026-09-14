@@ -17,7 +17,7 @@ ONEDRIVE_FOLDER = os.environ.get(
 )
 TZ = ZoneInfo("America/Toronto")
 
-APP_VERSION = "2026-09-04-fix-banque-obti-v38"
+APP_VERSION = "2026-09-04-fix-nom-dubreuil-v39"
 
 TECHNICIANS = [
     ("Alain Duguay",              "GW636"),
@@ -27,7 +27,7 @@ TECHNICIANS = [
     ("Patrick Robitaille",        "HA414"),
     ("Benoit Charrette",          "HG848"),
     ("Benoit Larame",             "SQ740"),
-    ("Christian Dubrueil",        "IW666"),
+    ("Christian Dubreuil",        "IW666"),
     ("Donald Lagace (IN SHOP)",   "IW667"),
     ("Elie Rajotte-Lemay",        "XE270"),
     ("Francois Racine",           "GW629"),
