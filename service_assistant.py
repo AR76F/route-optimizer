@@ -74,6 +74,7 @@ from math import sqrt
 from pathlib import Path
 from typing import Any, Iterable, Protocol
 import unicodedata
+from time import perf_counter
 
 import fitz
 import streamlit as st
@@ -103,7 +104,14 @@ def _resolve_openai_api_key() -> str | None:
     except Exception:
         return None
 
-OPENAI_CLIENT = OpenAI(api_key = _resolve_openai_api_key())
+# Keep evaluation and interactive requests from waiting indefinitely on a
+# stalled network request. The Agents SDK uses its own client for generation;
+# this timeout applies to our embedding requests.
+OPENAI_CLIENT = OpenAI(
+    api_key = _resolve_openai_api_key(),
+    timeout = 60.0,
+    max_retries = 2,
+)
 
 EMBEDDING_MODEL = "text-embedding-3-large" # Small or large
 KNOWLEDGE_BASE_PATH = Path("knowledge_base")
@@ -1049,6 +1057,8 @@ def build_agent(
     temporary_context: str | None = None,
     uploaded_sources: Iterable[Any] | None = None,
     retrieval_query: str | None = None,
+    model: str = "gpt-5.6-luna",
+    retrieval_capture: dict[str, Any] | None = None,
 ) -> Agent:
     """
     Build an agent with only the most relevant knowledge excerpts.
@@ -1074,6 +1084,14 @@ def build_agent(
         kb_index,
         top_k = top_k,
     )
+
+    if retrieval_capture is not None:
+        retrieval_capture["sources"] = [chunk.source for chunk in relevant_chunks]
+        retrieval_capture["chunks"] = [
+            {"source": chunk.source, "text": chunk.text}
+            for chunk in relevant_chunks
+        ]
+        retrieval_capture["top_k"] = top_k
     retrieved_context = format_retrieved_context(relevant_chunks)
     temp_context = build_temporary_context(
         temporary_context = temporary_context,
@@ -1130,7 +1148,7 @@ Temporary uploaded-file context:
 
     return Agent(
         name = "Service Assistant",
-        model = "gpt-5.6-luna", 
+        model = model,
         model_settings = ModelSettings(
             reasoning = Reasoning(effort = "medium"), verbosity = "low"),
         instructions = human_instructions,
@@ -1175,6 +1193,60 @@ def ask_service_assistant(
     )
 
     return result.final_output
+
+
+def run_service_assistant(
+    question: str,
+    session_id: str = "default_service_chat",
+    knowledge_base_paths: str | Path | Iterable[str | Path] = KNOWLEDGE_BASE_PATH,
+    temporary_context: str | None = None,
+    uploaded_sources: Iterable[Any] | None = None,
+    model: str = "gpt-5.6-luna",
+    timeout_seconds: float = 90.0,
+    max_retries: int = 1,
+) -> dict[str, Any]:
+    """Run the assistant and return answer plus evaluation diagnostics."""
+    started = perf_counter()
+    session = get_session(session_id=session_id)
+    retrieval_query = build_retrieval_query(question, session=session)
+    retrieval_capture: dict[str, Any] = {}
+    agent = build_agent(
+        question,
+        knowledge_base_paths=knowledge_base_paths,
+        temporary_context=temporary_context,
+        uploaded_sources=uploaded_sources,
+        retrieval_query=retrieval_query,
+        model=model,
+        retrieval_capture=retrieval_capture,
+    )
+    user_input = build_user_input(question, uploaded_sources=uploaded_sources)
+    async def run_with_timeout():
+        return await asyncio.wait_for(
+            Runner.run(agent, user_input, session=session),
+            timeout=timeout_seconds,
+        )
+
+    last_error: Exception | None = None
+    for attempt in range(max_retries + 1):
+        try:
+            result = asyncio.run(run_with_timeout())
+            break
+        except Exception as exc:
+            last_error = exc
+            if attempt >= max_retries:
+                raise
+    else:
+        raise last_error or RuntimeError("Assistant run failed")
+
+    return {
+        "answer": result.final_output,
+        "retrieved_sources": retrieval_capture.get("sources", []),
+        "retrieved_chunks": retrieval_capture.get("chunks", []),
+        "retrieval_top_k": retrieval_capture.get("top_k"),
+        "latency_seconds": round(perf_counter() - started, 3),
+        "session_id": session_id,
+        "model": model,
+    }
 
 ##### Terminal Use Only #####
 if __name__ == "__main__":
