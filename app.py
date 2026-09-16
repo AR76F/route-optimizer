@@ -51,7 +51,7 @@ import uuid
 
 import pandas as pd
 import requests
-from app_config import BRANCH_DEFAULT_LANGUAGES, BRANCH_PROFILES, SUPPORTED_BRANCHES
+from app_config import BRANCH_DEFAULT_LANGUAGES, BRANCH_PROFILES, QUICK_LINKS, SUPPORTED_BRANCHES
 from ui_text import SUPPORTED_LANGUAGES, get_ui_text
 
 from service_assistant import ask_service_assistant
@@ -1377,7 +1377,7 @@ def render_service_assistant():
         selected_branch = st.selectbox(
             "Branch",
             SUPPORTED_BRANCHES,
-            key="branch_selector",
+            key = "branch_selector",
             on_change=_set_branch_default_language,
         )
 
@@ -1388,10 +1388,10 @@ def render_service_assistant():
         selected_language_label = st.selectbox(
             "Language",
             list(SUPPORTED_LANGUAGES),
-            index=list(SUPPORTED_LANGUAGES.values()).index(
+            index = list(SUPPORTED_LANGUAGES.values()).index(
                 st.session_state.ui_language
             ),
-            key="language_selector",
+            key = "language_selector",
         )
 
     st.session_state.active_branch = selected_branch
@@ -1442,6 +1442,25 @@ def render_service_assistant():
         with st.container(horizontal = True):
             if st.button(f"{ui_text('priority_button')}", key = "assistant_priority_open"):
                 _priority_open_dialog()
+
+            # Popover pour deployer une liste de liens utiles
+            with st.popover(ui_text("quick_links_button"), icon = ":material/link:"):
+                # Keep the popover within laptop-height viewports (350) so only the
+                # links container needs to scroll.
+                with st.container(height = 350, border = False):
+                    st.caption(ui_text("quick_links_title"))
+
+                    category_key = "category_fr" if st.session_state.ui_language == "fr" else "category"
+                    label_key = "label_fr" if st.session_state.ui_language == "fr" else "label"
+
+                    # Preserve the configured order in every language instead
+                    # of alphabetically sorting translated category names.
+                    for category in dict.fromkeys(link[category_key] for link in QUICK_LINKS):
+                        st.markdown(f"**{category}**")
+
+                        for link in [item for item in QUICK_LINKS if item[category_key] == category]:
+                            st.link_button(link[label_key], link["url"], icon = link.get("icon"), width = "stretch")
+
             st.link_button(
                 f"{ui_text('feedback_button')}",
                 feedback_form_url,

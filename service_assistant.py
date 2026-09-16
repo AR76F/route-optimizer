@@ -1150,7 +1150,7 @@ Temporary uploaded-file context:
         name = "Service Assistant",
         model = model,
         model_settings = ModelSettings(
-            reasoning = Reasoning(effort = "medium"), verbosity = "low"),
+            reasoning = Reasoning(effort = "medium"), verbosity = "medium"),
         instructions = human_instructions,
     )
 
