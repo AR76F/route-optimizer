@@ -1,15 +1,37 @@
+---
+title: Service Department Resources
+title_fr: Ressources du service
+category: reference
+subcategory: service_department_resources
+language: bilingual
+keywords:
+  - service department resources
+  - ressources du service
+  - useful links
+  - useful resources
+  - quick links
+  - quick access
+  - liens utiles
+  - liens rapides
+  - accès rapide
+  - liens de service
+  - liens applications
+  - BMS
+  - FieldAware
+  - Power BI
+  - Clover
+  - PGBU warranty
+  - QSOL
+  - Seismic Learning
+  - Geotab
+  - Route Optimizer
+  - Cummins applications
+  - service tools
+---
+
 # Service Department Resources
 
-# Version 1.0.0
-
-# Last Updated: 2026-07-20
-
-# Updated By: Jipeng Li
-
-# Change Log:
-
-v1.0.0
-- Creation of initial document.
+# Last Updated: 2026-09-14
 
 ## Purpose
 
@@ -132,15 +154,66 @@ Power Generation Business Unit Warranty System
 
 **Purpose**
 
-Used to:
+Cummins warranty lookup portal used to:
 
 - Look up generator serial numbers
 - Identify generator models
-- Verify warranty information
+- Verify generator warranty information
+- Support warranty claim research, including QSOL-related information when required
 
 **Access**
 
 https://mylogin.cummins.com/clw/s/login/?ec=302&inst=Uz&startURL=%2Fclw%2FIAM_Authorize%3Fappid%3Da1a4N00000Hd6gr
+
+---
+
+## QSOL
+
+**Purpose**
+
+Cummins technical information and service literature portal used for:
+
+- Warranty research
+- Service information and technical documentation
+- Troubleshooting and repair reference material
+
+**Access**
+
+https://mylogin.cummins.com/clw/s/login/?ec=302&inst=Uz&startURL=%2Fclw%2FIAM_Authorize%3Fappid%3Da1a4N00000DEdub
+
+---
+
+## Cummins Seismic Learning
+
+**Purpose**
+
+Cummins online learning platform used for:
+
+- Service and technical training
+- Assigned learning activities
+- Reviewing available training courses and completion status
+
+**Access**
+
+https://cummins.seismic.com/apps/learning/learn
+
+---
+
+## Geotab
+
+**Purpose**
+
+Vehicle telematics and fleet management portal used to:
+
+- View live vehicle locations
+- Review vehicle and driver information
+- Monitor fleet activity and map-based route details
+
+**Access**
+
+https://ari.geotab.com/cummins_inc/
+
+> Use the Cummins Geotab account provided by your manager or system administrator.
 
 ---
 
@@ -201,4 +274,7 @@ https://route-optimizer-6hqpt2tqchkcfycp8ovgee.streamlit.app/
 | Power BI | Reporting & Analytics |
 | Clover | Customer Payments |
 | PGBU Warranty | Serial Number & Warranty Lookup |
+| QSOL | Warranty & Technical Information |
+| Seismic Learning | Service & Technical Training |
+| Geotab | Fleet Telematics & Live Vehicle Map |
 | Route Optimizer | Route Planning & Dispatch Support |

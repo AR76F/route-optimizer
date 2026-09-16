@@ -17,12 +17,18 @@ UI_TEXT = {
         "feedback_button": "Submit feedback",
         "feedback_help": "Open the feedback form in SharePoint.",
         "clear_button": "Clear conversation",
+        "clear_help": "Deletes the messages, notes, and temporary files from this conversation.",
         "attached": "Attached in this conversation: {count} file(s)",
         "temporary_notes": "Optional temporary notes",
         "temporary_notes_placeholder": "Feel free to take notes here.",
         "chat_placeholder": "Ask a service question...",
         "analyzing": "Analyzing request...",
         "greeting": "Hi — Ask a question.",
+        "suggestions_intro": "Quick questions to get started (Beta):",
+        "suggested_questions": [
+            "How do I create a work order?",
+            "How do I process a warranty claim?",
+        ],
     },
     "fr": {
         "assistant_title": "Allo, je suis Bob. Comment puis-je vous aider?",
@@ -33,15 +39,22 @@ UI_TEXT = {
         "feedback_button": "Soumettre un commentaire",
         "feedback_help": "Ouvrir le formulaire de commentaires dans SharePoint.",
         "clear_button": "Effacer la conversation",
+        "clear_help": "Supprime les messages, les notes et les fichiers temporaires de cette conversation.",
         "attached": "Fichier(s) joint(s) dans cette conversation : {count}",
         "temporary_notes": "Notes temporaires optionnelles",
         "temporary_notes_placeholder": "Libre à vous de prendre des notes ici.",
         "chat_placeholder": "Posez une question sur le service...",
         "analyzing": "Analyse de la demande...",
         "greeting": "Bonjour — Posez une question.",
+        "suggestions_intro": "Questions rapides pour commencer (Beta) :",
+        "suggested_questions": [
+            "Comment créer un bon de travail?",
+            "Comment traiter une réclamation de garantie?",
+        ],
     },
 }
 
 
-def get_ui_text(language: str, key: str, **kwargs: Any) -> str:
-    return UI_TEXT[language][key].format(**kwargs)
+def get_ui_text(language: str, key: str, **kwargs: Any) -> Any:
+    value = UI_TEXT[language][key]
+    return value.format(**kwargs) if isinstance(value, str) else value

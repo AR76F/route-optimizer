@@ -114,7 +114,7 @@ def _set_branch_default_language() -> None:
         if code == st.session_state.ui_language
     )
 
-def ui_text(key: str, **kwargs: Any) -> str:
+def ui_text(key: str, **kwargs: Any) -> Any:
     return get_ui_text(st.session_state.ui_language, key, **kwargs)
 
 # ────────────────────────────────────────────────────────────────
@@ -1349,6 +1349,27 @@ def _priority_open_dialog():
 
 # Service Assistant Addition
 
+def render_assistant_suggestions() -> Optional[str]:
+    """Render quick questions for a new or cleared conversation."""
+    is_new_conversation = (
+        len(st.session_state.assistant_messages) == 1
+        and st.session_state.assistant_messages[0].get("role") == "assistant"
+    )
+
+    if not is_new_conversation:
+        return None
+
+    with st.container(border = True):
+        st.caption(ui_text("suggestions_intro"))
+
+        return st.pills(
+            "Suggested questions",
+            ui_text("suggested_questions"),
+            key = f"assistant_suggested_question_{st.session_state.ui_language}",
+            label_visibility = "collapsed",
+        )
+
+
 def render_service_assistant():
     branch_col, language_col = st.columns(2)
 
@@ -1429,7 +1450,7 @@ def render_service_assistant():
 
     with clear_col:
         with st.container(horizontal = True, horizontal_alignment = "right"):
-            if st.button(f"{ui_text('clear_button')}", key = "assistant_clear"):
+            if st.button(f"{ui_text('clear_button')}", icon = ":material/delete:", key = "assistant_clear", help = ui_text("clear_help")):
                 st.session_state.assistant_messages = [
                     {"role": "assistant", "content": ui_text("greeting")}
                 ]
@@ -1461,6 +1482,8 @@ def render_service_assistant():
         ""
     ).strip()
 
+    selected_question = render_assistant_suggestions()
+
     # Open the priority modal when requested.
     if st.session_state.get("priority_tool_open", False):
         render_priority_dialog()
@@ -1469,10 +1492,11 @@ def render_service_assistant():
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    question = st.chat_input(
+    typed_question = st.chat_input(
         ui_text("chat_placeholder"),
-        key="assistant_chat_input",
+        key = "assistant_chat_input",
     )
+    question = selected_question or typed_question
 
     if question:
         st.session_state.assistant_messages.append(
