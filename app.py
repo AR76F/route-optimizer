@@ -1429,7 +1429,12 @@ def render_service_assistant():
 
     with clear_col:
         with st.container(horizontal = True, horizontal_alignment = "right"):
-            if st.button(f"{ui_text('clear_button')}", key = "assistant_clear"):
+            if st.button(
+                f"{ui_text('clear_button')}",
+                icon = ":material/delete:",
+                key = "assistant_clear",
+                help = ui_text("clear_help"),
+            ):
                 st.session_state.assistant_messages = [
                     {"role": "assistant", "content": ui_text("greeting")}
                 ]
