@@ -106,7 +106,7 @@ def _resolve_openai_api_key() -> str | None:
 
 # Keep evaluation and interactive requests from waiting indefinitely on a
 # stalled network request. The Agents SDK uses its own client for generation;
-# this timeout applies to our embedding requests.
+# this timeout applies to the embedding requests.
 OPENAI_CLIENT = OpenAI(
     api_key = _resolve_openai_api_key(),
     timeout = 60.0,
@@ -1207,23 +1207,23 @@ def run_service_assistant(
 ) -> dict[str, Any]:
     """Run the assistant and return answer plus evaluation diagnostics."""
     started = perf_counter()
-    session = get_session(session_id=session_id)
-    retrieval_query = build_retrieval_query(question, session=session)
+    session = get_session(session_id = session_id)
+    retrieval_query = build_retrieval_query(question, session = session)
     retrieval_capture: dict[str, Any] = {}
     agent = build_agent(
         question,
-        knowledge_base_paths=knowledge_base_paths,
-        temporary_context=temporary_context,
-        uploaded_sources=uploaded_sources,
-        retrieval_query=retrieval_query,
-        model=model,
-        retrieval_capture=retrieval_capture,
+        knowledge_base_paths = knowledge_base_paths,
+        temporary_context = temporary_context,
+        uploaded_sources = uploaded_sources,
+        retrieval_query = retrieval_query,
+        model = model,
+        retrieval_capture = retrieval_capture,
     )
-    user_input = build_user_input(question, uploaded_sources=uploaded_sources)
+    user_input = build_user_input(question, uploaded_sources = uploaded_sources)
     async def run_with_timeout():
         return await asyncio.wait_for(
-            Runner.run(agent, user_input, session=session),
-            timeout=timeout_seconds,
+            Runner.run(agent, user_input, session = session),
+            timeout = timeout_seconds,
         )
 
     last_error: Exception | None = None
