@@ -1384,13 +1384,17 @@ def render_service_assistant():
     if "ui_language" not in st.session_state:
         st.session_state.ui_language = BRANCH_DEFAULT_LANGUAGES[selected_branch]
 
+    if "language_selector" not in st.session_state:
+        st.session_state.language_selector = next(
+            label
+            for label, code in SUPPORTED_LANGUAGES.items()
+            if code == st.session_state.ui_language
+        )
+
     with language_col:
         selected_language_label = st.selectbox(
             "Language",
             list(SUPPORTED_LANGUAGES),
-            index = list(SUPPORTED_LANGUAGES.values()).index(
-                st.session_state.ui_language
-            ),
             key = "language_selector",
         )
 
