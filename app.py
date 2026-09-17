@@ -1362,6 +1362,45 @@ def render_assistant_suggestions() -> Optional[str]:
     with st.container(border = True):
         st.caption(ui_text("suggestions_intro"))
 
+        # Couleur des boutons 
+        st.html("""
+        <style>
+        div[class *= "st-key-assistant_suggested_question_"]
+        button[data-variant = "pills"]:not([data-selected]) {
+            color: #FF4B4B !important;
+            border: 1px solid #FF4B4B !important;
+            background: transparent !important;
+        }
+
+        div[class *= "st-key-assistant_suggested_question_"]
+        button[data-variant = "pills"]:not([data-selected]) * {
+            color: #FF4B4B !important;
+        }
+
+        div[class *= "st-key-assistant_suggested_question_"]
+        button[data-variant = "pills"]:not([data-selected]):hover {
+            background: #FFE5E5 !important;
+        }
+        </style>
+        """)
+
+        if st.context.theme.type == "dark":
+            st.html("""
+            <style>
+            div[class *= "st-key-assistant_suggested_question_"]
+            button[data-variant = "pills"][data-selected] {
+                background: #5A1F1F !important;
+                border-color: #FF4B4B !important;
+                color: #FFB3B3 !important;
+            }
+
+            div[class *= "st-key-assistant_suggested_question_"]
+            button[data-variant = "pills"][data-selected] * {
+                color: #FFB3B3 !important;
+            }
+            </style>
+            """)
+
         return st.pills(
             "Suggested questions",
             ui_text("suggested_questions"),
@@ -1449,16 +1488,14 @@ def render_service_assistant():
 
             # Popover pour deployer une liste de liens utiles
             with st.popover(ui_text("quick_links_button"), icon = ":material/link:"):
-                # Keep the popover within laptop-height viewports (350) so only the
-                # links container needs to scroll.
+                # Keep the popover within laptop-height viewports (350) so only the links container needs to scroll.
                 with st.container(height = 350, border = False):
                     st.caption(ui_text("quick_links_title"))
 
                     category_key = "category_fr" if st.session_state.ui_language == "fr" else "category"
                     label_key = "label_fr" if st.session_state.ui_language == "fr" else "label"
 
-                    # Preserve the configured order in every language instead
-                    # of alphabetically sorting translated category names.
+                    # Preserve the configured order in every language instead of alphabetically sorting translated category names.
                     for category in dict.fromkeys(link[category_key] for link in QUICK_LINKS):
                         st.markdown(f"**{category}**")
 
