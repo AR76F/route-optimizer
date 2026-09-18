@@ -1,3 +1,21 @@
+---
+title: Front Desk - Call Triage
+title_fr: Réception - Triage des appels
+category: procedure
+subcategory: front_desk_call_triage
+region: Shared
+language: bilingual
+keywords:
+  - front desk call triage
+  - receptionist call routing
+  - triage des appels à la réception
+  - acheminement des appels
+  - service call intake
+  - prise d'appel de service
+  - PM call
+  - appel de maintenance préventive
+---
+
 # Front Desk - Call Triage
 
 # Last Updated: 2026-09-01

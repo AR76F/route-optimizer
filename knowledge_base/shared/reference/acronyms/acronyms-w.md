@@ -1,3 +1,19 @@
+---
+title: Company Acronyms - W
+title_fr: Acronymes de l'entreprise - W
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym W
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes W
+---
+
 # Company Acronyms - W
 
 # Version 1.0.0
@@ -58,3 +74,48 @@ This document contains company acronyms beginning with the letter specified in t
 | WWSAS | Worldwide Sales Analysis System |
 | WWSPS | Worldwide Service Provider System |
 | WWTQS | Worldwide Total Quality System |
+---
+title: Company Acronyms - W
+title_fr: Acronymes de l'entreprise - W
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym W
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes W
+---
+---
+title: Company Acronyms - W
+title_fr: Acronymes de l'entreprise - W
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym W
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes W
+---
+---
+title: Company Acronyms - W
+title_fr: Acronymes de l'entreprise - W
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym W
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes W
+---

@@ -1,3 +1,21 @@
+---
+title: Customer Invoice Credit Procedure
+title_fr: Procédure de crédit sur facture client
+category: procedure
+subcategory: invoice_credit
+region: Shared
+language: bilingual
+keywords:
+  - customer invoice credit
+  - credit invoice
+  - crédit sur facture client
+  - facture de crédit
+  - invoice correction
+  - correction de facture
+  - credit memo
+  - note de crédit
+---
+
 # Customer Invoice Credit Procedure
 
 # Last Updated: 2026-09-02

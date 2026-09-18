@@ -1,3 +1,19 @@
+---
+title: Technician Index
+title_fr: Index des techniciens
+category: technician
+subcategory: technician_index
+region: Candiac
+language: bilingual
+keywords:
+  - technician index
+  - technician profiles
+  - index des techniciens
+  - profils des techniciens
+  - Candiac technicians
+  - techniciens de Candiac
+---
+
 # Technician Index
 
 | Technician | File | Region |

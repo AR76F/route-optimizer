@@ -1,3 +1,20 @@
+---
+title: FieldAware Integration
+title_fr: Intégration FieldAware
+category: software
+subcategory: fieldaware_prioritization
+system: FieldAware
+region: Shared
+language: bilingual
+keywords:
+  - FieldAware integration
+  - prioritization indication
+  - intégration FieldAware
+  - indication de priorisation
+  - service priority
+  - priorité de service
+---
+
 # FieldAware Integration
 
 # Last Updated: 2026-09-02

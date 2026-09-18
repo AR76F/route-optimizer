@@ -1,3 +1,19 @@
+---
+title: Technician Profiles Library
+title_fr: Bibliothèque des profils de techniciens
+category: technician
+subcategory: technician_profiles
+region: Candiac
+language: bilingual
+keywords:
+  - technician profiles
+  - technician library
+  - profils des techniciens
+  - bibliothèque des techniciens
+  - field technician reference
+  - référence des techniciens de terrain
+---
+
 # Technician Profiles Library v2
 
 This ZIP contains one Markdown file per technician, rewritten into a retrieval-friendly format.

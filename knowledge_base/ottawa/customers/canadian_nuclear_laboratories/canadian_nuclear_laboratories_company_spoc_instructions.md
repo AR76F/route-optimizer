@@ -6,7 +6,7 @@ subcategory: reference
 customer: Canadian Nuclear Laboratories
 customer_fr: Laboratoires Nucléaires Canadiens
 region: Ottawa
-language: english
+language: bilingual
 keywords:
   - Canadian Nuclear Laboratories
   - CNL

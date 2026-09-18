@@ -1,3 +1,21 @@
+---
+title: Cash Customers - Overview
+title_fr: Clients cash - Vue d'ensemble
+category: procedure
+subcategory: cash_customers_overview
+region: Shared
+language: bilingual
+keywords:
+  - cash customer
+  - cash customer management
+  - client cash
+  - gestion des clients cash
+  - payment protection
+  - protection du paiement
+  - pre-authorization
+  - préautorisation
+---
+
 # Cash Customers - Overview
 
 # Last Updated: 2026-09-02

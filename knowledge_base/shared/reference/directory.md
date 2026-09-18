@@ -1,3 +1,17 @@
+---
+title: CSSNA Employee Directory
+title_fr: Répertoire des employés CSSNA
+category: reference
+subcategory: employee_directory
+region: Shared
+language: bilingual
+keywords:
+  - employee directory
+  - CSSNA contacts
+  - répertoire des employés
+  - contacts CSSNA
+---
+
 # CSSNA Employee Directory
 
 # Last Updated: 2026-09-11
@@ -288,3 +302,58 @@ These numbers may affect active service operations and should remain current.
 # Search Keywords
 
 Service Department Directory, employee directory, staff directory, personnel, personnel list, employee list, contacts, phone numbers, extensions, WWID, technicians, Candiac technicians, Ottawa technicians, office personnel, branch contacts, emergency service, emergency parts, bottin, répertoire, répertoire employés, liste employés, liste du personnel, coordonnées, numéros téléphone, techniciens Candiac, techniciens Ottawa
+title: CSSNA Employee Directory
+title_fr: Répertoire des employés CSSNA
+category: reference
+subcategory: employee_directory
+region: Shared
+language: bilingual
+keywords:
+  - employee directory
+  - CSSNA contacts
+  - répertoire des employés
+  - contacts CSSNA
+  - employee contact
+  - coordonnées des employés
+---
+title: CSSNA Employee Directory
+title_fr: Répertoire des employés CSSNA
+category: reference
+subcategory: employee_directory
+region: Shared
+language: bilingual
+keywords:
+  - employee directory
+  - CSSNA contacts
+  - répertoire des employés
+  - contacts CSSNA
+  - employee contact
+  - coordonnées des employés
+---
+---
+title: CSSNA Employee Directory
+title_fr: Répertoire des employés CSSNA
+category: reference
+subcategory: employee_directory
+region: Shared
+language: bilingual
+keywords:
+  - employee directory
+  - CSSNA contacts
+  - répertoire des employés
+  - contacts CSSNA
+---
+title: CSSNA Employee Directory
+title_fr: Répertoire des employés CSSNA
+category: reference
+subcategory: employee_directory
+region: Shared
+language: bilingual
+keywords:
+  - employee directory
+  - CSSNA contacts
+  - répertoire des employés
+  - contacts CSSNA
+  - employee contact
+  - coordonnées des employés
+---

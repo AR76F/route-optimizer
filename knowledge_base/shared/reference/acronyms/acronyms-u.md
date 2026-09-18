@@ -1,3 +1,19 @@
+---
+title: Company Acronyms - U
+title_fr: Acronymes de l'entreprise - U
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym U
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes U
+---
+
 # Company Acronyms - U
 
 # Version 1.0.0
@@ -53,3 +69,48 @@ This document contains company acronyms beginning with the letter specified in t
 | UUAA | Used Up All Adjustment |
 | UUT | Unit Under Test |
 | UXPI | Ultra Extreme Pressure Injection |
+---
+title: Company Acronyms - U
+title_fr: Acronymes de l'entreprise - U
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym U
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes U
+---
+---
+title: Company Acronyms - U
+title_fr: Acronymes de l'entreprise - U
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym U
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes U
+---
+---
+title: Company Acronyms - U
+title_fr: Acronymes de l'entreprise - U
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym U
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes U
+---

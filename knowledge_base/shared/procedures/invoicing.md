@@ -1,3 +1,23 @@
+---
+title: Procedure - Invoicing
+title_fr: Procédure - Facturation
+category: procedure
+subcategory: invoicing
+region: Shared
+language: bilingual
+keywords:
+  - service invoicing
+  - FieldAware invoice
+  - BMS invoice
+  - facturation de service
+  - facture FieldAware
+  - facture BMS
+  - close Work Order
+  - fermer un bon de travail
+  - Field Service Basic
+  - rapport de service terrain
+---
+
 # Procedure - Invoicing
 
 # Last Updated: 2026-09-03

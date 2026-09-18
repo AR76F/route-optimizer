@@ -1,3 +1,20 @@
+---
+title: BMS - Overtime Entry
+title_fr: BMS - Saisie des heures supplémentaires
+category: software
+subcategory: bms_overtime
+system: BMS
+region: Shared
+language: bilingual
+keywords:
+  - BMS overtime entry
+  - enter overtime
+  - saisie des heures supplémentaires BMS
+  - entrer les heures supplémentaires
+  - technician overtime
+  - heures supplémentaires du technicien
+---
+
 # BMS - Overtime Entry 
 
 # Last Updated: 2026-09-03

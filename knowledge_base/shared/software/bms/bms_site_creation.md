@@ -1,3 +1,20 @@
+---
+title: BMS - Site Creation
+title_fr: BMS - Création d'un site
+category: software
+subcategory: bms_site_creation
+system: BMS
+region: Shared
+language: bilingual
+keywords:
+  - BMS site creation
+  - create a site
+  - création de site BMS
+  - créer un site
+  - customer site
+  - site client
+---
+
 # BMS - Site Creation
 
 # Last Updated: 2026-09-03

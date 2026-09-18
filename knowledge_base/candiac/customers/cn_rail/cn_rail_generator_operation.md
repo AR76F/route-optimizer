@@ -1,3 +1,20 @@
+---
+title: Customers - CN Rail Generator Operation
+title_fr: Clients - Fonctionnement des génératrices de CN Rail
+category: customer
+subcategory: generator_operation
+customer: CN Rail
+region: Candiac
+language: bilingual
+keywords:
+  - CN Rail generator
+  - generator operation
+  - génératrice CN Rail
+  - fonctionnement de la génératrice
+  - generator procedure
+  - procédure de génératrice
+---
+
 # Customers - CN Rail Generator Operation
 
 # Last Updated: 2026-08-28

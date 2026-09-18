@@ -1,3 +1,21 @@
+---
+title: Clover - Invoice to Pay
+title_fr: Clover - Facture à payer
+category: software
+subcategory: clover_invoice_to_pay
+system: Clover
+region: Shared
+language: bilingual
+keywords:
+  - Clover Invoice to Pay
+  - Clover payment link
+  - lien de paiement Clover
+  - invoice payment
+  - paiement de facture
+  - customer payment link
+  - lien de paiement client
+---
+
 # Clover - Invoice to Pay
 
 # Last Updated: 2026-09-02

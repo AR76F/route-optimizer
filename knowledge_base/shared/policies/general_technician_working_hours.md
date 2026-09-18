@@ -1,3 +1,19 @@
+---
+title: Policies - General Technician Working Hours
+title_fr: Politiques - Heures de travail générales des techniciens
+category: policy
+subcategory: working_hours
+region: Shared
+language: bilingual
+keywords:
+  - technician working hours
+  - work hours
+  - heures de travail des techniciens
+  - heures de travail
+  - technician availability
+  - disponibilité des techniciens
+---
+
 # Policies - General Technician Working Hours
 
 # Last Updated: 2026-08-28

@@ -1,6 +1,25 @@
+---
+title: Clover Training
+title_fr: Formation Clover
+category: software
+subcategory: clover_training
+system: Clover
+region: Shared
+language: bilingual
+keywords:
+  - Clover training
+  - Clover Virtual Terminal
+  - formation Clover
+  - terminal virtuel Clover
+  - pre-authorization
+  - préautorisation
+  - cash customer payment
+  - paiement client cash
+---
+
 # Clover Training
 
-# Last Updated: 2026-09-11
+# Last Updated: 2026-09-18
 
 ## Purpose
 
@@ -204,13 +223,13 @@ Brisson12345
 
 # Pre-Authorization Expiration
 
-When the customer's payment information is not saved, pre-authorizations expire after:
+When the customer's payment information is not saved, pre-authorizations expire after approximately:
 
 ```text
-2 Weeks
+7 Days
 ```
 
-If a required part will take longer than two weeks to arrive, add a note such as:
+If a required part or service timeline will extend beyond seven days, contact the customer before the pre-authorization expires and arrange the required payment. Add a note such as:
 
 ```text
 Contact the customer for payment once the order is ready.

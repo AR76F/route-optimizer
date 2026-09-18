@@ -1,3 +1,22 @@
+---
+title: Cash Customers - Customer Deposits / Order Entry (OE)
+title_fr: Clients cash - Dépôts clients / saisie de commande (OE)
+category: procedure
+subcategory: customer_deposits
+region: Shared
+language: bilingual
+keywords:
+  - customer deposit
+  - Order Entry
+  - OE
+  - dépôt client
+  - réceptionner un paiement
+  - apply deposit to Work Order
+  - appliquer un dépôt au bon de travail
+  - DEPOSIT
+  - Misc Charges
+---
+
 # Cash Customers - Customer Deposits / Order Entry (OE)
 
 # Last Updated: 2026-09-11
@@ -62,11 +81,13 @@ To receive a customer deposit:
 
 Create an **Order Entry (OE)** using the customer's information.
 
-For a customer deposit, use:
+For a CASH accepted-quotation deposit, use:
 
 ```text
-Transaction Type: OE
+Transaction Type: WO
 ```
+
+This is the transaction type shown in the current CASH quotation workflow. Use the related Work Order reference in the customer and Comments information.
 
 Enter the applicable customer and order information.
 
@@ -97,6 +118,8 @@ Tax District: Applicable Tax District
 ```
 
 OneBMS calculates the applicable taxes automatically at the end. Do not enter the tax-inclusive amount in the OE.
+
+The instruction to enter the amount **before taxes** is a data-entry instruction. It does not, by itself, mean that the deposit is tax-exempt. The selected Tax District and the applicable deposit treatment determine whether tax is calculated.
 
 The Tax District must reflect the correct tax treatment for the applicable branch/location.
 

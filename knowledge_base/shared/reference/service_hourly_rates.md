@@ -1,3 +1,19 @@
+---
+title: Coordinator - Service Billing Rates
+title_fr: Coordonnateur - Taux de facturation du service
+category: reference
+subcategory: service_hourly_rates
+region: Shared
+language: bilingual
+keywords:
+  - service billing rates
+  - hourly rates
+  - taux de facturation du service
+  - taux horaires
+  - billing rate reference
+  - référence des taux
+---
+
 # Coordinator - Service Billing Rates
 
 # Version 1.1.0
@@ -241,3 +257,45 @@ Before preparing quotations or invoices:
 - quote_management.md
 - invoicing.md
 - overtime_entry.md
+title: Coordinator - Service Billing Rates
+title_fr: Coordonnateur - Taux de facturation du service
+category: reference
+subcategory: service_hourly_rates
+region: Shared
+language: bilingual
+keywords:
+  - service billing rates
+  - hourly rates
+  - taux de facturation du service
+  - taux horaires
+  - billing rate reference
+  - référence des taux
+---
+title: Coordinator - Service Billing Rates
+title_fr: Coordonnateur - Taux de facturation du service
+category: reference
+subcategory: service_hourly_rates
+region: Shared
+language: bilingual
+keywords:
+  - service billing rates
+  - hourly rates
+  - taux de facturation du service
+  - taux horaires
+  - billing rate reference
+  - référence des taux
+---
+title: Coordinator - Service Billing Rates
+title_fr: Coordonnateur - Taux de facturation du service
+category: reference
+subcategory: service_hourly_rates
+region: Shared
+language: bilingual
+keywords:
+  - service billing rates
+  - hourly rates
+  - taux de facturation du service
+  - taux horaires
+  - billing rate reference
+  - référence des taux
+---

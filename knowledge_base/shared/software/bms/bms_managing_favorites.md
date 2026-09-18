@@ -1,3 +1,20 @@
+---
+title: BMS - Managing Favorites
+title_fr: BMS - Gestion des favoris
+category: software
+subcategory: bms_favorites
+system: BMS
+region: Shared
+language: bilingual
+keywords:
+  - BMS favorites
+  - manage favorites
+  - favoris BMS
+  - gérer les favoris
+  - saved screens
+  - écrans enregistrés
+---
+
 # BMS - Managing Favorites
 
 # Last Updated: 2026-09-03

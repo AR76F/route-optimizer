@@ -1,3 +1,19 @@
+---
+title: Company Acronyms - D
+title_fr: Acronymes de l'entreprise - D
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym D
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes D
+---
+
 # Company Acronyms - D
 
 # Version 1.1.0
@@ -183,3 +199,48 @@ This document contains company acronyms beginning with the letter specified in t
 | DWU | Diesel Workers Union |
 | DtV | Design to Value |
 | dEPS | digital Engine Position Sensor |
+---
+title: Company Acronyms - D
+title_fr: Acronymes de l'entreprise - D
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym D
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes D
+---
+---
+title: Company Acronyms - D
+title_fr: Acronymes de l'entreprise - D
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym D
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes D
+---
+---
+title: Company Acronyms - D
+title_fr: Acronymes de l'entreprise - D
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym D
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes D
+---

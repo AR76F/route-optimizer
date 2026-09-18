@@ -1,3 +1,20 @@
+---
+title: Technician Profile - Alain Duguay
+title_fr: Profil de technicien - Alain Duguay
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Alain Duguay
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+
 # Technician Profile: Alain Duguay
 
 Version: 2.0.0
@@ -90,3 +107,35 @@ Excellent resource for government customers, secured facilities, preventive main
 ## Search Keywords
 
 15+, 2100, 3100, 3200, 3201, 3300, 70e, advanced, alain, alternator, and, ats, automatic, automatic transfer switches, autoroute, bank, bett, canadian, clearance, cnl, commissioning, complex, contracts, controls, customers, cèdres, demanding, diagnostics, duguay, dwyer, electrical, engine, engine diagnostics, engine work, excellent, experience, extensive, facilities, field, field service, field technician, for, fundamentals, generator, generator controls, government, hill, hudson, iii, island, laboratories, les, level, load, maintenance, montreal, neutral, nfpa, nsps, nuclear, of, overtime, pc3.x, pcc, preventive, preventive maintenance, project, projects, projects / commissioning, qualification, rcmp, repair, repairs, resource, safety, secret, secured, security, senior, support, supporting, switch, switches, technically, technician, transfer, travel, troubleshooting, vaudreuil, west, with, years, yes
+---
+title: Technician Profile - Alain Duguay
+title_fr: Profil de technicien - Alain Duguay
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Alain Duguay
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+---
+title: Technician Profile - Alain Duguay
+title_fr: Profil de technicien - Alain Duguay
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Alain Duguay
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---

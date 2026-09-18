@@ -1,3 +1,20 @@
+---
+title: Technician Profile - Ali Reza-Sabour
+title_fr: Profil de technicien - Ali Reza-Sabour
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Ali Reza-Sabour
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+
 # Technician Profile: Ali Reza-Sabour
 
 Version: 2.0.0
@@ -86,3 +103,35 @@ Frequently assigned to customer-facing work due to strong communication skills a
 ## Search Keywords
 
 15+, 2100, 3100, 3200, 3201, 70e, ali, alternator, and, area, assigned, ats, automatic, automatic transfer switches, autoroute, bank, broad, calls, canadian, clet, cnl, communication, controls, customer, due, dwyer, engine work, experience, extensive, facing, field, field service, field technician, frequently, general, generator, generator controls, hill, hudson, island, laboratories, level, load, maintenance, montreal, neutral, nfpa, nuclear, of, overtime, pcc, preventive, preventive maintenance, projects / commissioning, qualification, required, reza, sabour, saint, secret, secured, senior, service, site, sites, skills, strong, support, supporting, switch, switches, systems, technician, transfer, travel, vaudreuil, west, with, work, years, yes
+---
+title: Technician Profile - Ali Reza-Sabour
+title_fr: Profil de technicien - Ali Reza-Sabour
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Ali Reza-Sabour
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+---
+title: Technician Profile - Ali Reza-Sabour
+title_fr: Profil de technicien - Ali Reza-Sabour
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Ali Reza-Sabour
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---

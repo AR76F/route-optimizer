@@ -1,3 +1,20 @@
+---
+title: Customers - Hydro-Québec Invoicing Requirements
+title_fr: Clients - Exigences de facturation d'Hydro-Québec
+category: customer
+subcategory: invoicing_requirements
+customer: Hydro-Québec
+region: Candiac
+language: bilingual
+keywords:
+  - Hydro-Québec invoicing
+  - customer invoicing requirements
+  - facturation Hydro-Québec
+  - exigences de facturation client
+  - purchase order
+  - bon de commande
+---
+
 # Customers - Hydro-Québec Invoicing Requirements
 
 # Last Updated: 2026-08-28

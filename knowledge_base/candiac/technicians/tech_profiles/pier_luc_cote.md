@@ -1,3 +1,20 @@
+---
+title: Technician Profile - Pier-Luc Côté
+title_fr: Profil de technicien - Pier-Luc Côté
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Pier-Luc Côté
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+
 # Technician Profile: Pier-Luc Côté
 
 Version: 2.0.0
@@ -79,3 +96,35 @@ Recognized throughout the branch as a primary engine diagnostic specialist.
 ## Search Keywords
 
 10–15, 2100, 3100, alternator, and, ats, automatic, automatic transfer switches, branch, complex, controls, côté, diagnostic, diagnostics, documented, engine, engine diagnostics, engine work, experience, extensive, failures, field, field service, field technician, generator, generator controls, investigations, luc, marieville, mechanical, montreal, not, pcc, pier, primary, projects, projects / commissioning, qualification, recognized, repair, senior, shore, south, specialist, switch, switches, systems, technical, technician, the, throughout, transfer, travel, with, years, yes
+---
+title: Technician Profile - Pier-Luc Côté
+title_fr: Profil de technicien - Pier-Luc Côté
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Pier-Luc Côté
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+---
+title: Technician Profile - Pier-Luc Côté
+title_fr: Profil de technicien - Pier-Luc Côté
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Pier-Luc Côté
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---

@@ -1,3 +1,20 @@
+---
+title: Technician Profile - Michael Sulte
+title_fr: Profil de technicien - Michael Sulte
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Michael Sulte
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+
 # Technician Profile: Michael Sulte
 
 Version: 2.0.0
@@ -76,3 +93,35 @@ Strong electrical resource for wiring issues, communication faults, and control-
 ## Search Keywords
 
 1–3, alternator, and, ats, automatic, automatic transfer switches, cabling, communication, control, controls, diagnostics, electrical, electrical work, faults, field, field service, field technician, for, general, generator, generator controls, hemmingford, hinchinbrooke, huntingdon, inpower, issues, lasalle, laurent, michael, montreal, of, ormstown, overtime, preferred, preventive maintenance, qualification, resource, saint, service, shore, software, south, specializing, strong, sulte, switch, switches, system, systems, technician, transfer, travel, troubleshooting, west, wiring, years, yes
+---
+title: Technician Profile - Michael Sulte
+title_fr: Profil de technicien - Michael Sulte
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Michael Sulte
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+---
+title: Technician Profile - Michael Sulte
+title_fr: Profil de technicien - Michael Sulte
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Michael Sulte
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---

@@ -1,3 +1,22 @@
+---
+title: BMS - Work Order Creation
+title_fr: BMS - Création d'un bon de travail
+category: software
+subcategory: bms_work_order_creation
+system: BMS
+region: Shared
+language: bilingual
+keywords:
+  - BMS Work Order
+  - WOQT
+  - work order creation
+  - bon de travail BMS
+  - création d'un bon de travail
+  - quote creation
+  - création de soumission
+  - FieldAware synchronization
+---
+
 # BMS - Work Order Creation
 
 # Last Updated: 2026-09-03

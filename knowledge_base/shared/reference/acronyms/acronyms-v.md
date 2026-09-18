@@ -1,3 +1,19 @@
+---
+title: Company Acronyms - V
+title_fr: Acronymes de l'entreprise - V
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym V
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes V
+---
+
 # Company Acronyms - V
 
 # Version 1.1.0
@@ -70,3 +86,48 @@ This document contains company acronyms beginning with the letter specified in t
 | VV | Verification and Validation |
 | VVA | Variable Valve Actuation |
 | VVT | Variable Valve Timing |
+---
+title: Company Acronyms - V
+title_fr: Acronymes de l'entreprise - V
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym V
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes V
+---
+---
+title: Company Acronyms - V
+title_fr: Acronymes de l'entreprise - V
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym V
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes V
+---
+---
+title: Company Acronyms - V
+title_fr: Acronymes de l'entreprise - V
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym V
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes V
+---

@@ -1,3 +1,19 @@
+---
+title: Company Acronyms - N
+title_fr: Acronymes de l'entreprise - N
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym N
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes N
+---
+
 # Company Acronyms - N
 
 # Version 1.1.0
@@ -88,3 +104,48 @@ This document contains company acronyms beginning with the letter specified in t
 | NUD | New, Unique & Different |
 | NVH | Noise, Vibration, and Harshness |
 | NWG | Newage Generator |
+---
+title: Company Acronyms - N
+title_fr: Acronymes de l'entreprise - N
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym N
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes N
+---
+---
+title: Company Acronyms - N
+title_fr: Acronymes de l'entreprise - N
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym N
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes N
+---
+---
+title: Company Acronyms - N
+title_fr: Acronymes de l'entreprise - N
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym N
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes N
+---

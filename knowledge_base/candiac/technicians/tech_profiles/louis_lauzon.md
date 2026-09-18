@@ -1,3 +1,20 @@
+---
+title: Technician Profile - Louis Lauzon
+title_fr: Profil de technicien - Louis Lauzon
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Louis Lauzon
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+
 # Technician Profile: Louis Lauzon
 
 Version: 2.0.0
@@ -96,3 +113,35 @@ Operational scheduling preference:
 ## Search Keywords
 
 Louis Lauzon, South Shore, Beloeil, Châteauguay, preventive maintenance, routine service, senior technician, field technician
+---
+title: Technician Profile - Louis Lauzon
+title_fr: Profil de technicien - Louis Lauzon
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Louis Lauzon
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+---
+title: Technician Profile - Louis Lauzon
+title_fr: Profil de technicien - Louis Lauzon
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Louis Lauzon
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---

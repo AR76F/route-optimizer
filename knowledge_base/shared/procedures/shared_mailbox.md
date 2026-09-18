@@ -1,3 +1,21 @@
+---
+title: Shared Mailbox - Service Department
+title_fr: Boîte aux lettres partagée - Service
+category: procedure
+subcategory: shared_mailbox
+region: Shared
+language: bilingual
+keywords:
+  - shared mailbox
+  - service department mailbox
+  - boîte aux lettres partagée
+  - boîte du service
+  - email routing
+  - acheminement des courriels
+  - service email
+  - courriel de service
+---
+
 # Shared Mailbox - Service Department
 
 # Last Updated: 2026-09-01

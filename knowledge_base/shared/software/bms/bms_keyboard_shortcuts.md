@@ -1,3 +1,20 @@
+---
+title: BMS - Keyboard Shortcuts
+title_fr: BMS - Raccourcis clavier
+category: software
+subcategory: bms_shortcuts
+system: BMS
+region: Shared
+language: bilingual
+keywords:
+  - BMS keyboard shortcuts
+  - BMS hotkeys
+  - raccourcis clavier BMS
+  - touches de raccourci BMS
+  - keyboard commands
+  - commandes clavier
+---
+
 # BMS - Keyboard Shortcuts
 
 # Last Updated: 2026-09-03

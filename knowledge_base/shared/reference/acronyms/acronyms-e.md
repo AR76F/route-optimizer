@@ -1,3 +1,19 @@
+---
+title: Company Acronyms - E
+title_fr: Acronymes de l'entreprise - E
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym E
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes E
+---
+
 # Company Acronyms - E
 
 # Version 1.1.0
@@ -205,3 +221,48 @@ This document contains company acronyms beginning with the letter specified in t
 | eFPA | Embedded Field Performance Analysis |
 | eQMS | Electronic Quality Management System |
 | eRCV | electric Rotating Crankcase Ventilation |
+---
+title: Company Acronyms - E
+title_fr: Acronymes de l'entreprise - E
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym E
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes E
+---
+---
+title: Company Acronyms - E
+title_fr: Acronymes de l'entreprise - E
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym E
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes E
+---
+---
+title: Company Acronyms - E
+title_fr: Acronymes de l'entreprise - E
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym E
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes E
+---

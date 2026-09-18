@@ -1,3 +1,19 @@
+---
+title: Company Acronyms - G
+title_fr: Acronymes de l'entreprise - G
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym G
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes G
+---
+
 # Company Acronyms - G
 
 # Version 1.1.0
@@ -114,3 +130,48 @@ This document contains company acronyms beginning with the letter specified in t
 | GUI | Graphical User Interface |
 | GVW | Gross Vehicle Weight |
 | GVWR | Gross Vehicle Weight Rating |
+---
+title: Company Acronyms - G
+title_fr: Acronymes de l'entreprise - G
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym G
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes G
+---
+---
+title: Company Acronyms - G
+title_fr: Acronymes de l'entreprise - G
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym G
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes G
+---
+---
+title: Company Acronyms - G
+title_fr: Acronymes de l'entreprise - G
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym G
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes G
+---

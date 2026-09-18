@@ -1,3 +1,19 @@
+---
+title: Company Acronyms - F
+title_fr: Acronymes de l'entreprise - F
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym F
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes F
+---
+
 # Company Acronyms - F
 
 # Version 1.1.0
@@ -154,3 +170,48 @@ This document contains company acronyms beginning with the letter specified in t
 | FWC | Front Wheel Clearance |
 | FWS | Fuel-Water Separator |
 | FYSA | FOR YOUR AWARNESS |
+---
+title: Company Acronyms - F
+title_fr: Acronymes de l'entreprise - F
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym F
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes F
+---
+---
+title: Company Acronyms - F
+title_fr: Acronymes de l'entreprise - F
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym F
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes F
+---
+---
+title: Company Acronyms - F
+title_fr: Acronymes de l'entreprise - F
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym F
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes F
+---

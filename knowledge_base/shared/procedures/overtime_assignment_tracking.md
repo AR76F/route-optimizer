@@ -1,3 +1,21 @@
+---
+title: Procedure - Overtime Assignment and Tracking
+title_fr: Procédure - Attribution et suivi des heures supplémentaires
+category: procedure
+subcategory: overtime_tracking
+region: Shared
+language: bilingual
+keywords:
+  - overtime assignment
+  - overtime tracking
+  - attribution des heures supplémentaires
+  - suivi des heures supplémentaires
+  - technician overtime
+  - heures supplémentaires des techniciens
+  - overtime approval
+  - approbation des heures supplémentaires
+---
+
 # Procedure - Overtime Assignment and Tracking 
 
 # Last Updated: 2026-09-03

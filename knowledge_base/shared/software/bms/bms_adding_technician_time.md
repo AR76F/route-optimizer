@@ -1,3 +1,20 @@
+---
+title: BMS - Adding Technician Time
+title_fr: BMS - Ajouter le temps du technicien
+category: software
+subcategory: bms_technician_time
+system: BMS
+region: Shared
+language: bilingual
+keywords:
+  - BMS technician time
+  - add technician hours
+  - temps du technicien dans BMS
+  - ajouter des heures
+  - labor entry
+  - saisie de main-d'oeuvre
+---
+
 # BMS - Adding Technician Time
 
 # Last Updated: 2026-08-31

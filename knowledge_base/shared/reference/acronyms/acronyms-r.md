@@ -1,3 +1,19 @@
+---
+title: Company Acronyms - R
+title_fr: Acronymes de l'entreprise - R
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym R
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes R
+---
+
 # Company Acronyms - R
 
 # Version 1.0.1
@@ -139,3 +155,48 @@ This document contains company acronyms beginning with the letter specified in t
 | RVP | Reliability Verification Plan |
 | RX | Reconditionned Parts |
 | rOSD | Request On Site Delivery |
+---
+title: Company Acronyms - R
+title_fr: Acronymes de l'entreprise - R
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym R
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes R
+---
+---
+title: Company Acronyms - R
+title_fr: Acronymes de l'entreprise - R
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym R
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes R
+---
+---
+title: Company Acronyms - R
+title_fr: Acronymes de l'entreprise - R
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym R
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes R
+---

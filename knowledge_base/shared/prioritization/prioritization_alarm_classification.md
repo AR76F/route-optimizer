@@ -1,3 +1,19 @@
+---
+title: Alarm Classification
+title_fr: Classification des alarmes
+category: prioritization
+subcategory: alarm_classification
+region: Shared
+language: bilingual
+keywords:
+  - alarm classification
+  - generator alarm
+  - classification des alarmes
+  - alarme de génératrice
+  - alarm severity
+  - gravité de l'alarme
+---
+
 # Alarm Classification
 
 ## Purpose

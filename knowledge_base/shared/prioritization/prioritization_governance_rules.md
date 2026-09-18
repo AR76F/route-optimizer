@@ -1,3 +1,19 @@
+---
+title: Prioritization Governance Rules
+title_fr: Règles de gouvernance de la priorisation
+category: prioritization
+subcategory: governance_rules
+region: Shared
+language: bilingual
+keywords:
+  - prioritization governance
+  - business rules
+  - gouvernance de la priorisation
+  - règles d'affaires
+  - dispatch governance
+  - gouvernance de la répartition
+---
+
 # Business Rules
 
 ## Overview

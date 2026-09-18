@@ -1,3 +1,21 @@
+---
+title: Client Classes (C1-C4)
+title_fr: Classes de clients (C1 à C4)
+category: prioritization
+subcategory: customer_classification
+region: Shared
+language: bilingual
+keywords:
+  - customer classification
+  - client classes
+  - classification des clients
+  - classes de clients
+  - C1
+  - C2
+  - C3
+  - C4
+---
+
 # Client Classes (C1–C4)
 
 ## Overview

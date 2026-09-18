@@ -1,3 +1,19 @@
+---
+title: Policies - Absence and Vacation Management
+title_fr: Politiques - Gestion des absences et des vacances
+category: policy
+subcategory: absence_vacation
+region: Shared
+language: bilingual
+keywords:
+  - absence management
+  - vacation management
+  - gestion des absences
+  - gestion des vacances
+  - service coverage
+  - couverture du service
+---
+
 # Policies - Absence and Vacation Management
 
 # Last Updated: 2026-08-28

@@ -1,3 +1,20 @@
+---
+title: Technician Profile - Georges Érick Yamna Nghuedieu
+title_fr: Profil de technicien - Georges Érick Yamna Nghuedieu
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Georges Érick Yamna Nghuedieu
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+
 # Technician Profile: Georges Érick Yamna Nghuedieu
 
 Version: 2.0.0
@@ -75,3 +92,35 @@ Well suited for scheduled maintenance work and routine customer service calls.
 ## Search Keywords
 
 2100, 3100, 3–5, and, areas, ats, automatic, automatic transfer switches, calls, controls, customer, documented, downtown, eustache, experience, field, field service, field technician, for, general, generator, generator controls, georges, laval, maintenance, montreal, nghuedieu, north, not, operations, overtime, pcc, preventive, preventive maintenance, required, routine, saint, scheduled, service, shore, suited, supporting, surrounding, switch, switches, systems, technician, transfer, travel, well, with, work, yamna, years, yes, érick
+---
+title: Technician Profile - Georges Érick Yamna Nghuedieu
+title_fr: Profil de technicien - Georges Érick Yamna Nghuedieu
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Georges Érick Yamna Nghuedieu
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+---
+title: Technician Profile - Georges Érick Yamna Nghuedieu
+title_fr: Profil de technicien - Georges Érick Yamna Nghuedieu
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Georges Érick Yamna Nghuedieu
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---

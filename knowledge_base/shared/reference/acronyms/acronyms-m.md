@@ -1,3 +1,19 @@
+---
+title: Company Acronyms - M
+title_fr: Acronymes de l'entreprise - M
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym M
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes M
+---
+
 # Company Acronyms - M
 
 # Version 1.1.0
@@ -153,3 +169,48 @@ This document contains company acronyms beginning with the letter specified in t
 | MWO | Master Work Order |
 | MWO | Multi-Engine Work Order |
 | ManTA | Manufacturing Transfer Application |
+---
+title: Company Acronyms - M
+title_fr: Acronymes de l'entreprise - M
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym M
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes M
+---
+---
+title: Company Acronyms - M
+title_fr: Acronymes de l'entreprise - M
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym M
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes M
+---
+---
+title: Company Acronyms - M
+title_fr: Acronymes de l'entreprise - M
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym M
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes M
+---

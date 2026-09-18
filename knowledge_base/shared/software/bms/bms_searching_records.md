@@ -1,3 +1,20 @@
+---
+title: BMS - Searching Records
+title_fr: BMS - Rechercher des dossiers
+category: software
+subcategory: bms_search
+system: BMS
+region: Shared
+language: bilingual
+keywords:
+  - BMS search records
+  - search customers
+  - rechercher dans BMS
+  - rechercher des clients
+  - record lookup
+  - recherche de dossiers
+---
+
 # BMS - Searching Records
 
 # Last Updated: 2026-09-03

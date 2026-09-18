@@ -1,3 +1,20 @@
+---
+title: Technician Profile - Donald Lagacé
+title_fr: Profil de technicien - Donald Lagacé
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Donald Lagacé
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+
 # Technician Profile: Donald Lagacé
 
 Version: 2.0.0
@@ -81,3 +98,35 @@ Primary resource for all RV and portable generator repairs performed within the 
 ## Search Keywords
 
 15+, all, and, bench, catherine, diagnostics, documented, does, donald, field, for, generator, generators, in-shop, lagacé, not, only, perform, performed, portable, primary, repairs, resource, saint, senior, service, shop, shop only, shop work only, shore, south, specializing, technician, the, within, work, years, yes
+---
+title: Technician Profile - Donald Lagacé
+title_fr: Profil de technicien - Donald Lagacé
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Donald Lagacé
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+---
+title: Technician Profile - Donald Lagacé
+title_fr: Profil de technicien - Donald Lagacé
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Donald Lagacé
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---

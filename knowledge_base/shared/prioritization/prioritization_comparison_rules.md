@@ -1,3 +1,19 @@
+---
+title: Job Comparison Rules
+title_fr: Règles de comparaison des travaux
+category: prioritization
+subcategory: comparison_rules
+region: Shared
+language: bilingual
+keywords:
+  - job comparison
+  - work order comparison
+  - comparaison des travaux
+  - comparaison des bons de travail
+  - priority comparison
+  - comparaison des priorités
+---
+
 # Job Comparison Rules
 
 ## Overview

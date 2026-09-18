@@ -1,3 +1,19 @@
+---
+title: Company Acronyms - Z
+title_fr: Acronymes de l'entreprise - Z
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym Z
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes Z
+---
+
 # Company Acronyms - Z
 
 # Version 1.0.0
@@ -21,3 +37,48 @@ This document contains company acronyms beginning with the letter specified in t
 |---------|------------|
 | ZDM | Zero Defect Mentality |
 | ZEV | Zero Emission Vehicle |
+---
+title: Company Acronyms - Z
+title_fr: Acronymes de l'entreprise - Z
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym Z
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes Z
+---
+---
+title: Company Acronyms - Z
+title_fr: Acronymes de l'entreprise - Z
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym Z
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes Z
+---
+---
+title: Company Acronyms - Z
+title_fr: Acronymes de l'entreprise - Z
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym Z
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes Z
+---

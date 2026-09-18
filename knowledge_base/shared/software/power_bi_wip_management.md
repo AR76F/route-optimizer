@@ -1,3 +1,20 @@
+---
+title: Power BI - WIP Management
+title_fr: Power BI - Gestion des travaux en cours
+category: software
+subcategory: power_bi_wip
+system: Power BI
+region: Shared
+language: bilingual
+keywords:
+  - Power BI WIP
+  - work in progress
+  - travaux en cours
+  - gestion WIP
+  - service backlog
+  - carnet de travaux de service
+---
+
 # Power BI - WIP Management
 
 # Last Updated: 2026-09-02

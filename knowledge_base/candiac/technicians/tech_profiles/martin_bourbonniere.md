@@ -1,3 +1,20 @@
+---
+title: Technician Profile - Martin Bourbonnière
+title_fr: Profil de technicien - Martin Bourbonnière
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Martin Bourbonnière
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+
 # Technician Profile: Martin Bourbonnière
 
 Version: 2.0.0
@@ -86,3 +103,35 @@ Highly experienced technician frequently assigned to technically demanding work 
 ## Search Keywords
 
 15+, 2100, 3100, 3200, 3201, across, advanced, and, assigned, ats, automatic, automatic transfer switches, bourbonnière, controls, corridor, demanding, eastern, engine work, experience, experienced, extensive, field, field service, field technician, frequently, general, generator, generator controls, geographic, highly, l'assomption, large, leadership, level, martin, north, overtime, pcc, project, projects, projects / commissioning, required, rivières, secret, senior, service, shore, supporting, switch, switches, systems, technical, technically, technician, territories, the, throughout, transfer, travel, trois, troubleshooting, with, work, years, yes
+---
+title: Technician Profile - Martin Bourbonnière
+title_fr: Profil de technicien - Martin Bourbonnière
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Martin Bourbonnière
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+---
+title: Technician Profile - Martin Bourbonnière
+title_fr: Profil de technicien - Martin Bourbonnière
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Martin Bourbonnière
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---

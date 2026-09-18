@@ -1,3 +1,20 @@
+---
+title: Technician Profile - Fredy Diaz
+title_fr: Profil de technicien - Fredy Diaz
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Fredy Diaz
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+
 # Technician Profile: Fredy Diaz
 
 Version: 2.0.0
@@ -77,3 +94,35 @@ Strong resource for Laval service coverage and routine maintenance work.
 ## Search Keywords
 
 3–5, alternator, and, areas, ats, automatic, automatic transfer switches, controls, coverage, diaz, documented, downtown, electrical, engine work, eustache, field, field service, field technician, focus, for, fredy, general, generator controls, laval, maintenance, montreal, north, not, overtime, preventive, projects / commissioning, qualification, required, resource, routine, saint, service, shore, strong, supporting, surrounding, switch, switches, systems, technician, transfer, travel, troubleshooting, with, work, years, yes
+---
+title: Technician Profile - Fredy Diaz
+title_fr: Profil de technicien - Fredy Diaz
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Fredy Diaz
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+---
+title: Technician Profile - Fredy Diaz
+title_fr: Profil de technicien - Fredy Diaz
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Fredy Diaz
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---

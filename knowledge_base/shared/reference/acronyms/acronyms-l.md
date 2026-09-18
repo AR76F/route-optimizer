@@ -1,3 +1,19 @@
+---
+title: Company Acronyms - L
+title_fr: Acronymes de l'entreprise - L
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym L
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes L
+---
+
 # Company Acronyms - L
 
 # Version 1.1.0
@@ -99,3 +115,48 @@ This document contains company acronyms beginning with the letter specified in t
 | LUIS | Loadbox User Interface System |
 | LVA | Low Voltage Authorization |
 | LoV | List of Value |
+---
+title: Company Acronyms - L
+title_fr: Acronymes de l'entreprise - L
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym L
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes L
+---
+---
+title: Company Acronyms - L
+title_fr: Acronymes de l'entreprise - L
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym L
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes L
+---
+---
+title: Company Acronyms - L
+title_fr: Acronymes de l'entreprise - L
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym L
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes L
+---

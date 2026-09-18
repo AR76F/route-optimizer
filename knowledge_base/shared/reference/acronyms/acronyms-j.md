@@ -1,3 +1,19 @@
+---
+title: Company Acronyms - J
+title_fr: Acronymes de l'entreprise - J
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym J
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes J
+---
+
 # Company Acronyms - J
 
 # Version 1.1.0
@@ -33,3 +49,48 @@ This document contains company acronyms beginning with the letter specified in t
 | JV | Joint Venture |
 | JVK | Joint Venture Kitting |
 | JVO | Joint Venture Operations |
+---
+title: Company Acronyms - J
+title_fr: Acronymes de l'entreprise - J
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym J
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes J
+---
+---
+title: Company Acronyms - J
+title_fr: Acronymes de l'entreprise - J
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym J
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes J
+---
+---
+title: Company Acronyms - J
+title_fr: Acronymes de l'entreprise - J
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym J
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes J
+---

@@ -1,3 +1,19 @@
+---
+title: Policies - Stop Work Authority
+title_fr: Politiques - Autorité d'arrêt des travaux
+category: policy
+subcategory: stop_work_authority
+region: Shared
+language: bilingual
+keywords:
+  - stop work authority
+  - safety stop
+  - autorité d'arrêt des travaux
+  - arrêt pour raisons de sécurité
+  - unsafe work
+  - travail dangereux
+---
+
 # Policies - Stop Work Authority
 
 # Last Updated: 2026-08-28

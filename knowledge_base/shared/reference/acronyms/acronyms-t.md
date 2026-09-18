@@ -1,3 +1,19 @@
+---
+title: Company Acronyms - T
+title_fr: Acronymes de l'entreprise - T
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym T
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes T
+---
+
 # Company Acronyms - T
 
 # Version 1.1.0
@@ -129,3 +145,48 @@ This document contains company acronyms beginning with the letter specified in t
 | TWC | Three Way Catalyst |
 | TWIG | Technical Work Integration Group |
 | TWMS | Technical Work Management System |
+---
+title: Company Acronyms - T
+title_fr: Acronymes de l'entreprise - T
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym T
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes T
+---
+---
+title: Company Acronyms - T
+title_fr: Acronymes de l'entreprise - T
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym T
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes T
+---
+---
+title: Company Acronyms - T
+title_fr: Acronymes de l'entreprise - T
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym T
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes T
+---

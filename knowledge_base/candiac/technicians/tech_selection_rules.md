@@ -1,3 +1,19 @@
+---
+title: Technician Selection Rules
+title_fr: Règles de sélection des techniciens
+category: technician
+subcategory: selection_rules
+region: Candiac
+language: bilingual
+keywords:
+  - technician selection
+  - dispatch technician
+  - sélection des techniciens
+  - répartition des techniciens
+  - technician capability
+  - compétences des techniciens
+---
+
 # Technician Selection Rules
 
 ## Purpose

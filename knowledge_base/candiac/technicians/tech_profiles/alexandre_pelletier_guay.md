@@ -1,3 +1,20 @@
+---
+title: Technician Profile - Alexandre Pelletier-Guay
+title_fr: Profil de technicien - Alexandre Pelletier-Guay
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Alexandre Pelletier-Guay
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+
 # Technician Profile: Alexandre Pelletier-Guay
 
 Version: 2.0.0
@@ -76,3 +93,35 @@ Highly experienced with major customer projects and railway applications.
 ## Search Keywords
 
 10–15, 2100, 3100, alexandre, and, applications, ats, automatic, automatic transfer switches, commissioning, complex, controls, customer, documented, engine work, experienced, field, field service, field technician, general, generator, generator controls, guay, highly, large, major, montreal, not, overtime, particularly, pcc, pelletier, projects, projects / commissioning, railway, regional, required, sabrevois, scale, service, shore, south, specializing, support, switch, switches, systems, technician, transfer, travel, with, work, years, yes
+---
+title: Technician Profile - Alexandre Pelletier-Guay
+title_fr: Profil de technicien - Alexandre Pelletier-Guay
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Alexandre Pelletier-Guay
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+---
+title: Technician Profile - Alexandre Pelletier-Guay
+title_fr: Profil de technicien - Alexandre Pelletier-Guay
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Alexandre Pelletier-Guay
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---

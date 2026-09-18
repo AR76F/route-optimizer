@@ -1,3 +1,19 @@
+---
+title: Technician Capability Matrix
+title_fr: Matrice des compétences des techniciens
+category: technician
+subcategory: capability_matrix
+region: Candiac
+language: bilingual
+keywords:
+  - technician capability matrix
+  - technician skills
+  - matrice des compétences des techniciens
+  - compétences des techniciens
+  - technician qualifications
+  - qualifications des techniciens
+---
+
 # Technician Capability Matrix
 
 # Last Updated: 2026-09-11

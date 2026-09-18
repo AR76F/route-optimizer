@@ -1,6 +1,24 @@
+---
+title: Cash Customers - Service Call
+title_fr: Clients cash - Appel de service
+category: procedure
+subcategory: cash_customers_service_call
+region: Shared
+language: bilingual
+keywords:
+  - cash customer service call
+  - $750 pre-authorization
+  - appel de service client cash
+  - préautorisation de 750 $
+  - Clover pre-authorization
+  - préautorisation Clover
+  - payment before dispatch
+  - paiement avant la répartition
+---
+
 # Cash Customers - Service Call
 
-# Last Updated: 2026-09-02
+# Last Updated: 2026-09-18
 
 ## Purpose
 
@@ -59,9 +77,10 @@ For a standard cash customer service call:
 Before dispatching the technician:
 
 1. Obtain the customer's payment information.
-2. Complete a **$750 pre-authorization in Clover**.
-3. Retrieve the Clover Authorization ID.
-4. Enter the Authorization ID as the **PO number on the BMS Work Order**.
+2. Keep the payment information in the designated locked, secure drawer.
+3. Complete a **$750 pre-authorization in Clover**.
+4. Retrieve the Clover Authorization ID.
+5. Enter the Authorization ID as the **PO number on the BMS Work Order**.
 
 A pre-authorization is **not the final payment**. It reserves funds before the technician is dispatched.
 
@@ -79,7 +98,7 @@ Continue using the standard Service and Work Order procedures.
 
 # Post-Service Follow-Up
 
-After the service call:
+Complete the follow-up within the same week as the service call:
 
 - Follow up with the assigned supervisor.
 - Verify that the technician's labor/punch has been entered.
@@ -93,7 +112,7 @@ Contact the customer to:
 - Answer any questions.
 - Obtain approval to complete the final payment.
 
-Whenever possible, provide the customer with a preview of the invoice before completing payment.
+Provide the customer with the invoice preview before the call whenever possible, then review and validate the final amount during the call before completing payment.
 
 ---
 
@@ -124,7 +143,7 @@ File the required payment and invoice documentation according to the established
 
 # Pre-Authorization Expiration
 
-If the work or required parts extend beyond the Clover pre-authorization period, contact the customer before the authorization expires and arrange the required payment.
+If the work or required parts extend beyond the approximately **7-day Clover pre-authorization period**, contact the customer before the authorization expires and arrange the required payment.
 
 When appropriate, add a reminder such as:
 

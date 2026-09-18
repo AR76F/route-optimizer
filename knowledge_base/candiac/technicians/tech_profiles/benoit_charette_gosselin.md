@@ -1,3 +1,20 @@
+---
+title: Technician Profile - Benoit Charette-Gosselin
+title_fr: Profil de technicien - Benoit Charette-Gosselin
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Benoit Charette-Gosselin
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+
 # Technician Profile: Benoit Charette-Gosselin
 
 Version: 2.0.0
@@ -83,3 +100,35 @@ Frequently supports customers located in remote regions where travel experience 
 ## Search Keywords
 
 15+, and, benoit, charette, customer, customers, documented, engine work, essential, experience, experienced, field, field service, field technician, frequently, fully, general, gosselin, jérôme, level, located, locations, mont, north, northern, not, overtime, project, projects / commissioning, providing, quebec, regions, remote, required, saint, secret, senior, service, shore, support, supports, technical, technician, territories, territory, the, throughout, travel, tremblant, troubleshooting, where, with, work, years, yes
+---
+title: Technician Profile - Benoit Charette-Gosselin
+title_fr: Profil de technicien - Benoit Charette-Gosselin
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Benoit Charette-Gosselin
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+---
+title: Technician Profile - Benoit Charette-Gosselin
+title_fr: Profil de technicien - Benoit Charette-Gosselin
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Benoit Charette-Gosselin
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---

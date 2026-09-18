@@ -1,6 +1,24 @@
+---
+title: Cash Customers - Accepted Quotation
+title_fr: Clients cash - Soumission acceptée
+category: procedure
+subcategory: cash_customers_accepted_quote
+region: Shared
+language: bilingual
+keywords:
+  - cash customer quotation
+  - accepted cash quote
+  - client cash
+  - soumission cash acceptée
+  - full payment before parts
+  - paiement complet avant les pièces
+  - WO deposit
+  - dépôt sur bon de travail
+---
+
 # Cash Customers - Accepted Quotation
 
-# Last Updated: 2026-09-02
+# Last Updated: 2026-09-18
 
 ## Purpose
 
@@ -61,10 +79,11 @@ For an accepted cash quotation:
 Before ordering parts, scheduling work, or dispatching a technician:
 
 1. Obtain the customer's payment information.
-2. Collect the **entire quotation amount**.
-3. Do **not** perform a pre-authorization.
-4. Send the payment receipt to the customer.
-5. Process the payment through the applicable **Customer Deposit / Order Entry (OE)** procedure.
+2. Keep the payment information in the designated locked, secure drawer.
+3. Collect the **entire quotation amount**.
+4. Do **not** perform a pre-authorization.
+5. Send the payment receipt to the customer.
+6. Process the payment through the applicable **Customer Deposit / Order Entry (OE)** procedure.
 
 No parts should be ordered and work should not proceed until the required payment has been received.
 
@@ -95,9 +114,22 @@ Refer to **Clover Training** for the detailed Clover payment procedure.
 
 After the full payment has been received, process the amount using the applicable **Customer Deposit / Order Entry (OE)** procedure.
 
-The OE is used to reserve and apply the customer's payment against the Work Order.
+For an accepted CASH quotation, create the entry with:
 
-Refer to the **Customer Deposits Process** for the complete BMS deposit and OE workflow.
+```text
+Transaction Type: WO
+Charges: DEPOSIT
+Amount: Payment amount before taxes
+Comments: Reference to the related Work Order
+```
+
+Enter the payment amount before taxes. OneBMS calculates the applicable taxes automatically according to the selected Tax District; do not enter the tax-inclusive amount.
+
+Invoice the entry, then apply it to the Work Order through **Misc Charges** using the `DEPOSIT` category. On the Work Order **Divers** tab, use the `Dépôt` category.
+
+The entry is used to reserve and apply the customer's payment against the Work Order.
+
+Refer to the **Customer Deposits Process** for the complete BMS deposit workflow.
 
 ---
 
@@ -114,7 +146,7 @@ Continue using the standard Work Order and scheduling procedures.
 
 # Post-Service Follow-Up
 
-After the work has been completed:
+Complete the follow-up within the same week as the completed work:
 
 - Follow up with the assigned supervisor.
 - Verify that the technician's labor/punch has been entered.
@@ -125,6 +157,7 @@ Contact the customer to:
 - Confirm that the service has been completed.
 - Explain the work performed.
 - Review the final amount.
+- Review the invoice preview that was sent before the call.
 - Answer any customer questions.
 - Confirm customer satisfaction.
 

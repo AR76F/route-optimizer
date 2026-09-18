@@ -1,3 +1,19 @@
+---
+title: Tribal Knowledge
+title_fr: Connaissances informelles
+category: reference
+subcategory: tribal_knowledge
+region: Shared
+language: bilingual
+keywords:
+  - tribal knowledge
+  - branch knowledge
+  - connaissances informelles
+  - connaissances de la succursale
+  - operational knowledge
+  - connaissances opérationnelles
+---
+
 # Tribal Knowledge
 
 # Last Updated: 2026-09-17
@@ -48,3 +64,45 @@ Parts are sent on Thurdays and arrive and Tuesdays of the following week.
 ## FieldAware Best Practice
 
 Refresh the scheduler frequently to avoid technician double bookings.
+title: Tribal Knowledge
+title_fr: Connaissances informelles
+category: reference
+subcategory: tribal_knowledge
+region: Shared
+language: bilingual
+keywords:
+  - tribal knowledge
+  - branch knowledge
+  - connaissances informelles
+  - connaissances de la succursale
+  - operational knowledge
+  - connaissances opérationnelles
+---
+title: Tribal Knowledge
+title_fr: Connaissances informelles
+category: reference
+subcategory: tribal_knowledge
+region: Shared
+language: bilingual
+keywords:
+  - tribal knowledge
+  - branch knowledge
+  - connaissances informelles
+  - connaissances de la succursale
+  - operational knowledge
+  - connaissances opérationnelles
+---
+title: Tribal Knowledge
+title_fr: Connaissances informelles
+category: reference
+subcategory: tribal_knowledge
+region: Shared
+language: bilingual
+keywords:
+  - tribal knowledge
+  - branch knowledge
+  - connaissances informelles
+  - connaissances de la succursale
+  - operational knowledge
+  - connaissances opérationnelles
+---

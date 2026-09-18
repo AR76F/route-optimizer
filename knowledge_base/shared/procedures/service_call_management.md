@@ -1,3 +1,21 @@
+---
+title: Procedure - Service Call Management
+title_fr: Procédure - Gestion des appels de service
+category: procedure
+subcategory: service_call_management
+region: Shared
+language: bilingual
+keywords:
+  - service call management
+  - service call intake
+  - gestion des appels de service
+  - prise d'appel de service
+  - dispatch preparation
+  - préparation de la répartition
+  - technician dispatch
+  - répartition des techniciens
+---
+
 # Procedure - Service Call Management
 
 # Last Updated: 2026-09-09

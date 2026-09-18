@@ -1,3 +1,22 @@
+---
+title: FieldAware - Work Order Creation and Scheduling
+title_fr: FieldAware - Création et planification d'un bon de travail
+category: software
+subcategory: fieldaware_work_order_creation
+system: FieldAware
+region: Shared
+language: bilingual
+keywords:
+  - FieldAware Work Order
+  - FieldAware scheduling
+  - bon de travail FieldAware
+  - planification FieldAware
+  - technician assignment
+  - assignation de technicien
+  - scheduler
+  - répartiteur
+---
+
 # FieldAware - Work Order Creation and Scheduling
 
 # Last Updated: 2026-09-03

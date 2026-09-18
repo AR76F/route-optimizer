@@ -1,3 +1,20 @@
+---
+title: Technician Profile - François Racine
+title_fr: Profil de technicien - François Racine
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - François Racine
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+
 # Technician Profile: François Racine
 
 Version: 2.0.0
@@ -96,3 +113,35 @@ Frequently serves as the branch's technical resource for difficult troubleshooti
 ## Search Keywords
 
 15+, 2100, 3100, 3200, 3201, 3300, activities, advanced, alternator, and, ats, automatic, automatic transfer switches, branch's, canadian, cnl, commissioning, complete, complex, consulted, controls, coteau, customer, diagnostics, difficult, dwyer, engine, engine diagnostics, engine work, field, field service, field technician, for, françois, frequently, generator, generator controls, guidance, hill, iii, kingston, laboratories, lac, leader, leadership, level, montreal, nsps, nuclear, of, ottawa, overtime, path, pc3.x, pcc, preventive maintenance, projects, projects / commissioning, province, qualification, qualifications, quebec, racine, rcmp, recommendations, required, resource, secret, senior, serves, specializing, start, support, switch, switches, systems, technical, technician, the, transfer, travel, troubleshooting, ups, west, wide, years, yes
+---
+title: Technician Profile - François Racine
+title_fr: Profil de technicien - François Racine
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - François Racine
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+---
+title: Technician Profile - François Racine
+title_fr: Profil de technicien - François Racine
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - François Racine
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---

@@ -1,3 +1,20 @@
+---
+title: Technician Profile - Kevin Duranceau
+title_fr: Profil de technicien - Kevin Duranceau
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Kevin Duranceau
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+
 # Technician Profile: Kevin Duranceau
 
 Version: 2.0.0
@@ -82,3 +99,35 @@ Well-rounded technician capable of supporting both routine service and project-r
 ## Search Keywords
 
 10–15, 2100, 3100, 3200, 3201, across, and, ats, automatic, automatic transfer switches, beloeil, both, broad, capable, controls, duranceau, engine work, experienced, field, field service, field technician, general, generator, generator controls, kevin, level, maintenance, montreal, operations, overtime, pcc, preventive, project, projects, projects / commissioning, range, related, rounded, routine, secret, service, shore, south, supporting, switch, switches, systems, technical, technician, transfer, travel, well, work, years, yes
+---
+title: Technician Profile - Kevin Duranceau
+title_fr: Profil de technicien - Kevin Duranceau
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Kevin Duranceau
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+---
+title: Technician Profile - Kevin Duranceau
+title_fr: Profil de technicien - Kevin Duranceau
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Kevin Duranceau
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---

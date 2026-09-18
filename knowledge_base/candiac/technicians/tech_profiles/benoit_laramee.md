@@ -1,3 +1,20 @@
+---
+title: Technician Profile - Benoit Laramée
+title_fr: Profil de technicien - Benoit Laramée
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Benoit Laramée
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+
 # Technician Profile: Benoit Laramée
 
 Version: 2.0.0
@@ -75,3 +92,35 @@ Often used when additional field coverage or scheduling flexibility is required.
 ## Search Keywords
 
 2100, 3100, 3–5, 70e, additional, and, assignments, assists, ats, automatic, automatic transfer switches, balancing, bank, benoit, controls, coverage, engine work, field, field service, field technician, flexibility, flexible, gaps, general, generator controls, laramée, level, load, maintenance, mercier, montreal, multi, nfpa, north, of, often, ottawa, overtime, pcc, preventive, preventive maintenance, provides, region, regional, required, scheduling, secret, service, shore, support, switch, switches, technician, territory, transfer, travel, used, versatile, west, when, who, with, workload, years, yes
+---
+title: Technician Profile - Benoit Laramée
+title_fr: Profil de technicien - Benoit Laramée
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Benoit Laramée
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+---
+title: Technician Profile - Benoit Laramée
+title_fr: Profil de technicien - Benoit Laramée
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Benoit Laramée
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---

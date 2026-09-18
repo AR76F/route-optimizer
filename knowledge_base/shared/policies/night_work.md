@@ -1,3 +1,19 @@
+---
+title: Policies - Night Work
+title_fr: Politiques - Travail de nuit
+category: policy
+subcategory: night_work
+region: Shared
+language: bilingual
+keywords:
+  - night work
+  - after-hours work
+  - travail de nuit
+  - travail après les heures normales
+  - night service
+  - service de nuit
+---
+
 # Policies - Night Work 
 
 # Last Updated: 2026-08-28

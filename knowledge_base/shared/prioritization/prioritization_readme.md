@@ -1,3 +1,19 @@
+---
+title: Prioritization Engine
+title_fr: Moteur de priorisation
+category: prioritization
+subcategory: overview
+region: Shared
+language: bilingual
+keywords:
+  - prioritization engine
+  - service prioritization
+  - moteur de priorisation
+  - priorisation du service
+  - dispatch prioritization
+  - priorisation de la répartition
+---
+
 # Prioritization Engine
 
 ## Official Source Document

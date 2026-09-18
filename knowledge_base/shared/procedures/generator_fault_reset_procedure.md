@@ -1,3 +1,21 @@
+---
+title: Customers - Generator Does Not Start During a Power Outage
+title_fr: Clients - Génératrice qui ne démarre pas pendant une panne de courant
+category: procedure
+subcategory: generator_fault_reset
+region: Shared
+language: bilingual
+keywords:
+  - generator does not start
+  - power outage
+  - emergency generator reset
+  - génératrice ne démarre pas
+  - panne de courant
+  - réinitialisation de génératrice
+  - generator fault
+  - défaut de génératrice
+---
+
 # Customers - Generator Does Not Start During a Power Outage
 
 # Last Updated: 2026-09-03

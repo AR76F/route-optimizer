@@ -1,3 +1,20 @@
+---
+title: BMS - Unit Creation
+title_fr: BMS - Création d'une unité
+category: software
+subcategory: bms_unit_creation
+system: BMS
+region: Shared
+language: bilingual
+keywords:
+  - BMS unit creation
+  - create a unit
+  - création d'unité BMS
+  - créer une unité
+  - generator unit
+  - unité de génératrice
+---
+
 # BMS - Unit Creation
 
 # Last Updated: 2026-09-03

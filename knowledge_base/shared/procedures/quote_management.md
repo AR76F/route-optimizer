@@ -1,3 +1,21 @@
+---
+title: Procedure - Preparing and Accepting a Quote
+title_fr: Procédure - Préparation et acceptation d'une soumission
+category: procedure
+subcategory: quote_management
+region: Shared
+language: bilingual
+keywords:
+  - quote preparation
+  - quote acceptance
+  - preparing a quotation
+  - préparation d'une soumission
+  - acceptation d'une soumission
+  - customer quotation
+  - soumission client
+  - RFQ
+---
+
 # Procedure - Preparing and Accepting a Quote
 
 # Last Updated: 2026-09-11

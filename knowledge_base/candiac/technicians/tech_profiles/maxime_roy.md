@@ -1,3 +1,20 @@
+---
+title: Technician Profile - Maxime Roy
+title_fr: Profil de technicien - Maxime Roy
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Maxime Roy
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+
 # Technician Profile: Maxime Roy
 
 Version: 2.0.0
@@ -81,3 +98,35 @@ Preferred resource for commissioning activities and load bank testing.
 ## Search Keywords
 
 2100, 3100, 3–5, activities, and, areas, ats, automatic, automatic transfer switches, aux, bank, châteauguay, commissioning, controls, documented, downtown, field, field service, field technician, for, generator, generator controls, l'île, load, maxime, montreal, noix, not, overtime, paul, pcc, preferred, project, projects, projects / commissioning, required, resource, roy, saint, shore, south, specializing, start, support, surrounding, switch, switches, technician, testing, transfer, travel, ups, years, yes
+---
+title: Technician Profile - Maxime Roy
+title_fr: Profil de technicien - Maxime Roy
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Maxime Roy
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+---
+title: Technician Profile - Maxime Roy
+title_fr: Profil de technicien - Maxime Roy
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Maxime Roy
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---

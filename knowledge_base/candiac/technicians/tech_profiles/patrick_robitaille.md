@@ -1,3 +1,20 @@
+---
+title: Technician Profile - Patrick Robitaille
+title_fr: Profil de technicien - Patrick Robitaille
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Patrick Robitaille
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+
 # Technician Profile: Patrick Robitaille
 
 Version: 2.0.0
@@ -68,3 +85,35 @@ Excellent choice when additional coverage is needed outside normal technician te
 ## Search Keywords
 
 15+, additional, and, assignments, choice, coverage, distance, documented, emergency, excellent, field, field service, field technician, flexibility, for, general, long, montreal, needed, normal, north, not, of, ottawa, outside, overtime, patrick, preferred, qualifications, recognized, regional, regional assignments, required, robitaille, senior, service, shore, south, standard, support, technician, territories, travel, west, when, years
+---
+title: Technician Profile - Patrick Robitaille
+title_fr: Profil de technicien - Patrick Robitaille
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Patrick Robitaille
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+---
+title: Technician Profile - Patrick Robitaille
+title_fr: Profil de technicien - Patrick Robitaille
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Patrick Robitaille
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---

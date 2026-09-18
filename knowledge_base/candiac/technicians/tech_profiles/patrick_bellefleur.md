@@ -1,3 +1,20 @@
+---
+title: Technician Profile - Patrick Bellefleur
+title_fr: Profil de technicien - Patrick Bellefleur
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Patrick Bellefleur
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+
 # Technician Profile: Patrick Bellefleur
 
 Version: 2.0.0
@@ -84,3 +101,35 @@ Versatile senior technician frequently utilized for emergency coverage, project 
 ## Search Keywords
 
 15+, 2100, 3100, 3200, 3201, and, assignments, ats, automatic, automatic transfer switches, bellefleur, controls, corridor, coverage, eastern, emergency, engine work, field, field service, field technician, for, frequently, general, generator, generator controls, l'assomption, level, north, overtime, patrick, pcc, project, projects / commissioning, providing, response, rivières, secret, senior, service, shore, support, switch, switches, systems, technical, technician, territory, the, throughout, transfer, travel, trois, troubleshooting, utilized, versatile, work, years, yes
+---
+title: Technician Profile - Patrick Bellefleur
+title_fr: Profil de technicien - Patrick Bellefleur
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Patrick Bellefleur
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+---
+title: Technician Profile - Patrick Bellefleur
+title_fr: Profil de technicien - Patrick Bellefleur
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Patrick Bellefleur
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---

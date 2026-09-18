@@ -1,3 +1,20 @@
+---
+title: Technician Profile - Élie Rajotte-Lemay
+title_fr: Profil de technicien - Élie Rajotte-Lemay
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Élie Rajotte-Lemay
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+
 # Technician Profile: Élie Rajotte-Lemay
 
 Version: 2.0.0
@@ -67,3 +84,35 @@ Strong resource for scheduled maintenance and standard service work.
 ## Search Keywords
 
 1–3, and, beloeil, developing, documented, field, field service, field technician, focused, for, general, inspections, lemay, maintenance, montreal, not, overtime, preventive, preventive maintenance, primarily, rajotte, regions, required, resource, routine, scheduled, service, shore, south, standard, strong, technician, the, throughout, travel, work, years, yes, élie
+---
+title: Technician Profile - Élie Rajotte-Lemay
+title_fr: Profil de technicien - Élie Rajotte-Lemay
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Élie Rajotte-Lemay
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+---
+title: Technician Profile - Élie Rajotte-Lemay
+title_fr: Profil de technicien - Élie Rajotte-Lemay
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Élie Rajotte-Lemay
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---

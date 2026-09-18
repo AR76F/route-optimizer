@@ -1,3 +1,19 @@
+---
+title: Policies - Standby (On-Call)
+title_fr: Politiques - Garde et disponibilité
+category: policy
+subcategory: standby_on_call
+region: Shared
+language: bilingual
+keywords:
+  - standby
+  - on-call
+  - garde
+  - disponibilité
+  - after-hours coverage
+  - couverture hors heures normales
+---
+
 # Policies - Standby (On-Call)
 
 # Last Updated: 2026-08-28

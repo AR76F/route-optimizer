@@ -1,3 +1,21 @@
+---
+title: Priority Levels (P1-P6)
+title_fr: Niveaux de priorité (P1 à P6)
+category: prioritization
+subcategory: priority_levels
+region: Shared
+language: bilingual
+keywords:
+  - priority levels
+  - P1
+  - P2
+  - P3
+  - P4
+  - P5
+  - P6
+  - niveaux de priorité
+---
+
 # Priority Levels (P1–P6)
 
 ## Overview

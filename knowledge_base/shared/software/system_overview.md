@@ -1,3 +1,21 @@
+---
+title: Software - System Overview
+title_fr: Logiciels - Vue d'ensemble des systèmes
+category: software
+subcategory: system_overview
+region: Shared
+language: bilingual
+keywords:
+  - software systems
+  - system overview
+  - logiciels
+  - vue d'ensemble des systèmes
+  - BMS
+  - FieldAware
+  - Clover
+  - Power BI
+---
+
 # Software - System Overview
 
 # Last Updated: 2026-09-03

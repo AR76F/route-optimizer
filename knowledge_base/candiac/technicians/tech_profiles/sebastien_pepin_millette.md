@@ -1,3 +1,20 @@
+---
+title: Technician Profile - Sébastien Pépin-Millette
+title_fr: Profil de technicien - Sébastien Pépin-Millette
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Sébastien Pépin-Millette
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+
 # Technician Profile: Sébastien Pépin-Millette
 
 Version: 2.0.0
@@ -70,3 +87,35 @@ Dedicated resource for electric bus work performed within the shop.
 ## Search Keywords
 
 1–3, and, bus, buses, component, dedicated, documented, electric, for, in-shop, millette, not, only, operations, performed, pépin, repair, replacement, resource, service, shop, shop only, shop work only, shore, south, specializing, sébastien, technician, the, within, work, years, yes
+---
+title: Technician Profile - Sébastien Pépin-Millette
+title_fr: Profil de technicien - Sébastien Pépin-Millette
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Sébastien Pépin-Millette
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+---
+title: Technician Profile - Sébastien Pépin-Millette
+title_fr: Profil de technicien - Sébastien Pépin-Millette
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Sébastien Pépin-Millette
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---

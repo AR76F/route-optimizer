@@ -1,3 +1,19 @@
+---
+title: Company Acronyms - Q
+title_fr: Acronymes de l'entreprise - Q
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym Q
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes Q
+---
+
 # Company Acronyms - Q
 
 # Version 1.1.0
@@ -49,3 +65,48 @@ This document contains company acronyms beginning with the letter specified in t
 | QTCT | Quality Target Control Table |
 | QTD | Quantity Timing Diagnostic |
 | QTQ | Qualify the Qualifier |
+---
+title: Company Acronyms - Q
+title_fr: Acronymes de l'entreprise - Q
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym Q
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes Q
+---
+---
+title: Company Acronyms - Q
+title_fr: Acronymes de l'entreprise - Q
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym Q
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes Q
+---
+---
+title: Company Acronyms - Q
+title_fr: Acronymes de l'entreprise - Q
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym Q
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes Q
+---

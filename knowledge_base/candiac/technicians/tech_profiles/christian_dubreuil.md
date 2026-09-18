@@ -1,3 +1,20 @@
+---
+title: Technician Profile - Christian Dubreuil
+title_fr: Profil de technicien - Christian Dubreuil
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Christian Dubreuil
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+
 # Technician Profile: Christian Dubreuil
 
 Version: 2.0.0
@@ -84,3 +101,35 @@ One of the branch's primary resources for complex troubleshooting and repeat fai
 ## Search Keywords
 
 15+, 2100, 3100, advanced, analysis, and, assigned, ats, automatic, automatic transfer switches, branch's, cause, challenging, christian, complex, controls, customer, delson, diagnostic, diagnostics, dubreuil, electrical, engine work, escalations, failures, field, field service, field technician, for, frequently, generator, generator controls, level, montreal, nsps, one, overtime, pcc, preventive maintenance, primary, projects / commissioning, qualification, recognized, repeat, resources, root, secret, senior, shore, south, specialist, strongest, switch, switches, systems, technical, technically, technician, the, transfer, troubleshooters, troubleshooting, years, yes
+---
+title: Technician Profile - Christian Dubreuil
+title_fr: Profil de technicien - Christian Dubreuil
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Christian Dubreuil
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---
+---
+title: Technician Profile - Christian Dubreuil
+title_fr: Profil de technicien - Christian Dubreuil
+category: technician
+subcategory: technician_profile
+region: Candiac
+language: bilingual
+keywords:
+  - Christian Dubreuil
+  - technician profile
+  - field technician
+  - profil de technicien
+  - technicien de terrain
+  - technician capabilities
+  - compétences du technicien
+---

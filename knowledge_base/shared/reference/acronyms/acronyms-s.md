@@ -1,3 +1,19 @@
+---
+title: Company Acronyms - S
+title_fr: Acronymes de l'entreprise - S
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym S
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes S
+---
+
 # Company Acronyms - S
 
 # Version 1.1.0
@@ -222,3 +238,48 @@ This document contains company acronyms beginning with the letter specified in t
 | SWM | STANDARD WORKING METHOD |
 | SWP | Standard Working Procedure |
 | SyDD | System Design Document |
+---
+title: Company Acronyms - S
+title_fr: Acronymes de l'entreprise - S
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym S
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes S
+---
+---
+title: Company Acronyms - S
+title_fr: Acronymes de l'entreprise - S
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym S
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes S
+---
+---
+title: Company Acronyms - S
+title_fr: Acronymes de l'entreprise - S
+category: reference
+subcategory: company_acronyms
+region: Shared
+language: bilingual
+keywords:
+  - company acronyms
+  - acronym reference
+  - acronym S
+  - acronymes de l'entreprise
+  - référence des acronymes
+  - acronymes S
+---

@@ -1,3 +1,19 @@
+---
+title: Prioritization Decision Process
+title_fr: Processus décisionnel de priorisation
+category: prioritization
+subcategory: decision_process
+region: Shared
+language: bilingual
+keywords:
+  - prioritization decision process
+  - service priority
+  - processus décisionnel de priorisation
+  - priorité de service
+  - dispatch decision
+  - décision de répartition
+---
+
 # Decision Process
 
 ## Overview
