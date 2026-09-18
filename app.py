@@ -51,7 +51,7 @@ import uuid
 
 import pandas as pd
 import requests
-from app_config import BRANCH_DEFAULT_LANGUAGES, BRANCH_PROFILES, SUPPORTED_BRANCHES
+from app_config import BRANCH_DEFAULT_LANGUAGES, BRANCH_PROFILES, QUICK_LINKS, SUPPORTED_BRANCHES
 from ui_text import SUPPORTED_LANGUAGES, get_ui_text
 
 from service_assistant import ask_service_assistant
@@ -1362,6 +1362,45 @@ def render_assistant_suggestions() -> Optional[str]:
     with st.container(border = True):
         st.caption(ui_text("suggestions_intro"))
 
+        # Couleur des boutons 
+        st.html("""
+        <style>
+        div[class *= "st-key-assistant_suggested_question_"]
+        button[data-variant = "pills"]:not([data-selected]) {
+            color: #FF4B4B !important;
+            border: 1px solid #FF4B4B !important;
+            background: transparent !important;
+        }
+
+        div[class *= "st-key-assistant_suggested_question_"]
+        button[data-variant = "pills"]:not([data-selected]) * {
+            color: #FF4B4B !important;
+        }
+
+        div[class *= "st-key-assistant_suggested_question_"]
+        button[data-variant = "pills"]:not([data-selected]):hover {
+            background: #FFE5E5 !important;
+        }
+        </style>
+        """)
+
+        if st.context.theme.type == "dark":
+            st.html("""
+            <style>
+            div[class *= "st-key-assistant_suggested_question_"]
+            button[data-variant = "pills"][data-selected] {
+                background: #5A1F1F !important;
+                border-color: #FF4B4B !important;
+                color: #FFB3B3 !important;
+            }
+
+            div[class *= "st-key-assistant_suggested_question_"]
+            button[data-variant = "pills"][data-selected] * {
+                color: #FFB3B3 !important;
+            }
+            </style>
+            """)
+
         return st.pills(
             "Suggested questions",
             ui_text("suggested_questions"),
@@ -1377,21 +1416,25 @@ def render_service_assistant():
         selected_branch = st.selectbox(
             "Branch",
             SUPPORTED_BRANCHES,
-            key="branch_selector",
+            key = "branch_selector",
             on_change=_set_branch_default_language,
         )
 
     if "ui_language" not in st.session_state:
         st.session_state.ui_language = BRANCH_DEFAULT_LANGUAGES[selected_branch]
 
+    if "language_selector" not in st.session_state:
+        st.session_state.language_selector = next(
+            label
+            for label, code in SUPPORTED_LANGUAGES.items()
+            if code == st.session_state.ui_language
+        )
+
     with language_col:
         selected_language_label = st.selectbox(
             "Language",
             list(SUPPORTED_LANGUAGES),
-            index=list(SUPPORTED_LANGUAGES.values()).index(
-                st.session_state.ui_language
-            ),
-            key="language_selector",
+            key = "language_selector",
         )
 
     st.session_state.active_branch = selected_branch
@@ -1442,6 +1485,23 @@ def render_service_assistant():
         with st.container(horizontal = True):
             if st.button(f"{ui_text('priority_button')}", key = "assistant_priority_open"):
                 _priority_open_dialog()
+
+            # Popover pour deployer une liste de liens utiles
+            with st.popover(ui_text("quick_links_button"), icon = ":material/link:"):
+                # Keep the popover within laptop-height viewports (350) so only the links container needs to scroll.
+                with st.container(height = 350, border = False):
+                    st.caption(ui_text("quick_links_title"))
+
+                    category_key = "category_fr" if st.session_state.ui_language == "fr" else "category"
+                    label_key = "label_fr" if st.session_state.ui_language == "fr" else "label"
+
+                    # Preserve the configured order in every language instead of alphabetically sorting translated category names.
+                    for category in dict.fromkeys(link[category_key] for link in QUICK_LINKS):
+                        st.markdown(f"**{category}**")
+
+                        for link in [item for item in QUICK_LINKS if item[category_key] == category]:
+                            st.link_button(link[label_key], link["url"], icon = link.get("icon"), width = "stretch")
+
             st.link_button(
                 f"{ui_text('feedback_button')}",
                 feedback_form_url,

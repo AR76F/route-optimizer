@@ -1,5 +1,7 @@
 # Tribal Knowledge
 
+# Last Updated: 2026-09-17
+
 ## Customer Referrals
 
 Refer customers to:
@@ -14,6 +16,15 @@ for:
 - Installation guides
 - Parts lists
 - Product documentation
+
+## Battery Maintenance Planning
+
+When a maintenance job involves 4D and 8D batteries:
+
+- Plan two technicians instead of one.
+- Include the two-technician requirement when scheduling.
+- Confirm the correct method and equipment for transporting the batteries.
+- Verify any site-specific handling or safety requirements before dispatch.
 
 ## North Shore Parts Storage
 
